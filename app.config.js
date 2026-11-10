@@ -1,0 +1,58 @@
+const fs = require('node:fs/promises');
+const net = require('node:net');
+const path = require('node:path');
+const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
+
+const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
+const staging = process.env.EXPO_PUBLIC_FIREBASE_MODE === 'staging';
+const pilot = process.env.EXPO_PUBLIC_FIREBASE_MODE === 'pilot';
+const lanApk = process.env.MARCHIX_LAN_APK === '1';
+const id = pilot ? 'vn.marchix.quanly.pilot' : staging ? 'vn.marchix.quanly.staging' : 'vn.marchix.quanly.emulator';
+const plugins = lanApk || pilot ? [] : ['expo-dev-client'];
+
+if (lanApk) {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST?.trim();
+  if (staging || pilot || net.isIP(host || '') !== 4) {
+    throw new Error('Bản APK thử cần địa chỉ IPv4 của máy chạy Firebase Emulator.');
+  }
+
+  plugins.push(config => {
+    config = withAndroidManifest(config, mod => {
+      const application = mod.modResults.manifest.application[0];
+      application.$['android:networkSecurityConfig'] = '@xml/marchix_emulator_network';
+      return mod;
+    });
+    return withDangerousMod(config, ['android', async mod => {
+      const dir = path.join(mod.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'xml');
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'marchix_emulator_network.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="false">${host}</domain>
+  </domain-config>
+</network-security-config>
+`);
+      return mod;
+    }]);
+  });
+}
+
+if (staging && iosClientId) {
+  plugins.push(['@react-native-google-signin/google-signin', {
+    iosUrlScheme: iosClientId.split('.').reverse().join('.'),
+  }]);
+}
+
+module.exports = {
+  name: pilot ? 'Quản lý Marchix Pilot' : staging ? 'Quản lý Marchix Staging' : 'Quản lý Marchix Demo',
+  slug: 'marchix-mobile',
+  version: pilot ? '0.5.3' : '0.4.0',
+  orientation: 'portrait',
+  userInterfaceStyle: 'light',
+  icon: './assets/icon.png',
+  android: { package: id, ...(pilot ? { versionCode: 4, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
+  ios: { bundleIdentifier: id, supportsTablet: false },
+  web: { favicon: './assets/favicon.png' },
+  plugins,
+};

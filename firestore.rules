@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function email() {
+      return request.auth.token.email;
+    }
+
+    function member() {
+      return verified() && exists(/databases/$(database)/documents/members/$(email()));
+    }
+
+    function openStatus(status) {
+      return status in ['Chưa làm', 'Đang làm', 'Vướng'];
+    }
+
+    function isoDate(value) {
+      return value is string
+        && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$');
+    }
+
+    function validComment(comment) {
+      return comment is map && comment.keys().hasAll(['by', 'at', 'text', 'files'])
+        && comment.keys().hasOnly(['by', 'at', 'text', 'files'])
+        && comment.by == email() && isoDate(comment.at)
+        && comment.text is string && comment.text.size() <= 1000
+        && comment.text.matches('(?s).*[^\\s].*')
+        && comment.files == [];
+    }
+
+    function appendsComment() {
+      let before = resource.data.get('comments', []);
+      let after = request.resource.data.get('comments', []);
+      let count = before.size();
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments'])
+        && before is list && after is list && after.size() == count + 1
+        && (count == 0 || after[0:count] == before) && validComment(after[count]);
+    }
+
+    match /members/{id} {
+      allow get: if verified() && email() == id;
+    }
+
+    // Shared web inbox. Trusted senders supply to, from, title, body, link and createdAt.
+    // Recipients can only change read to true. The optional emailed flag is server-managed.
+    match /notifications/{id} {
+      function isRecipient() {
+        return verified() && resource.data.to == email()
+          && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
+      }
+
+      allow get, list: if isRecipient();
+      allow update: if isRecipient() && request.resource.data.read == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
+
+    match /tasks/{id} {
+      allow get, list: if member() && resource.data.assigneeEmail == email();
+      // The server sets assignedBy at creation. Client updates cannot change it.
+      allow read: if member() && resource.data.assignedBy == email()
+        && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
+      // A designated approver can read the task while its submission is pending.
+      allow get, list: if member() && resource.data.approverEmail == email()
+        && resource.data.status == 'Chờ duyệt' && hasReviewGrant();
+      allow update: if member() && resource.data.assigneeEmail == email()
+        && openStatus(resource.data.status) && openStatus(request.resource.data.status)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'progress', 'updatedAt', 'updatedBy'])
+        && request.resource.data.updatedBy == email()
+        && isoDate(request.resource.data.updatedAt)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['progress'])
+          || (resource.data.get('checklist', []).size() == 0
+            && request.resource.data.progress is int
+            && request.resource.data.progress >= 0 && request.resource.data.progress <= 100));
+      allow update: if member() && resource.data.assigneeEmail == email() && appendsComment();
+
+      function hasReviewGrant() {
+        let profile = get(/databases/$(database)/documents/members/$(email())).data;
+        let grants = profile.get('grants', []);
+        return profile.get('enabled', true) != false
+          && (profile.get('role', '') == 'admin' || (grants is list && 'taskReview' in grants));
+      }
+    }
+  }
+}

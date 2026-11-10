@@ -1,0 +1,43 @@
+diff --git a/web/app.js b/web/app.js
+index a07bed4..1fab60b 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -178,9 +178,9 @@ function renderNotes() {
+   const ra = $("#readAll"); if (ra) ra.onclick = () => list.filter(x => !x.read).forEach(x => updateDoc(doc(db, "notifications", x.id), { read: true }).catch(() => {}));
+ }
+ document.addEventListener("click", e => { const a = e.target.closest("[data-note]"); if (a) { updateDoc(doc(db, "notifications", a.dataset.note), { read: true }).catch(() => {}); $("#notesBox").hidden = true; } });
+-async function notify(to, title, body, link) {
++async function notify(to, title, body, link, taskId) {
+   if (!to || to === me()) return;
+-  try { await setDoc(doc(db, "notifications", newId("notifications")), { to, from: me(), title, body, link: link || "#thu-chi", createdAt: nowISO(), read: false, emailed: false }); } catch (e) { console.error("notify", e.code); }
++  try { await setDoc(doc(db, "notifications", newId("notifications")), { to, from: me(), title, body, link: link || "#thu-chi", createdAt: nowISO(), read: false, emailed: false, ...(taskId ? { taskId } : {}) }); } catch (e) { console.error("notify", e.code); }
+ }
+ const admins = () => S.members.filter(m => m.role === "admin").map(m => m.email || m.id);
+ 
+@@ -970,7 +970,7 @@ $("#main").addEventListener("drop", async e => {
+   const id = e.dataTransfer.getData("text/plain"), t = S.tasks.find(x => x.id === id); let st = col.dataset.drop; if (!t || t.status === st) return;
+   if (["Xong", "Chờ duyệt"].includes(st) || ["Xong", "Chờ duyệt"].includes(t.status)) return openForm("task", id);
+   try { await updateDoc(doc(db, "tasks", id), { status: st, progress: isDoneT({ status: st }) ? 100 : (t.progress || 0), doneAt: isDoneT({ status: st }) ? (t.doneAt || nowISO()) : "", updatedAt: nowISO(), updatedBy: me() });
+-    [t.assigneeEmail, t.assignedBy, ...(t.watchers || [])].filter((x, i, a) => x && a.indexOf(x) === i).forEach(w => notify(w, `Việc “${t.title}” chuyển sang ${st}`, `Cập nhật bởi ${memberName(me())}`, "#cong-viec"));
++    [t.assigneeEmail, t.assignedBy, ...(t.watchers || [])].filter((x, i, a) => x && a.indexOf(x) === i).forEach(w => notify(w, `Việc “${t.title}” chuyển sang ${st}`, `Cập nhật bởi ${memberName(me())}`, "#cong-viec", id));
+     if (isDoneT({ status: st }) && t.repeat && t.repeat !== "Không lặp" && !t.spawned && t.due) { const n = nextRepeat(t); delete n.id; await updateDoc(doc(db, "tasks", id), { spawned: true }); await setDoc(doc(db, "tasks", newId("tasks")), n); } } catch (err) { alertBox("Không cập nhật được (" + err.code + ")."); }
+ });
+ $("#main").addEventListener("click", e => {
+@@ -1182,7 +1182,7 @@ function openForm(kind, id) {
+     $("#clList").addEventListener("click", e => { const i = e.target.dataset.cldel; if (i !== undefined) { S._cl.splice(i, 1); redraw(); } });
+     $("#f_status").addEventListener("change", e => { if (e.target.value === "Xong" || e.target.value === "Chờ duyệt") $("#f_progress").value = 100; });
+     const rb = $("#remindBtn"); if (rb) rb.onclick = async () => { const t = S.tasks.find(x => x.id === id);
+-      await notify(t.assigneeEmail, "Nhắc việc: " + t.title, `${memberName(me())} nhắc: ${t.due ? (daysTo(t.due) < 0 ? "đã quá hạn " + (-daysTo(t.due)) + " ngày" : "hạn " + fmtDate(t.due)) : "chưa có hạn"} · tiến độ ${t.progress || 0}%`, "#cong-viec");
++      await notify(t.assigneeEmail, "Nhắc việc: " + t.title, `${memberName(me())} nhắc: ${t.due ? (daysTo(t.due) < 0 ? "đã quá hạn " + (-daysTo(t.due)) + " ngày" : "hạn " + fmtDate(t.due)) : "chưa có hạn"} · tiến độ ${t.progress || 0}%`, "#cong-viec", id);
+       await updateDoc(doc(db, "tasks", id), { remindedAt: nowISO(), remindedBy: me() }); rb.textContent = "Đã tạo thông báo · email chờ lịch gửi"; rb.disabled = true; };
+   }
+   form.querySelectorAll("[data-decision]").forEach(btn => btn.onclick = async () => { btn.disabled = true; try { await handleDecision(kind, id, btn.dataset.decision); } finally { btn.disabled = false; } });
+@@ -1235,7 +1235,7 @@ form.addEventListener("submit", async e => {
+     if (data.status === "Xong" && data.repeat !== "Không lặp" && !data.spawned && data.due) {
+       data.spawned = true; spawn = nextRepeat(data);
+     }
+-    after = async () => { for (const [to, t, b] of notes) await notify(to, t, b, link); if (spawn) { delete spawn.id; await setDoc(doc(db, "tasks", newId("tasks")), spawn); } };
++    after = async () => { for (const [to, t, b] of notes) await notify(to, t, b, link, docId); if (spawn) { delete spawn.id; await setDoc(doc(db, "tasks", newId("tasks")), spawn); } };
+   } else if (kind === "project") { col = "projects"; data = { name: g("name"), owner: g("owner"), ownerEmail: (g("ownerEmail") || "").startsWith("ten:") ? "" : (g("ownerEmail") || ""), status: g("status"), budget: num(g("budget")), startDate: g("startDate"), deadline: g("deadline"), goal: g("goal"), phase: g("phase"), risks: g("risks"), note: g("note") }; }
+   else if (kind === "member") { col = "members"; const em = g("email").toLowerCase(); docId = id || em; if (!id && S.members.some(m => (m.email || m.id) === em)) { $("#msg").textContent = "Email đã tồn tại. Mở tài khoản cũ để sửa quyền."; return; } data = { name: g("name"), email: em, role: em === OWNER ? "admin" : g("role"), enabled: em === OWNER || $("#f_enabled").checked, grants: [...form.querySelectorAll('input[name="memberGrant"]:checked')].map(el => el.value) }; }
+   else if (kind === "employee") { col = "employees"; data = { name: g("name"), email: (g("email") || "").toLowerCase(), position: g("position"), contract: g("contract"), startDate: g("startDate"), status: g("status"), salary: num(g("salary")), insSalary: num(g("insSalary")), allowTaxable: num(g("allowTaxable")), allowFree: num(g("allowFree")), dependents: Number(g("dependents") || 0), taxCode: g("taxCode") }; }
