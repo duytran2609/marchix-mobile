@@ -20,7 +20,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   onLogout: () => Promise<void>;
 }) {
   const { width } = useWindowDimensions();
-  const drawerWidth = Math.min(width * 0.86, 336);
+  const drawerWidth = Math.min(width * 0.75, 280);
   const progress = useRef(new Animated.Value(0)).current;
   const logoutTrigger = useRef<ComponentRef<typeof Pressable>>(null);
   const cancelButton = useRef<ComponentRef<typeof Pressable>>(null);
@@ -110,7 +110,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
                     : <Text style={styles.initials}>{initials}</Text>}
                 </View>
                 <View style={styles.profileDetails}>
-                  <Text numberOfLines={2} style={styles.profileName}>{name}</Text>
+                  <Text style={styles.profileName}>{name}</Text>
                   <Text style={styles.role}>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</Text>
                 </View>
                 <Pressable ref={logoutTrigger} accessibilityRole="button" accessibilityLabel="Đăng xuất"

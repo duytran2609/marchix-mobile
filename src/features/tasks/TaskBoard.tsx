@@ -18,6 +18,7 @@ const statusOptions = taskFilters.map(value => ({ value, label: value }));
 const priorityFilters = ['', ...taskPriorities, 'Chưa đặt'] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
 const workDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+const overdueTone = statusTone('Vướng');
 type TaskFilter = typeof taskFilters[number];
 type PriorityFilter = typeof priorityFilters[number];
 type TaskView = 'list' | 'kanban';
@@ -29,8 +30,13 @@ function isOpenTask(task: Task) {
   return task.status !== 'Xong' && task.status !== 'Chờ duyệt';
 }
 
-function isOverdue(task: Task, today: string) {
-  return isOpenTask(task) && !!task.due && /^\d{4}-\d{2}-\d{2}$/.test(task.due) && task.due < today;
+function daysOverdue(task: Task, today: string) {
+  if (!isOpenTask(task) || !task.due || !/^\d{4}-\d{2}-\d{2}$/.test(task.due) || task.due >= today) return 0;
+
+  // Date-only ISO values parse at UTC midnight, so the difference counts calendar days.
+  const deadline = new Date(task.due);
+  if (!Number.isFinite(deadline.getTime()) || deadline.toISOString().slice(0, 10) !== task.due) return 0;
+  return (Date.parse(today) - deadline.getTime()) / 86_400_000;
 }
 
 function assigneeKey(task: Task) {
@@ -41,11 +47,12 @@ function assigneeKey(task: Task) {
 const TaskCard = memo(function TaskCard({ task, today, onOpen, kanban = false, assigneeName }: {
   task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
 }) {
-  const overdue = isOverdue(task, today);
+  const overdueDays = daysOverdue(task, today);
+  const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
   const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
-      accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdue ? 'Quá hạn. ' : ''}${due}.`}
+      accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdueLabel ? `${overdueLabel}. ` : ''}${due}.`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardHeader}>
         <Text numberOfLines={2} ellipsizeMode="tail" selectable={kanban ? false : undefined}
@@ -56,14 +63,19 @@ const TaskCard = memo(function TaskCard({ task, today, onOpen, kanban = false, a
         <Text selectable={kanban ? false : undefined} style={styles.muted}>
           <Text style={styles.metaLabel}>Người thực hiện: </Text>{assigneeName}
         </Text>
-        <Text selectable={kanban ? false : undefined} style={[styles.muted, overdue && styles.danger]}>
+        <Text selectable={kanban ? false : undefined} style={styles.muted}>
           <Text style={styles.metaLabel}>Hạn chót: </Text>
-          {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}{overdue ? ' · Quá hạn' : ''}
+          <Text style={overdueLabel ? styles.danger : undefined}>
+            {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
+          </Text>
         </Text>
         <Text selectable={kanban ? false : undefined} style={[styles.muted, task.priority === 'Cao' && styles.danger]}>
           <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>{task.priority || 'Chưa đặt'}
         </Text>
       </View>
+      {overdueLabel ? (
+        <Text selectable={kanban ? false : undefined} style={styles.overdueTag}>{overdueLabel}</Text>
+      ) : null}
       {!kanban && <TaskProgress task={task} />}
     </Pressable>
   );
@@ -166,14 +178,14 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
   const today = workDate.format(new Date());
   const stats = [
     { label: 'Chưa xong', value: scopedTasks.filter(isOpenTask).length, tone: statusTone('Đang làm') },
-    { label: 'Quá hạn', value: scopedTasks.filter(task => isOverdue(task, today)).length, tone: statusTone('Vướng') },
+    { label: 'Quá hạn', value: scopedTasks.filter(task => daysOverdue(task, today) > 0).length, tone: overdueTone },
     { label: 'Chờ duyệt', value: scopedTasks.filter(task => task.status === 'Chờ duyệt').length, tone: statusTone('Chờ duyệt') },
     { label: 'Đã xong', value: scopedTasks.filter(task => task.status === 'Xong').length, tone: { text: '#23613A', background: '#E5F5E9' } },
   ] as const;
   const filteredTasks = scopedTasks.filter(task => {
     const status = taskStatus(task);
     return filter === 'Tất cả' || filter === status ||
-      (filter === 'Chưa xong' && isOpenTask(task)) || (filter === 'Quá hạn' && isOverdue(task, today));
+      (filter === 'Chưa xong' && isOpenTask(task)) || (filter === 'Quá hạn' && daysOverdue(task, today) > 0);
   });
   const visibleTasks = searchByName(filteredTasks, search, task => task.title);
   const showNoMatch = tasks.length > 0 || search.trim().length > 0;
@@ -250,10 +262,10 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
 const styles = StyleSheet.create({
   board: { gap: 12 },
   stats: { flexDirection: 'row', gap: 8 },
-  stat: { flex: 1, minWidth: 0, minHeight: 72, gap: 3, paddingVertical: 10, paddingHorizontal: 6, borderWidth: 1, borderRadius: 13,
-    borderColor: colors.line },
-  statValue: { fontSize: 24, fontWeight: '800' },
-  statLabel: { fontSize: 12, fontWeight: '700' },
+  stat: { flex: 1, minWidth: 0, minHeight: 72, alignItems: 'center', gap: 3,
+    paddingVertical: 10, paddingHorizontal: 6, borderWidth: 1, borderRadius: 13, borderColor: colors.line },
+  statValue: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
+  statLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   controls: { padding: 12, gap: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.paper },
   views: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10, backgroundColor: colors.surfaceMuted },
   viewButton: { flex: 1, minHeight: 44, paddingHorizontal: 6, paddingVertical: 8, borderRadius: 8,
@@ -290,6 +302,8 @@ const styles = StyleSheet.create({
   metaLabel: { fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },
+  overdueTag: { alignSelf: 'flex-start', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    color: overdueTone.text, backgroundColor: overdueTone.background, fontSize: 12, fontWeight: '700' },
 
 
 
