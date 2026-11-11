@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const net = require('node:net');
 const path = require('node:path');
-const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
+const { withAndroidManifest, withDangerousMod, withGradleProperties } = require('expo/config-plugins');
 
 const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
 const staging = process.env.EXPO_PUBLIC_FIREBASE_MODE === 'staging';
@@ -9,6 +9,20 @@ const pilot = process.env.EXPO_PUBLIC_FIREBASE_MODE === 'pilot';
 const lanApk = process.env.MARCHIX_LAN_APK === '1';
 const id = pilot ? 'vn.marchix.quanly.pilot' : staging ? 'vn.marchix.quanly.staging' : 'vn.marchix.quanly.emulator';
 const plugins = lanApk || pilot ? [] : ['expo-dev-client'];
+plugins.push(['expo-location', {
+  locationWhenInUsePermission: 'Cho phép Quản lý Marchix kiểm tra vị trí văn phòng khi bạn chấm công.',
+}]);
+plugins.push(config => withGradleProperties(config, mod => {
+  const key = 'android.packagingOptions.pickFirsts';
+  const sharedCpp = '**/libc++_shared.so';
+  const existing = mod.modResults.find(item => item.type === 'property' && item.key === key);
+  if (existing) {
+    existing.value = [...new Set([...existing.value.split(',').filter(Boolean), sharedCpp])].join(',');
+  } else {
+    mod.modResults.push({ type: 'property', key, value: sharedCpp });
+  }
+  return mod;
+}));
 
 if (lanApk) {
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST?.trim();
@@ -49,7 +63,7 @@ module.exports = {
   slug: 'marchix-mobile',
   version: pilot ? '0.5.3' : '0.4.0',
   orientation: 'portrait',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
   android: { package: id, ...(pilot ? { versionCode: 4, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
   ios: { bundleIdentifier: id, supportsTablet: false },

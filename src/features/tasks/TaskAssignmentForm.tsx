@@ -4,7 +4,8 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AssignmentCalendar, displayDay, shiftDay, todayInVietnam } from './AssignmentCalendar';
+import { AssignmentCalendar, displayDay } from './AssignmentCalendar';
+import { shiftDay, todayInVietnam } from './taskDates';
 import { auth, emulatorMode, pilotMode } from '../../services/firebase/firebase';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
@@ -17,7 +18,7 @@ import {
   taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
 } from './tasks';
 import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee } from './tasks';
-import { colors } from '../../theme/theme';
+import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
 
 const quickDates = [
@@ -42,6 +43,7 @@ function MemberPicker({ members, selected, email, disabled, label, emptyMessage,
   members: TaskAssignee[]; selected: string[]; email: string; disabled: boolean; label: string; emptyMessage: string;
   onToggle: (member: string) => void;
 }) {
+  const styles = useStyles();
   const [search, setSearch] = useState('');
   const matches = searchByName(members, search, member => member.name);
   const visible = matches.slice(0, 6);
@@ -81,6 +83,7 @@ function MemberPicker({ members, selected, email, disabled, label, emptyMessage,
 function Choices<T extends string>({ items, value, onChange, disabled }: {
   items: readonly { value: T; label: string }[]; value: T; onChange: (value: T) => void; disabled: boolean;
 }) {
+  const styles = useStyles();
   return <View style={styles.quickDates}>{items.map(item => (
     <Pressable key={item.value} accessibilityRole="radio" aria-checked={value === item.value}
       onPress={() => onChange(item.value)} disabled={disabled}
@@ -97,6 +100,8 @@ function choices<T extends string>(values: readonly T[]) {
 export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   email: string; task?: Task; onClose: () => void; onSaved: (assignees: string[]) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const showToast = useToast();
   const [taskId] = useState(() => task?.id ?? newTaskId());
   const assignment = task ? getAssignmentComment(task) : undefined;
@@ -470,7 +475,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   keyboard: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   panel: { width: '100%', maxWidth: 560, flexShrink: 1, borderRadius: 16, backgroundColor: colors.paper, overflow: 'hidden' },
@@ -493,7 +498,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted, borderRadius: 9, minHeight: 48, borderWidth: 1, borderColor: colors.line },
   highlight: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   mark: { borderWidth: 1, borderColor: colors.line, width: 22, height: 22, lineHeight: 20, borderRadius: 5,
-    color: colors.paper, textAlign: 'center', fontWeight: '800' },
+    color: colors.onAccent, textAlign: 'center', fontWeight: '800' },
   markChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
   personLabel: { flex: 1, gap: 2 },
   personChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
@@ -506,7 +511,7 @@ const styles = StyleSheet.create({
   actionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },
   submit: { backgroundColor: colors.accent, minHeight: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   saving: { opacity: 0.65 },
-  submitText: { color: colors.paper, fontSize: 15, fontWeight: '800' },
+  submitText: { color: colors.onAccent, fontSize: 15, fontWeight: '800' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   multiline: { paddingVertical: 10, minHeight: 76, textAlignVertical: 'top' },
-});
+}));

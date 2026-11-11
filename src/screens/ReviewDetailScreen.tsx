@@ -8,11 +8,12 @@ import { commentMaxLength, reviewRatings, reviewTaskCompletion, submissionVersio
 import type { ReviewRating, Task } from '../features/tasks/tasks';
 import { taskAssignmentEnabled } from '../services/firebase/firebase';
 import { formatVietnamDateTime } from '../utils/dateTime';
-import { screenStyles } from '../theme/screenStyles';
+import { useScreenStyles } from '../theme/screenStyles';
 
 export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onReviewed }: {
   task: Task; active: boolean; needsReviewer: boolean; onBack: () => void; onReviewed: () => void;
 }) {
+  const screenStyles = useScreenStyles();
   const showToast = useToast();
   const [rating, setRating] = useState<ReviewRating | ''>('');
   const [note, setNote] = useState('');

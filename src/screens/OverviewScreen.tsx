@@ -1,0 +1,373 @@
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { ReactNode } from 'react';
+import { Button } from '../components/Button';
+import { Dropdown } from '../components/Dropdown';
+import { PageHeader } from '../components/PageHeader';
+import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
+import type { Cash, CashAccess } from '../features/cash/cash';
+import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
+import type { Project } from '../features/projects/projects';
+import { pendingRequest, watchRequests } from '../features/requests/requests';
+import type { StaffRequest } from '../features/requests/requests';
+import { formatDue, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
+import type { Task } from '../features/tasks/tasks';
+import type { WorkspaceRoute } from '../navigation/workspaceRoutes';
+import { pilotMode } from '../services/firebase/firebase';
+import { useScreenStyles } from '../theme/screenStyles';
+import { createThemedStyles, useTheme } from '../theme/theme';
+
+type Load<T> = T[] | 'error' | null;
+type Entry = { label: string; detail?: string; route: WorkspaceRoute };
+const groups = ['Quá hạn', 'Đang vướng', 'Hạn trong 7 ngày', 'Chờ duyệt', 'Đang mở khác'];
+const decisionFilters = [
+  { value: 'all', label: 'Tất cả' }, { value: 'cho-duyet', label: 'Công việc' },
+  { value: 'don-tu', label: 'Đơn từ' }, { value: 'thu-chi', label: 'Thu chi' }, { value: 'du-an', label: 'Dự án' },
+] as const;
+type DecisionFilter = typeof decisionFilters[number]['value'];
+const waiting = (row: Cash) => ['Chờ thu', 'Chờ chi'].includes(cashStatus(row));
+const amount = (rows: Cash[]) => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+const taskRoute = (task: Task): WorkspaceRoute => ({
+  screen: 'task-detail', task: { id: task.id, direct: true }, backTo: 'tong-quan',
+});
+
+function TaskRing({ counts, colors }: { counts: number[]; colors: string[] }) {
+  const styles = useStyles();
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  let start = 0;
+
+  return <View accessible accessibilityLabel={`${total} việc đang mở`} style={styles.ring}>
+    <View aria-hidden style={StyleSheet.absoluteFill}>
+      {counts.map((count, index) => {
+        if (!count) return null;
+        const sweep = 360 * count / total;
+        const angle = start;
+        start += sweep;
+        // Each clipped semicircle covers up to 180 degrees on native and web.
+        return [0, 180].filter(offset => offset < sweep).map(offset =>
+          <View key={`${index}-${offset}`} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${angle + offset}deg` }] }]}>
+            <View style={styles.ringWindow}>
+              <View style={[styles.ringSweep, { transform: [{ rotate: `${Math.min(sweep - offset, 180)}deg` }] }]}>
+                <View style={[styles.ringHalf, { backgroundColor: colors[index] }]} />
+              </View>
+            </View>
+          </View>);
+      })}
+    </View>
+    <View style={styles.ringCenter} aria-hidden>
+      <Text style={styles.total}>{total}</Text>
+      <Text style={styles.ringCaption}>việc đang mở</Text>
+    </View>
+  </View>;
+}
+
+export function OverviewScreen({
+  email, isAdmin, canReadCash, canReviewCash, canReviewRequests, personalTasks, tasksError, onRetryTasks, onNavigate,
+}: CashAccess & {
+  canReviewRequests: boolean;
+  personalTasks: Task[] | null;
+  tasksError: boolean;
+  onRetryTasks: () => void;
+  onNavigate: (route: WorkspaceRoute) => void;
+}) {
+  const styles = useStyles();
+  const screen = useScreenStyles();
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const [projects, setProjects] = useState<Load<Project>>(null);
+  const [cash, setCash] = useState<Load<Cash>>(null);
+  const [requests, setRequests] = useState<Load<StaffRequest>>(null);
+  const [overviewTasks, setOverviewTasks] = useState<Load<Task>>(null);
+  const [retry, setRetry] = useState(0);
+  const [group, setGroup] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<'alerts' | 'decisions' | null>(null);
+  const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
+  const [showDebt, setShowDebt] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [visibleEntries, setVisibleEntries] = useState(8);
+  const useOverviewTasks = isAdmin || pilotMode;
+
+  useEffect(() => {
+    const stopProjects = watchProjects(setProjects, () => setProjects('error'));
+    const stopCash = watchCash({ email, isAdmin, canReadCash, canReviewCash }, setCash, () => setCash('error'));
+    const stopRequests = watchRequests({ email, isAdmin, canReviewRequests }, setRequests, () => setRequests('error'));
+    const stopTasks = useOverviewTasks
+      ? watchPilotProjectTasks(email, isAdmin, setOverviewTasks, () => setOverviewTasks('error'))
+      : undefined;
+    return () => { stopProjects(); stopCash(); stopRequests(); stopTasks?.(); };
+  }, [email, isAdmin, canReadCash, canReviewCash, canReviewRequests, useOverviewTasks, retry]);
+
+  function reload() {
+    setProjects(null);
+    setCash(null);
+    setRequests(null);
+    setOverviewTasks(null);
+    if (tasksError) onRetryTasks();
+    setRetry(value => value + 1);
+  }
+
+  const tasks = tasksError ? 'error' : personalTasks;
+  const projectTasks = pilotMode ? overviewTasks : tasks;
+  const decisionTasks = useOverviewTasks ? overviewTasks : tasks;
+  const today = todayInVietnam();
+  const nextWeek = shiftDay(today, 7);
+  const open = (Array.isArray(tasks) ? tasks : []).filter(task => task.status !== 'Xong');
+  const grouped = groups.map(() => [] as Task[]);
+  for (const task of open) {
+    const index = task.status === 'Chờ duyệt' ? 3 : task.due && task.due < today ? 0
+      : task.status === 'Vướng' ? 1 : task.due && task.due <= nextWeek ? 2 : 4;
+    grouped[index].push(task);
+  }
+  const groupColors = [colors.danger, colors.warning, colors.success, colors.accent, colors.muted];
+  const ledger = Array.isArray(cash) ? cash : [];
+  const scheduled = ledger.filter(row => waiting(row) && verifiedCash(row));
+  const upcoming = scheduled.filter(row => row.dueDate >= today && row.dueDate <= nextWeek);
+  const income = amount(upcoming.filter(row => row.type === 'thu'));
+  const expense = amount(upcoming.filter(row => row.type === 'chi'));
+  const month = today.slice(0, 7);
+  const series = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(`${month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + index - 5);
+    const key = date.toISOString().slice(0, 7);
+    return { key, ...cashTotals(ledger.filter(row => row.date?.startsWith(key))) };
+  });
+  const maxCash = Math.max(1, ...series.flatMap(item => [item.income, item.expense]));
+  const hasCashActivity = series.some(item => item.income > 0 || item.expense > 0);
+  const cashMonth = series.find(item => item.key === selectedMonth) ?? series[series.length - 1];
+  const pendingCash = ledger.filter(row => cashStatus(row) === 'Chờ duyệt');
+  const pendingRequests = (Array.isArray(requests) ? requests : []).filter(row => row.status === pendingRequest);
+  const alerts: Entry[] = [];
+  const alertTasks = isAdmin ? open : open.filter(task => task.assigneeEmail === email);
+  const late = alertTasks.filter(task => task.due && task.due < today);
+  const soon = alertTasks.filter(task => task.due && task.due >= today && task.due <= shiftDay(today, 2));
+  if (late.length) alerts.push({ label: `${late.length} việc quá hạn`, detail: late.slice(0, 3).map(task => task.title).join(' · '), route: { screen: 'cong-viec' } });
+  if (soon.length) alerts.push({ label: `${soon.length} việc đến hạn trong 2 ngày tới`, route: { screen: 'cong-viec' } });
+  if (isAdmin && grouped[1].length) alerts.push({ label: `${grouped[1].length} việc đang vướng`, route: { screen: 'cong-viec' } });
+  const lateCash = scheduled.filter(row => row.dueDate && row.dueDate < today);
+  if (isAdmin && lateCash.length) alerts.push({ label: `${lateCash.length} khoản thu chi quá hạn`, detail: vnd.format(amount(lateCash)), route: { screen: 'thu-chi' } });
+  const visiblePendingCash = pendingCash.filter(row => isAdmin || row.createdBy === email);
+  const visiblePendingRequests = pendingRequests.filter(row => isAdmin || row.createdBy === email);
+  if (visiblePendingCash.length) alerts.push({ label: `${visiblePendingCash.length} đề nghị thu chi chờ duyệt`, route: { screen: 'thu-chi' } });
+  if (visiblePendingRequests.length) alerts.push({ label: `${visiblePendingRequests.length} đơn từ chờ duyệt`, route: { screen: 'don-tu' } });
+
+  const decisions: Entry[] = [];
+  const activeProjects = (Array.isArray(projects) ? projects : [])
+    .filter(project => !['Xong', 'Tạm dừng'].includes(project.status))
+    .map(project => {
+      const rows = Array.isArray(projectTasks) ? projectTasks.filter(task => task.projectId === project.id) : [];
+      const metrics = projectMetrics(rows, today);
+      const risk = Boolean(project.risks?.trim() || (project.deadline && project.deadline <= nextWeek) ||
+        rows.some(task => task.status === 'Vướng' || (task.status !== 'Xong' && task.due && task.due < today)));
+      return { project, metrics, count: rows.length, risk };
+    }).sort((a, b) => Number(b.risk) - Number(a.risk) ||
+      (a.project.deadline || '9999').localeCompare(b.project.deadline || '9999'));
+
+  if (isAdmin) {
+    for (const task of Array.isArray(decisionTasks) ? decisionTasks : []) {
+      if (task.status === 'Chờ duyệt') decisions.push({ label: task.title, detail: 'Công việc chờ duyệt', route: { screen: 'cho-duyet' } });
+    }
+    for (const row of pendingRequests) decisions.push({ label: row.reason || row.type, detail: 'Đơn từ chờ duyệt', route: { screen: 'don-tu' } });
+    for (const row of ledger) {
+      const status = cashStatus(row);
+      const reason = status === 'Chờ duyệt' ? 'Thu chi chờ duyệt'
+        : waiting(row) && !verifiedCash(row) ? 'Thiếu dấu vết duyệt'
+        : waiting(row) && row.dueDate && row.dueDate <= nextWeek ? 'Khoản thu chi đến hạn'
+        : ['Đã thu', 'Đã chi'].includes(status) && !String(row.ref ?? '').trim() ? 'Thiếu mã tham chiếu chứng từ' : '';
+      if (reason) decisions.push({ label: row.note || row.partyName || 'Khoản thu chi',
+        detail: `${reason} · ${vnd.format(row.amount)}`, route: { screen: 'thu-chi' } });
+    }
+    for (const { project, risk } of activeProjects) {
+      if (risk) decisions.push({ label: project.name, detail: project.risks || 'Dự án cần chú ý',
+        route: { screen: 'du-an', projectId: project.id } });
+    }
+  }
+
+  function row(entry: Entry, key: string | number) {
+    return <Pressable key={key} accessibilityRole="button" onPress={() => onNavigate(entry.route)} style={styles.row}>
+      <View style={styles.grow}>
+        <Text style={screen.label}>{entry.label}</Text>
+        {!!entry.detail && <Text style={screen.muted}>{entry.detail}</Text>}
+      </View>
+      <Text style={styles.link} accessibilityElementsHidden importantForAccessibility="no">›</Text>
+    </Pressable>;
+  }
+
+  function card(title: string, children: ReactNode, options?: { primary?: boolean; action?: ReactNode }) {
+    return <View style={[screen.panel, styles.card, width >= 760 && (options?.primary ? styles.widePrimary : styles.wide)]}>
+      <View style={styles.cardHeading}>
+        <Text accessibilityRole="header" style={[screen.cardTitle, styles.grow]}>{title}</Text>
+        {options?.action}
+      </View>
+      {children}
+    </View>;
+  }
+
+  function state(data: Load<unknown>, children: ReactNode) {
+    if (data === 'error') return <Text style={screen.error}>Không tải được dữ liệu.</Text>;
+    if (!data) return <ActivityIndicator color={colors.accent} accessibilityLabel="Đang tải dữ liệu" />;
+    return children;
+  }
+
+  function bar(value: number, color: string) {
+    return <View aria-hidden style={styles.track}>
+      <View style={[styles.fill, { width: `${value}%`, backgroundColor: color }]} />
+    </View>;
+  }
+
+  const sources = [tasks, projectTasks, projects, cash, requests, ...(isAdmin ? [decisionTasks] : [])];
+  const unavailable = sources.includes('error');
+  const entries = expanded === 'decisions'
+    ? decisions.filter(entry => decisionFilter === 'all' || entry.route.screen === decisionFilter) : alerts;
+  const incomplete = sources.some(source => !Array.isArray(source));
+
+  return <>
+    <PageHeader title="Tổng quan" />
+    <View style={screen.choices}>
+      <Button secondary label={incomplete ? 'Cảnh báo' : `Cảnh báo (${alerts.length})`}
+        onPress={() => { setExpanded(expanded === 'alerts' ? null : 'alerts'); setVisibleEntries(8); }} />
+      {isAdmin
+        ? <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
+          onPress={() => { setExpanded(expanded === 'decisions' ? null : 'decisions'); setVisibleEntries(8); }} />
+        : <Button secondary label="Phê duyệt" onPress={() => onNavigate({ screen: 'cho-duyet' })} />}
+    </View>
+    {unavailable && <Button secondary label="Tải lại dữ liệu" onPress={reload} />}
+    {expanded && <View style={screen.panel}>
+      <Text accessibilityRole="header" style={screen.cardTitle}>{expanded === 'alerts' ? 'Cảnh báo' : 'Việc cần quyết định'}</Text>
+      {expanded === 'decisions' && <Dropdown label="Loại việc" value={decisionFilter} choices={decisionFilters}
+        onChange={value => { setDecisionFilter(value); setVisibleEntries(8); }} />}
+      {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
+      {entries.slice(0, visibleEntries).map(row)}
+      {!entries.length && !incomplete && <Text style={screen.muted}>Không có mục cần xử lý.</Text>}
+      {entries.length > visibleEntries && <Button secondary label="Xem thêm" onPress={() => setVisibleEntries(value => value + 8)} />}
+    </View>}
+    <View style={styles.grid}>
+      {canReadCash && card('Dòng tiền thực tế', state(cash, <>
+        <View style={styles.chartLegend}>
+          <Text style={[screen.muted, styles.grow]}>6 tháng gần nhất</Text>
+          <View style={styles.legendItem}>
+            <View aria-hidden style={[styles.dot, { backgroundColor: colors.success }]} />
+            <Text style={screen.muted}>Đã thu</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View aria-hidden style={[styles.dot, { backgroundColor: colors.accent }]} />
+            <Text style={screen.muted}>Đã chi</Text>
+          </View>
+        </View>
+        <View style={styles.chart} aria-hidden>
+          {series.map(item => <View key={item.key} style={[styles.chartMonth,
+            hasCashActivity && item.key === cashMonth.key && styles.monthSelected]}>
+            <View style={[styles.column, { height: `${100 * item.income / maxCash}%`, backgroundColor: colors.success }]} />
+            <View style={[styles.column, { height: `${100 * item.expense / maxCash}%`, backgroundColor: colors.accent }]} />
+          </View>)}
+        </View>
+        <View style={styles.months}>
+          {series.map(item => <Pressable key={item.key} accessibilityRole="button"
+            accessibilityLabel={`Tháng ${Number(item.key.slice(5))}/${item.key.slice(0, 4)}`}
+            accessibilityState={{ selected: item.key === cashMonth.key }}
+            aria-pressed={item.key === cashMonth.key}
+            style={[styles.monthButton, item.key === cashMonth.key && styles.monthButtonSelected,
+              hasCashActivity && item.key === cashMonth.key && styles.monthSelected]}
+            onPress={() => setSelectedMonth(item.key)}>
+            <Text style={item.key === cashMonth.key ? styles.link : screen.muted}>T{Number(item.key.slice(5))}</Text>
+          </Pressable>)}
+        </View>
+        {cashMonth.income || cashMonth.expense ? <View style={screen.choices} accessibilityLiveRegion="polite">
+          <Text style={screen.body}>Đã thu {vnd.format(cashMonth.income)}</Text>
+          <Text style={screen.body}>Đã chi {vnd.format(cashMonth.expense)}</Text>
+        </View> : <Text style={screen.muted} accessibilityLiveRegion="polite">Chưa ghi nhận khoản đã thu hoặc đã chi trong kỳ.</Text>}
+        <Pressable accessibilityRole="button" style={styles.inlineAction} onPress={() => onNavigate({ screen: 'thu-chi' })}>
+          <Text style={styles.link}>Mở sổ Thu chi</Text>
+        </Pressable>
+      </>), { primary: true })}
+      {card('Tình trạng công việc', state(tasks, <>
+        <View style={styles.taskSummary}>
+          <TaskRing counts={grouped.map(items => items.length)} colors={groupColors} />
+          <View style={styles.taskLegend}>
+            {grouped.map((items, index) => <Pressable key={groups[index]} accessibilityRole="button"
+              accessibilityState={{ expanded: group === index, disabled: !items.length }} disabled={!items.length}
+              onPress={() => setGroup(group === index ? null : index)} style={styles.legendRow}>
+              <View aria-hidden style={[styles.dot, { backgroundColor: groupColors[index] }]} />
+              <Text style={[screen.label, styles.grow]}>{groups[index]}</Text>
+              <Text style={screen.label}>{items.length}</Text>
+            </Pressable>)}
+          </View>
+        </View>
+        {group !== null && grouped[group].length > 0 && <View style={screen.stack}>
+          <Text accessibilityRole="header" style={screen.cardTitle}>{groups[group]}</Text>
+          {[...grouped[group]].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+            .slice(0, 8).map(task => row({ label: task.title, detail: formatDue(task.due), route: taskRoute(task) }, task.id))}
+          <Button secondary label="Mở Công việc" onPress={() => onNavigate({ screen: 'cong-viec' })} />
+        </View>}
+      </>))}
+      {card('Tiến độ dự án', state(projects, <>
+        {!activeProjects.length && <Text style={[screen.muted, styles.empty]}>Chưa có dự án đang theo dõi.</Text>}
+        {activeProjects.slice(0, 4).map(({ project, metrics, count, risk }) => {
+          const { progress, done } = metrics;
+          const detail = projectTasks === 'error' ? 'Không tải được tiến độ' : !projectTasks ? 'Đang tải tiến độ…' : progress === null
+            ? 'Chưa có việc trong phạm vi xem' : `${done}/${count} việc đã duyệt · ${progress}%`;
+          return <View key={project.id}>
+            {row({ label: project.name, detail: risk ? `Cần chú ý · ${detail}` : detail,
+              route: { screen: 'du-an', projectId: project.id } }, project.id)}
+            {progress !== null && bar(progress, colors.accent)}
+          </View>;
+        })}
+      </>), { primary: true, action: <Pressable accessibilityRole="button" style={styles.inlineAction}
+        onPress={() => onNavigate({ screen: 'du-an' })}><Text style={styles.link}>Tất cả dự án</Text></Pressable> })}
+      {isAdmin && card('Thu chi đến hạn', state(cash, <>
+        <Text style={screen.muted}>7 ngày tới · Khoản đã duyệt</Text>
+        <View style={styles.cardHeading}><Text style={screen.label}>Phải thu</Text><Text style={screen.label}>{vnd.format(income)}</Text></View>
+        {bar(100 * income / Math.max(1, income, expense), colors.success)}
+        <View style={styles.cardHeading}><Text style={screen.label}>Phải chi</Text><Text style={screen.label}>{vnd.format(expense)}</Text></View>
+        {bar(100 * expense / Math.max(1, income, expense), colors.accent)}
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDebt }}
+          style={styles.row} onPress={() => setShowDebt(value => !value)}>
+          <Text style={styles.link}>Chi tiết công nợ</Text>
+        </Pressable>
+        {showDebt && <>
+          <Text style={screen.body}>Chênh lệch {vnd.format(income - expense)}</Text>
+          <Text style={screen.muted}>{lateCash.length} khoản quá hạn · {scheduled.filter(item => !item.dueDate).length} khoản chưa có hạn</Text>
+          <Button secondary label="Mở Thu chi" onPress={() => onNavigate({ screen: 'thu-chi' })} />
+        </>}
+      </>))}
+    </View>
+  </>;
+}
+
+const useStyles = createThemedStyles(colors => StyleSheet.create({
+  grid: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: 14 },
+  card: { width: '100%', gap: 10, padding: 16 },
+  widePrimary: { flexBasis: '54%', flexGrow: 1 },
+  wide: { flexBasis: '42%', flexGrow: 1 },
+  cardHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  inlineAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  grow: { flex: 1, minWidth: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8,
+    borderTopWidth: 1, borderTopColor: colors.line },
+  chart: { height: 140, flexDirection: 'row', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
+  chartLegend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  chartMonth: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 3, borderRadius: 6 },
+  column: { width: '30%', maxWidth: 22, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
+  months: { flexDirection: 'row', gap: 4 },
+  monthButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 6, borderWidth: 1, borderColor: colors.line },
+  monthSelected: { backgroundColor: colors.accentSoft },
+  monthButtonSelected: { borderColor: colors.accent },
+  taskSummary: { alignItems: 'center', gap: 14 },
+  taskLegend: { alignSelf: 'stretch' },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  ring: { width: 120, height: 120, borderRadius: 60, overflow: 'hidden', backgroundColor: colors.line,
+    alignItems: 'center', justifyContent: 'center' },
+  ringWindow: { position: 'absolute', left: 60, top: 0, width: 60, height: 120, overflow: 'hidden' },
+  ringSweep: { position: 'absolute', left: -60, top: 0, width: 120, height: 120 },
+  ringHalf: { width: 60, height: 120 },
+  ringCenter: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.paper,
+    alignItems: 'center', justifyContent: 'center' },
+  ringCaption: { color: colors.muted, fontSize: 11 },
+  empty: { textAlign: 'center', padding: 16, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line },
+  track: { height: 7, backgroundColor: colors.surfaceMuted, borderRadius: 8, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 8 },
+  dot: { width: 9, height: 9, borderRadius: 5 },
+  total: { color: colors.ink, fontSize: 28, fontWeight: '800' },
+  link: { color: colors.accent, fontWeight: '700' },
+}));

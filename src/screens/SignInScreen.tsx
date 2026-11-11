@@ -6,16 +6,19 @@ import { useToast } from '../components/Toast';
 import { signInWithGoogle } from '../features/auth/google';
 import type { Session } from '../features/auth/useSession';
 import { auth, checkAuthEmulator, configError, emulatorHost, emulatorMode, pilotMode } from '../services/firebase/firebase';
-import { colors } from '../theme/theme';
-import { screenStyles } from '../theme/screenStyles';
+import { useTheme } from '../theme/theme';
+import { useScreenStyles } from '../theme/screenStyles';
 import { WorkspaceHeader } from '../workspace/WorkspaceHeader';
 
 const demoAccounts = {
   staff: { sub: 'marchix-mobile-demo-staff', email: 'nhanvien@example.test', name: 'Nhân viên demo' },
   reviewer: { sub: 'marchix-mobile-demo-reviewer', email: 'nguoigiao@example.test', name: 'Người giao việc demo' },
+  admin: { sub: 'marchix-mobile-demo-admin', email: 'quantri@example.test', name: 'Quản trị demo' },
 };
 
 export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) {
+  const { colors } = useTheme();
+  const screenStyles = useScreenStyles();
   const showToast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -61,8 +64,12 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
                 <Button label={busy ? 'Đang đăng nhập…' : emulatorMode
                   ? 'Đăng nhập Google (mô phỏng)' : 'Đăng nhập bằng Google'}
                   onPress={() => void login()} disabled={busy} />
-                {emulatorMode ? <Button label="Đăng nhập người giao việc (mô phỏng)" secondary
-                  onPress={() => void login('reviewer')} disabled={busy} /> : null}
+                {emulatorMode && <>
+                  <Button label="Đăng nhập người giao việc (mô phỏng)" secondary
+                    onPress={() => void login('reviewer')} disabled={busy} />
+                  <Button label="Đăng nhập quản trị (mô phỏng)" secondary
+                    onPress={() => void login('admin')} disabled={busy} />
+                </>}
               </>}
             </View>}
       </View>

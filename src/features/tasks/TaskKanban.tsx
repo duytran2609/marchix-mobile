@@ -5,7 +5,7 @@ import type { GestureResponderEvent, ViewProps } from 'react-native';
 import { pilotMode, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { editableStatus, editableStatuses, saveProgress } from './tasks';
 import type { EditableStatus, Task } from './tasks';
-import { colors } from '../../theme/theme';
+import { createThemedStyles } from '../../theme/theme';
 import { useToast } from '../../components/Toast';
 
 type Column = { status: string; tasks: Task[] };
@@ -62,6 +62,7 @@ export function TaskKanban({ columns, columnWidth, email, columnColor, renderCar
   onOpen: (task: Task) => void;
   onDragChange: (dragging: boolean) => void;
 }) {
+  const styles = useStyles();
   const board = useRef<ComponentRef<typeof View>>(null);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const offset = useRef(0);
@@ -264,7 +265,7 @@ export function TaskKanban({ columns, columnWidth, email, columnColor, renderCar
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   wrapper: { gap: 6 },
   dragHint: { transform: [{ translateY: -4 }] },
   viewport: { overflow: 'hidden' },
@@ -280,4 +281,4 @@ const styles = StyleSheet.create({
   ghost: { position: 'absolute', padding: 9, borderWidth: 1, borderRadius: 10, borderColor: colors.accent,
     backgroundColor: colors.paper, boxShadow: '0 3px 12px rgba(33, 25, 53, 0.22)' },
   ghostTitle: { color: colors.accent, fontSize: 14, fontWeight: '800' },
-});
+}));

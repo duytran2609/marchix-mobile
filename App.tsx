@@ -1,31 +1,37 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet } from 'react-native';
+import { useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { ToastProvider } from './src/components/Toast';
 import { useSession } from './src/features/auth/useSession';
+import { usePreference } from './src/features/settings/usePreference';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { configError } from './src/services/firebase/firebase';
-import { colors } from './src/theme/theme';
+import { darkColors, lightColors, ThemeContext } from './src/theme/theme';
 import { MemberWorkspace } from './src/workspace/MemberWorkspace';
+
+const themeModes = ['system', 'light', 'dark'] as const;
 
 export default function App() {
   const session = useSession();
+  const system = useColorScheme();
+  const theme = usePreference('marchix:theme', themeModes, 'system');
+  const dark = theme.value === 'dark' || (theme.value === 'system' && system === 'dark');
+  const colors = dark ? darkColors : lightColors;
 
   return (
     <SafeAreaProvider>
-      <ToastProvider>
-        <SafeAreaView style={styles.safe}>
-          <StatusBar style="dark" />
-          {!configError && session.kind === 'member'
-            ? <MemberWorkspace key={session.email} email={session.email} name={session.name}
-                photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant} />
-            : <SignInScreen sessionKind={session.kind} />}
-        </SafeAreaView>
-      </ToastProvider>
+      <ThemeContext.Provider value={{ colors, dark, mode: theme.value, ready: theme.ready, setMode: theme.save }}>
+        <ToastProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+            <StatusBar style={dark ? 'light' : 'dark'} />
+            {!configError && session.kind === 'member'
+              ? <MemberWorkspace key={session.email} email={session.email} name={session.name}
+                  photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant}
+                  canReadCash={session.canReadCash} canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests} />
+              : <SignInScreen sessionKind={session.kind} />}
+          </SafeAreaView>
+        </ToastProvider>
+      </ThemeContext.Provider>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-});

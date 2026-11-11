@@ -1,0 +1,87 @@
+diff --git a/web/app.js b/web/app.js
+index d22b463..7f69423 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -741,7 +741,7 @@ function renderTasks() {
+ const canReview = t => myRouting("task", t);
+ const toLocalHM = iso => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+ function nextRepeat(t) {
+-  const k = t.repeat === "Hằng tuần" ? 7 : 0, shift = x => { if (!x) return ""; const dt = new Date(x + "T00:00:00"); if (k) dt.setDate(dt.getDate() + k); else dt.setMonth(dt.getMonth() + 1); dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset()); return dt.toISOString().slice(0, 10); };
++  const k = t.repeat === "Hằng tuần" ? 7 : 0, shift = x => { if (!x) return ""; const dt = new Date(x + "T00:00:00"); if (k) dt.setDate(dt.getDate() + k); else { const day = dt.getDate(); dt.setDate(1); dt.setMonth(dt.getMonth() + 1); dt.setDate(Math.min(day, new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate())); } dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset()); return dt.toISOString().slice(0, 10); };
+   const now = nowISO();
+   return { ...t, id: undefined, startDate: shift(t.startDate), due: shift(t.due), status: "Chưa làm", progress: 0, doneAt: "", spawned: false, comments: [], checklist: (t.checklist || []).map(c => ({ t: c.t, done: false })), createdAt: now, updatedAt: now, updatedBy: me() };
+ }
+@@ -805,8 +805,11 @@ function attCalc(r, date) {
+   const W2 = S.work, dw = dayWeight(date), inD = tsDate(r.inTs), outD = tsDate(r.outTs);
+   const inM = r.manualIn ? hm2m(r.manualIn) : inD ? inD.getHours() * 60 + inD.getMinutes() : null;
+   const outM = r.manualOut ? hm2m(r.manualOut) : outD ? outD.getHours() * 60 + outD.getMinutes() : null;
+-  const sIn = hm2m(W2.shiftIn), sOut = dw === 0.5 ? hm2m(W2.lunchFrom) : hm2m(W2.shiftOut), lF = hm2m(W2.lunchFrom), lT = hm2m(W2.lunchTo);
+-  const lunch = (a, b) => Math.max(0, Math.min(b, lT) - Math.max(a, lF));
++  const sIn = hm2m(W2.shiftIn), shiftEnd = hm2m(W2.shiftOut);
++  const lF = W2.lunchFrom ? hm2m(W2.lunchFrom) : NaN, lT = W2.lunchTo ? hm2m(W2.lunchTo) : NaN;
++  const sOut = dw === 0.5 ? (Number.isFinite(lF) ? lF : sIn + Math.floor((shiftEnd - sIn) / 2)) : shiftEnd;
++  const hasLunchBreak = Number.isFinite(lF) && lT > lF;
++  const lunch = (a, b) => hasLunchBreak ? Math.max(0, Math.min(b, lT) - Math.max(a, lF)) : 0;
+   const std = Math.max(1, (sOut - sIn) - lunch(sIn, sOut));
+   let worked = 0, work = 0, flag = "";
+   if (inM !== null && outM !== null && outM > inM) worked = (outM - inM) - lunch(inM, outM);
+@@ -2188,15 +2191,18 @@ async function saveStandardForm(e) {
+   const session = authSession;
+   const submitMessage = $("#msg");
+   const projectContext = form.dataset.projectContext;
+-  let col, data, docId = id, after = null;
++  let col, data, docId = id, after = null, spawnTask = null;
+   if (kind === "task") {
+     col = "tasks"; docId ||= newId(col); const ae = g("assigneeEmail") || "", prev = id ? (S.tasks.find(x => x.id === id) || {}) : {}, status = g("status");
+     const watchers = [...form.querySelectorAll('input[name="watch"]:checked')].map(x => x.value), cmt = g("comment");
+-    const W2 = S.work, status2 = status === "Xong" ? "Chờ duyệt" : status;
++    const W2 = S.work, requiresReview = W2.requireReview !== false;
++    const status2 = prev.status === "Chờ duyệt" && status === "Xong" ? "Chờ duyệt"
++      : !isDoneT(prev) && isDoneT({ status }) ? (requiresReview ? "Chờ duyệt" : "Xong") : status;
+     const approver = id ? (prev.approverEmail || "") : (g("approverEmail") || "");
+     if (status2 === "Chờ duyệt" && !approver) { $("#msg").textContent = "Chỉ định người duyệt rồi mới báo hoàn thành."; return; }
+     if (approver && approver === ae) { $("#msg").textContent = "Người thực hiện phải khác người duyệt."; return; }
+-    if (status2 === "Chờ duyệt" && prev.status !== "Chờ duyệt" && W2.requireReportNote && !cmt && !($("#f_files").files || []).length) { $("#msg").textContent = "Khi báo hoàn thành, hãy ghi kết quả hoặc đính kèm tệp."; return; }
++    if (status2 === "Xong" && !isDoneT(prev) && S._cl.some(item => !item.done)) { $("#msg").textContent = "Hãy đánh dấu xong tất cả việc con."; return; }
++    if (isDoneT({ status: status2 }) && !isDoneT(prev) && W2.requireReportNote && !cmt && !($("#f_files").files || []).length) { $("#msg").textContent = "Khi báo hoàn thành, hãy ghi kết quả hoặc đính kèm tệp."; return; }
+     let files = [];
+     try { files = await uploadFiles($("#f_files"), "tasks/" + docId, $("#msg")); } catch (err) { $("#msg").textContent = err.message; return; }
+     const comments = (prev.comments || []).slice(); if (cmt || files.length) comments.push({ by: me(), at: now, text: cmt || "", files });
+@@ -2211,11 +2217,15 @@ async function saveStandardForm(e) {
+     if (data.assigneeEmail && data.assigneeEmail !== prev.assigneeEmail) notes.push([data.assigneeEmail, "Bạn được giao việc mới", `${data.title}${data.due ? " – hạn " + fmtDate(data.due) : ""}${cmt ? " · " + cmt : ""}`]);
+     else if (cmt || files.length) who.forEach(w => notes.push([w, "Trao đổi mới: " + data.title, `${memberName(me())}: ${cmt || ""}${files.length ? " (đính kèm " + files.length + " tệp)" : ""}`]));
+     if (status2 !== prev.status && id) who.forEach(w => notes.push([w, status2 === "Chờ duyệt" ? `${memberName(me())} báo hoàn thành “${data.title}” — chờ duyệt` : status2 === "Xong" && prev.status === "Chờ duyệt" ? `Việc “${data.title}” đã được duyệt: ${rating}` : prev.status === "Chờ duyệt" ? `Việc “${data.title}” cần làm lại` : `Việc “${data.title}” chuyển sang ${status2}`, reviewNote || `Cập nhật bởi ${memberName(me())}`]));
+-    let spawn = null;
+     if (data.status === "Xong" && data.repeat !== "Không lặp" && !data.spawned && data.due) {
+-      data.spawned = true; spawn = nextRepeat(data);
++      data.spawned = true;
++      const seriesId = prev.seriesId || docId, generated = nextRepeat({ ...data, seriesId });
++      delete generated.id;
++      delete generated.rating;
++      delete generated.reviewNote;
++      spawnTask = { ref: doc(db, "tasks", "repeat_" + seriesId + "_" + generated.due), data: generated };
+     }
+-    after = async () => { for (const [to, t, b] of notes) await notify(to, t, b, link); if (spawn) { delete spawn.id; await setDoc(doc(db, "tasks", newId("tasks")), spawn); } };
++    after = async () => { for (const [to, t, b] of notes) await notify(to, t, b, link); };
+   } else if (kind === "project") { col = "projects"; docId ||= form.dataset.newProjectId; data = { name: g("name"), owner: g("owner"), ownerEmail: (g("ownerEmail") || "").startsWith("ten:") ? "" : (g("ownerEmail") || ""), status: g("status"), budget: num(g("budget")), startDate: g("startDate"), deadline: g("deadline"), goal: g("goal"), phase: g("phase"), risks: g("risks"), note: g("note") }; }
+   else if (kind === "member") { col = "members"; const em = g("email").toLowerCase(); docId = id || em; if (!id && S.members.some(m => (m.email || m.id) === em)) { $("#msg").textContent = "Email đã tồn tại. Mở tài khoản cũ để sửa quyền."; return; } data = { name: g("name"), email: em, role: em === OWNER ? "admin" : g("role"), enabled: em === OWNER || $("#f_enabled").checked, grants: [...form.querySelectorAll('input[name="memberGrant"]:checked')].map(el => el.value) }; }
+   else if (kind === "employee") { col = "employees"; data = { name: g("name"), email: (g("email") || "").toLowerCase(), position: g("position"), contract: g("contract"), startDate: g("startDate"), status: g("status"), salary: num(g("salary")), insSalary: num(g("insSalary")), allowTaxable: num(g("allowTaxable")), allowFree: num(g("allowFree")), dependents: Number(g("dependents") || 0), taxCode: g("taxCode") }; }
+@@ -2254,7 +2264,17 @@ async function saveStandardForm(e) {
+   $("#msg").textContent = "Đang lưu…";
+   try {
+     docId ||= newId(col);
+-    await setDoc(doc(db, col, docId), data, { merge: ["task", "request", "cash", "member", "project"].includes(kind) });
++    const target = doc(db, col, docId);
++    if (kind === "task" && spawnTask) {
++      await runTransaction(db, async tx => {
++        const [current, next] = await Promise.all([tx.get(target), tx.get(spawnTask.ref)]);
++        if (current.exists() && current.data().spawned) throw Error("Việc đã được cập nhật. Hãy mở lại để tiếp tục.");
++        tx.set(target, data, { merge: true });
++        if (!next.exists()) tx.set(spawnTask.ref, spawnTask.data);
++      });
++    } else {
++      await setDoc(target, data, { merge: ["task", "request", "cash", "member", "project"].includes(kind) });
++    }
+     if (session !== authSession || !submitMessage.isConnected) return;
+     if (kind === "project" && !id) {
+       if (!S.projects.some(p => p.id === docId)) S.projects.push({ id: docId, ...data });

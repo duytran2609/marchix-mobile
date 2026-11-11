@@ -5,6 +5,7 @@ import { auth, configError, db } from '../../services/firebase/firebase';
 
 export type MemberSession = {
   kind: 'member'; email: string; name: string; photoURL: string | null; isAdmin: boolean; hasReviewGrant: boolean;
+  canReadCash: boolean; canReviewCash: boolean; canReviewRequests: boolean;
 };
 export type Session =
   | { kind: 'loading' | 'signed-out' | 'denied' | 'error' }
@@ -29,7 +30,10 @@ export function useSession() {
           const isAdmin = member?.role === 'admin';
           setSession(snapshot.exists() && member?.enabled !== false
             ? { kind: 'member', email, name: member?.name || email, photoURL: user.photoURL, isAdmin,
-                hasReviewGrant: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('taskReview')) }
+                hasReviewGrant: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('taskReview')),
+                canReviewRequests: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('requestReview')),
+                canReadCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashRecord')),
+                canReviewCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashReview')) }
             : { kind: !snapshot.exists() && snapshot.metadata.fromCache ? 'error' : 'denied' });
         }, () => setSession({ kind: 'error' }));
       }

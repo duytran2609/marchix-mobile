@@ -1,24 +1,19 @@
-import { memo, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import type { LayoutRectangle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { memo } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Dropdown } from '../../components/Dropdown';
 import { SearchInput } from '../../components/SearchInput';
-import { formatDue, formatTaskDate } from './taskDates';
+import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
 import { TaskKanban } from './TaskKanban';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
 import { searchByName } from '../../utils/search';
 import { taskPriorities, taskStatuses } from './tasks';
 import type { Task } from './tasks';
-import { colors } from '../../theme/theme';
-import { ToastLayer } from '../../components/Toast';
+import { createThemedStyles, useTheme } from '../../theme/theme';
 
 const taskFilters = ['Tất cả', 'Chưa xong', 'Quá hạn', ...taskStatuses] as const;
 const statusOptions = taskFilters.map(value => ({ value, label: value }));
 const priorityFilters = ['', ...taskPriorities, 'Chưa đặt'] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
-const workDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
-const overdueTone = statusTone('Vướng');
 type TaskFilter = typeof taskFilters[number];
 type PriorityFilter = typeof priorityFilters[number];
 type TaskView = 'list' | 'kanban';
@@ -47,6 +42,7 @@ function assigneeKey(task: Task) {
 const TaskCard = memo(function TaskCard({ task, today, onOpen, kanban = false, assigneeName }: {
   task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
 }) {
+  const styles = useStyles();
   const overdueDays = daysOverdue(task, today);
   const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
   const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
@@ -81,83 +77,14 @@ const TaskCard = memo(function TaskCard({ task, today, onOpen, kanban = false, a
   );
 });
 
-function FilterDropdown<Value extends string>({ label, value, choices, onChange, singleLineValue = false }: {
-  label: string; value: Value; choices: readonly { value: Value; label: string }[]; onChange: (value: Value) => void;
-  singleLineValue?: boolean;
-}) {
-  const trigger = useRef<ComponentRef<typeof Pressable>>(null);
-  const [anchor, setAnchor] = useState<LayoutRectangle | null>(null);
-  const { width, height, fontScale } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const selectedLabel = choices.find(choice => choice.value === value)?.label ?? 'Tất cả';
-
-  function open() {
-    if (Keyboard.isVisible()) Keyboard.dismiss();
-    trigger.current?.measureInWindow((x, y, width, height) => setAnchor({ x, y, width, height }));
-  }
-
-  function close() {
-    setAnchor(null);
-  }
-
-  const edge = 8;
-  const gap = 4;
-  const menuWidth = Math.min(Math.max(anchor?.width ?? 0, 160), width - insets.left - insets.right - edge * 2);
-  const left = Math.min(Math.max(insets.left + edge, anchor?.x ?? 0), width - insets.right - edge - menuWidth);
-  const belowTop = (anchor?.y ?? 0) + (anchor?.height ?? 0) + gap;
-  const aboveBottom = (anchor?.y ?? 0) - gap;
-  const spaceBelow = height - insets.bottom - edge - belowTop;
-  const spaceAbove = aboveBottom - insets.top - edge;
-  const above = spaceBelow < Math.min(2, choices.length) * 44 + 10 && spaceAbove > spaceBelow;
-  const maxHeight = Math.min(274, Math.max(0, above ? spaceAbove : spaceBelow));
-
-  return (
-    <View style={styles.filterField}>
-      <Text style={styles.filterLabel}>{label}</Text>
-      <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${label}: ${selectedLabel}`}
-        aria-expanded={!!anchor} onPress={open}
-        style={[styles.filterButton, { height: 44 * Math.max(1, fontScale) },
-          (anchor || value !== choices[0]?.value) && styles.selected]}>
-        <Text numberOfLines={singleLineValue ? 1 : 2} ellipsizeMode="tail"
-          style={[styles.activeLabel, styles.filterTriggerValue]}>{selectedLabel}</Text>
-        <Text aria-hidden style={[styles.activeLabel, styles.filterArrow]}>{anchor ? '▴' : '▾'}</Text>
-      </Pressable>
-      {anchor ? (
-        <Modal transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
-          <View style={styles.filterOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={close} accessible={false}
-              importantForAccessibility="no" tabIndex={-1} />
-            <ScrollView keyboardShouldPersistTaps="handled"
-              style={[styles.filterOptions, { left, width: menuWidth, maxHeight },
-                above ? { bottom: height - aboveBottom } : { top: belowTop }]}>
-              <View accessibilityRole="radiogroup" accessibilityLabel={`Lọc theo ${label.toLocaleLowerCase('vi')}`}
-                style={styles.filterOptionsContent}>
-                {choices.map(choice => (
-                  <Pressable key={choice.value} accessibilityRole="radio" aria-checked={value === choice.value}
-                    onPress={() => { close(); onChange(choice.value); }}
-                    style={({ pressed }) => [styles.filterOption,
-                      (value === choice.value || pressed) && styles.filterOptionSelected]}>
-                    <Text style={[value === choice.value ? styles.activeLabel : styles.controlLabel, styles.filterValue]}>
-                      {choice.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-          <ToastLayer />
-        </Modal>
-      ) : null}
-    </View>
-  );
-}
-
 export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onDragChange }: {
   tasks: Task[]; member: { email: string; name: string };
   options: TaskBoardOptions; onOptionsChange: (options: TaskBoardOptions) => void;
   onOpen: (task: Task) => void;
   onDragChange: (dragging: boolean) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { search, filter, priority, view } = options;
   const assigneeNames = new Map<string, string>();
   for (const task of tasks) {
@@ -175,11 +102,11 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
   const scopedTasks = tasks.filter(task => (!assignee || assigneeKey(task) === assignee) &&
     (!priority || (task.priority || 'Chưa đặt') === priority));
   const { width } = useWindowDimensions();
-  const today = workDate.format(new Date());
+  const today = todayInVietnam();
   const stats = [
-    { label: 'Chưa xong', value: scopedTasks.filter(isOpenTask).length, tone: statusTone('Đang làm') },
-    { label: 'Quá hạn', value: scopedTasks.filter(task => daysOverdue(task, today) > 0).length, tone: overdueTone },
-    { label: 'Chờ duyệt', value: scopedTasks.filter(task => task.status === 'Chờ duyệt').length, tone: statusTone('Chờ duyệt') },
+    { label: 'Chưa xong', value: scopedTasks.filter(isOpenTask).length, tone: statusTone('Đang làm', colors) },
+    { label: 'Quá hạn', value: scopedTasks.filter(task => daysOverdue(task, today) > 0).length, tone: statusTone('Vướng', colors) },
+    { label: 'Chờ duyệt', value: scopedTasks.filter(task => task.status === 'Chờ duyệt').length, tone: statusTone('Chờ duyệt', colors) },
     { label: 'Đã xong', value: scopedTasks.filter(task => task.status === 'Xong').length, tone: { text: '#23613A', background: '#E5F5E9' } },
   ] as const;
   const filteredTasks = scopedTasks.filter(task => {
@@ -220,10 +147,10 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
           placeholderTextColor={colors.muted} style={styles.search} value={search} returnKeyType="search"
           onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <View style={styles.filterRow}>
-          <FilterDropdown label="Trạng thái" value={filter} choices={statusOptions} onChange={selectFilter} />
-          <FilterDropdown label="Người thực hiện" value={assignee} choices={assigneeOptions} singleLineValue
+          <Dropdown style={styles.filterField} label="Trạng thái" menuLabel="Lọc theo trạng thái" fallbackLabel="Tất cả" value={filter} choices={statusOptions} onChange={selectFilter} />
+          <Dropdown style={styles.filterField} label="Người thực hiện" menuLabel="Lọc theo người thực hiện" fallbackLabel="Tất cả" value={assignee} choices={assigneeOptions} singleLineValue
             onChange={value => onOptionsChange({ ...options, assignee: value })} />
-          <FilterDropdown label="Mức độ ưu tiên" value={priority} choices={priorityOptions}
+          <Dropdown style={styles.filterField} label="Mức độ ưu tiên" menuLabel="Lọc theo mức độ ưu tiên" fallbackLabel="Tất cả" value={priority} choices={priorityOptions}
             onChange={value => onOptionsChange({ ...options, priority: value })} />
         </View>
         <View style={styles.views} accessibilityLabel="Kiểu xem công việc">
@@ -252,14 +179,14 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
         <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} assigneeName={assigneeName(task)} />
       )) : (
         <TaskKanban columns={columns} columnWidth={Math.min(290, width * 0.74)} email={member.email}
-          columnColor={status => statusTone(status).text} onOpen={onOpen} onDragChange={onDragChange}
+          columnColor={status => statusTone(status, colors).text} onOpen={onOpen} onDragChange={onDragChange}
           renderCard={(task, open) => <TaskCard task={task} today={today} onOpen={open} assigneeName={assigneeName(task)} kanban />} />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   board: { gap: 12 },
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, minWidth: 0, minHeight: 72, alignItems: 'center', gap: 3,
@@ -276,20 +203,7 @@ const styles = StyleSheet.create({
   search: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
     color: colors.ink, fontSize: 16 },
   filterRow: { flexDirection: 'row', gap: 6 },
-  filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0, gap: 5 },
-  filterLabel: { flexGrow: 1, color: colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'left' },
-  filterButton: { width: '100%', flexDirection: 'row', alignItems: 'center',
-    gap: 4, paddingHorizontal: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 9, backgroundColor: colors.paper },
-  filterTriggerValue: { flex: 1, minWidth: 0, textAlign: 'left' },
-  filterArrow: { flexShrink: 0 },
-  filterValue: { flexShrink: 1, textAlign: 'left' },
-  filterOverlay: { flex: 1 },
-  filterOptions: { position: 'absolute', borderWidth: 1, borderColor: colors.line, borderRadius: 9,
-    backgroundColor: colors.paper, boxShadow: '0 8px 22px rgba(33, 25, 53, 0.18)' },
-  filterOptionsContent: { padding: 4 },
-  filterOption: { minHeight: 44, alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 6 },
-  filterOptionSelected: { backgroundColor: colors.accentSoft },
-  selected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0 },
   results: { minHeight: 34, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
   clearButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
@@ -303,11 +217,11 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },
   overdueTag: { alignSelf: 'flex-start', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-    color: overdueTone.text, backgroundColor: overdueTone.background, fontSize: 12, fontWeight: '700' },
+    color: colors.danger, backgroundColor: colors.dangerSoft, fontSize: 12, fontWeight: '700' },
 
 
 
 
 
 
-});
+}));

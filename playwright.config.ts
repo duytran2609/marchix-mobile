@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
+const port = new URL(previewUrl).port || '8081';
+
 export default defineConfig({
   testDir: './tests',
   workers: 1,
@@ -7,9 +10,9 @@ export default defineConfig({
     channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
   },
   webServer: {
-    command: 'npm run web -- --localhost --port 8081',
-    url: 'http://localhost:8081',
+    command: `npm run web -- --localhost --port ${port}`,
+    url: previewUrl,
     timeout: 120_000,
-    env: { EXPO_PUBLIC_FIREBASE_MODE: 'emulator', EXPO_PUBLIC_EMULATOR_HOST: '127.0.0.1' },
+    env: { EXPO_PUBLIC_FIREBASE_MODE: 'emulator', EXPO_PUBLIC_EMULATOR_HOST: process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1' },
   },
 });

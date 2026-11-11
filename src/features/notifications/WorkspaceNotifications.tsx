@@ -8,7 +8,7 @@ import { db } from '../../services/firebase/firebase';
 import { markNotificationsRead, watchNotifications } from './notifications';
 import type { WorkspaceNotification } from './notifications';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { colors } from '../../theme/theme';
+import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
 
 const inboxTabs = [{ id: 'all', label: 'Tất cả' }, { id: 'unread', label: 'Chưa đọc' }] as const;
@@ -19,6 +19,8 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
   edge: number;
   onOpenNote: (note: WorkspaceNotification) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [top, setTop] = useState<number | null>(null);
   const [tab, setTab] = useState<typeof inboxTabs[number]['id']>('all');
   const [notes, setNotes] = useState<WorkspaceNotification[] | null>(null);
@@ -172,7 +174,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   bellButton: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.accentSoft,
     alignItems: 'center', justifyContent: 'center' },
   bellIcon: { alignItems: 'center' },
@@ -182,7 +184,7 @@ const styles = StyleSheet.create({
   bellClapper: { width: 4, height: 2, marginTop: 2, borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
     backgroundColor: colors.accent },
   count: { position: 'absolute', top: -4, right: -5, minWidth: 19, paddingHorizontal: 4, borderRadius: 10,
-    overflow: 'hidden', backgroundColor: colors.danger, color: colors.paper,
+    overflow: 'hidden', backgroundColor: colors.danger, color: colors.onAccent,
     textAlign: 'center', fontSize: 10, lineHeight: 17, fontWeight: '800' },
   popup: { position: 'absolute', padding: 14, gap: 8, borderRadius: 14, borderWidth: 1,
     borderColor: colors.line, backgroundColor: colors.paper, elevation: 8, boxShadow: '0 8px 24px rgba(33, 25, 53, 0.16)' },
@@ -208,4 +210,4 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75 },
   noteTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   date: { color: colors.muted, fontSize: 11 },
-});
+}));

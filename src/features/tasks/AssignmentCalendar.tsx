@@ -1,25 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../theme/theme';
+import { createThemedStyles } from '../../theme/theme';
 
-const localDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
 const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 
-export const todayInVietnam = () => localDate.format(new Date());
 export const displayDay = (day: string) => day.split('-').reverse().join('/');
 
-export function shiftDay(day: string, amount: number) {
-  const date = new Date(day + 'T00:00:00Z');
-  date.setUTCDate(date.getUTCDate() + amount);
-  return isoDay(date);
-}
-
-export function AssignmentCalendar({ initialDay, value, min, max, disabled, onSelect }: {
-  initialDay: string; value: string; min?: string; max?: string; disabled: boolean;
+export function AssignmentCalendar({ initialDay, value, rangeEnd = value, min, max, disabled, onSelect }: {
+  initialDay: string; value: string; rangeEnd?: string; min?: string; max?: string; disabled: boolean;
   onSelect: (day: string) => void;
 }) {
+  const styles = useStyles();
   const [month, setMonth] = useState(() => initialDay.slice(0, 7) + '-01');
   const calendar = useRef<ComponentRef<typeof View>>(null);
   useEffect(() => {
@@ -61,7 +54,7 @@ export function AssignmentCalendar({ initialDay, value, min, max, disabled, onSe
             const number = week * 7 + weekday + 1 - offset;
             if (number < 1 || number > dayCount) return <View key={weekday} style={styles.day} />;
             const day = month.slice(0, 8) + String(number).padStart(2, '0');
-            const selected = day === value;
+            const selected = day >= value && day <= rangeEnd;
             const blocked = disabled || Boolean((min && day < min) || (max && day > max));
             return (
               <Pressable key={weekday} accessibilityRole="button" accessibilityLabel={`Ngày ${displayDay(day)}`}
@@ -77,7 +70,7 @@ export function AssignmentCalendar({ initialDay, value, min, max, disabled, onSe
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   calendar: { borderRadius: 10, padding: 6, borderWidth: 1, borderColor: colors.line, gap: 2 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: colors.ink, fontSize: 15, fontWeight: '700' },
@@ -88,6 +81,6 @@ const styles = StyleSheet.create({
   arrowText: { color: colors.accent, fontSize: 24, fontWeight: '700' },
   number: { color: colors.ink, fontSize: 14 },
   selected: { backgroundColor: colors.accent },
-  selectedText: { color: colors.paper, fontWeight: '700' },
+  selectedText: { color: colors.onAccent, fontWeight: '700' },
   disabled: { opacity: 0.35 },
-});
+}));

@@ -4,7 +4,7 @@ import type { ComponentRef } from 'react';
 import { Animated, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PopupCloseButton } from '../components/PopupCloseButton';
-import { colors } from '../theme/theme';
+import { createThemedStyles } from '../theme/theme';
 
 import { isNativeTab, workspaceTabs } from './workspaceRoutes';
 import type { WorkspaceTab } from './workspaceRoutes';
@@ -19,6 +19,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   onSelect: (tab: WorkspaceTab) => void;
   onLogout: () => Promise<void>;
 }) {
+  const styles = useStyles();
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(width * 0.75, 280);
   const progress = useRef(new Animated.Value(0)).current;
@@ -86,7 +87,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
               <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} />
             </View>
             <ScrollView contentContainerStyle={styles.list}>
-              {workspaceTabs.filter(item => isAdmin || item.id !== 'cai-dat').map(item => {
+              {workspaceTabs.map(item => {
                 const selected = item.id === activeTab;
                 const external = !isNativeTab(item.id);
                 const label = item.id === 'luong' && isAdmin ? 'Nhân sự & lương' : item.label;
@@ -155,7 +156,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, flexDirection: 'row' },
   fill: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(33, 25, 53, 0.54)' },
@@ -172,7 +173,7 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: colors.surfaceMuted },
   icon: { width: 30, height: 30, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.background,
     color: colors.muted, fontSize: 17, lineHeight: 30, textAlign: 'center', textAlignVertical: 'center' },
-  selectedIcon: { backgroundColor: colors.accent, color: colors.paper },
+  selectedIcon: { backgroundColor: colors.accent, color: colors.onAccent },
   label: { flexShrink: 1, color: colors.ink, fontSize: 15, fontWeight: '600' },
   selectedLabel: { color: colors.accent, fontWeight: '800' },
   webTag: { marginLeft: 'auto', color: colors.muted, fontSize: 11, fontWeight: '700' },
@@ -203,6 +204,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center', backgroundColor: colors.background },
   cancelText: { color: colors.ink, fontWeight: '700' },
   dangerButton: { backgroundColor: colors.danger },
-  dangerLabel: { color: colors.paper, fontWeight: '700' },
+  dangerLabel: { color: colors.onAccent, fontWeight: '700' },
   dimmed: { opacity: 0.65 },
-});
+}));

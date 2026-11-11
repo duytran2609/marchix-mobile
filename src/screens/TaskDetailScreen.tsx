@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
-import { useToast } from '../components/Toast';
+import { PopupCloseButton } from '../components/PopupCloseButton';
+import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
 import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskDiscussion } from '../features/tasks/TaskDiscussion';
@@ -12,14 +14,15 @@ import {
 } from '../features/tasks/tasks';
 import type { AssignmentProject, EditableStatus, Task, TaskAssignee } from '../features/tasks/tasks';
 import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
-import { colors } from '../theme/theme';
-import { screenStyles } from '../theme/screenStyles';
+import { createThemedStyles, useTheme } from '../theme/theme';
+import { useScreenStyles } from '../theme/screenStyles';
 
 type TaskDirectory = { members: TaskAssignee[]; projects?: AssignmentProject[] };
 
 function TaskMetadata({ task, assigneeName, members, project }: {
   task: Task; assigneeName?: string; members: Map<string, TaskAssignee>; project?: string;
 }) {
+  const styles = useStyles();
   const watchers = Array.isArray(task.watchers) ? task.watchers : [];
   const fields = [
     ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
@@ -43,9 +46,11 @@ function TaskMetadata({ task, assigneeName, members, project }: {
   </View>;
 }
 
-export function TaskDetailScreen({ liveTask, email, name, onBack }: {
-  liveTask: Task; email: string; name: string; onBack: () => void;
+export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'Danh sách công việc' }: {
+  liveTask: Task; email: string; name: string; onBack?: () => void; backLabel?: string;
 }) {
+  const styles = useStyles();
+  const screenStyles = useScreenStyles();
   const showToast = useToast();
   const checklist = liveTask.checklist ?? [];
   const checkedCount = checklist.filter(item => item.done === true).length;
@@ -118,7 +123,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack }: {
     setBusy(operation);
     try {
       await update();
-      if (operation === 'report') showToast('Đã gửi công việc để duyệt.');
+      if (operation === 'report') showToast('Đã ghi nhận báo hoàn thành.');
     } catch (err) {
       const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
         showToast(err instanceof Error && (!code || code === 'functions/failed-precondition')
@@ -130,15 +135,15 @@ export function TaskDetailScreen({ liveTask, email, name, onBack }: {
 
   return (
     <View style={screenStyles.stack}>
-      <Button label="‹ Danh sách công việc" secondary onPress={onBack} disabled={!!busy} />
-      <View style={screenStyles.panel}>
-        <View style={styles.taskDetailHeader}>
-          <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>
+      {onBack && <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />}
+      <View style={[screenStyles.panel, !onBack && styles.popupContent]}>
+        {(onBack || canEditAssignment) && <View style={styles.taskDetailHeader}>
+          {onBack && <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>}
           {canEditAssignment ? <Button label="Chỉnh sửa" secondary disabled={!!busy} onPress={() => {
             setSavedAssignment(undefined);
             setAssignmentDraft(liveTask);
           }} /> : null}
-        </View>
+        </View>}
         <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
         <TaskMetadata task={liveTask} assigneeName={isAssignee ? name : undefined} members={members} project={project} />
         <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} />
@@ -198,11 +203,11 @@ export function TaskDetailScreen({ liveTask, email, name, onBack }: {
         <View style={screenStyles.panel}>
           <Text accessibilityRole="header" style={screenStyles.cardTitle}>Báo hoàn thành</Text>
           {checkedCount < checklist.length
-            ? <Text style={screenStyles.muted}>Đánh dấu xong tất cả việc con để gửi duyệt.</Text>
+            ? <Text style={screenStyles.muted}>Đánh dấu xong tất cả việc con để báo hoàn thành.</Text>
             : <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
                 style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
                 value={reportNote} onChangeText={setReportNote} editable={!busy} />}
-          <Button label={busy === 'report' ? 'Đang gửi duyệt…' : 'Báo hoàn thành'}
+          <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
             disabled={!!busy || checkedCount < checklist.length}
             onPress={() => void changeWorkflow('report', () =>
               reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />
@@ -229,25 +234,65 @@ export function TaskDetailScreen({ liveTask, email, name, onBack }: {
   );
 }
 
-export function TaskUnavailable({ onBack }: { onBack: () => void }) {
+export function TaskUnavailable({ onBack, backLabel = 'Danh sách công việc' }: { onBack?: () => void; backLabel?: string }) {
+  const screenStyles = useScreenStyles();
   return (
     <View style={screenStyles.panel}>
       <Text accessibilityRole="alert" style={screenStyles.error}>Không xác định được công việc hoặc bạn không còn quyền mở.</Text>
-      <Button label="Danh sách công việc" secondary onPress={onBack} />
+      {onBack && <Button label={backLabel} secondary onPress={onBack} />}
     </View>
   );
 }
 
-export function LinkedTaskDetail({ id, email, name, onBack }: { id: string; email: string; name: string; onBack: () => void }) {
+export function LinkedTaskDetail({ id, email, name, onBack, backLabel }: {
+  id: string; email: string; name: string; onBack?: () => void; backLabel?: string;
+}) {
+  const { colors } = useTheme();
   const [task, setTask] = useState<Task | null>();
   useEffect(() => watchTask(id, setTask, () => setTask(null)), [id]);
   if (task === undefined) return <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />;
-  if (task === null) return <TaskUnavailable onBack={onBack} />;
-  return <TaskDetailScreen liveTask={task} email={email} name={name} onBack={onBack} />;
+  if (task === null) return <TaskUnavailable onBack={onBack} backLabel={backLabel} />;
+  return <TaskDetailScreen liveTask={task} email={email} name={name} onBack={onBack} backLabel={backLabel} />;
 }
 
-const styles = StyleSheet.create({
+export function TaskDetailPopup({ id, email, name, onClose, onBackToWeeklyPlan }: {
+  id: string; email: string; name: string; onClose: () => void;
+  onBackToWeeklyPlan?: () => void;
+}) {
+  const styles = useStyles();
+  const screenStyles = useScreenStyles();
+  return <Modal transparent visible onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+    <SafeAreaView style={styles.popupOverlay}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.popupCenter}>
+        <View role="dialog" accessibilityLabel="Chi tiết công việc" accessibilityViewIsModal style={styles.popup}>
+          <View style={styles.popupHeader}>
+            <Text style={screenStyles.cardTitle}>Chi tiết công việc</Text>
+            <PopupCloseButton label="Đóng chi tiết công việc" onPress={onClose} />
+          </View>
+          {onBackToWeeklyPlan && <View style={styles.popupBack}>
+            <Button label="Quay lại Kế hoạch tuần" secondary onPress={onBackToWeeklyPlan} />
+          </View>}
+          <ScrollView style={styles.popupScroll} contentContainerStyle={styles.popupScrollContent} keyboardShouldPersistTaps="handled">
+            <LinkedTaskDetail id={id} email={email} name={name} />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+      <ToastLayer safeAreaApplied />
+    </SafeAreaView>
+  </Modal>;
+}
+
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   grow: { flex: 1 },
+  popupOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
+  popupCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
+  popup: { width: '100%', maxWidth: 560, flexShrink: 1, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.paper },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
+  popupScroll: { flexShrink: 1, minHeight: 0 },
+  popupBack: { alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 12 },
+  popupScrollContent: { padding: 16 },
+  popupContent: { borderWidth: 0, padding: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskMetadata: { paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surfaceMuted },
@@ -258,4 +303,4 @@ const styles = StyleSheet.create({
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: colors.line, borderRadius: 5,
     alignItems: 'center', justifyContent: 'center' },
-});
+}));

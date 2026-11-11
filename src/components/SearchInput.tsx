@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import type { ComponentRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
-import { colors } from '../theme/theme';
+import { createThemedStyles } from '../theme/theme';
 
 type Props = TextInputProps & {
   accessibilityLabel: string;
@@ -11,6 +11,7 @@ type Props = TextInputProps & {
 };
 
 export function SearchInput({ accessibilityLabel, value, onChangeText, editable, style, ...props }: Props) {
+  const styles = useStyles();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const hasValue = value.length > 0;
 
@@ -31,10 +32,10 @@ export function SearchInput({ accessibilityLabel, value, onChangeText, editable,
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   field: { position: 'relative' },
   inputWithClear: { paddingRight: 48 },
   clear: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 44,
     alignItems: 'center', justifyContent: 'center' },
   icon: { color: colors.muted, fontSize: 23, lineHeight: 26 },
-});
+}));

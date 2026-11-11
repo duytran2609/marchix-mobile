@@ -46,6 +46,7 @@ export type Task = {
   milestone?: boolean;
   createdAt?: string;
   doneAt?: string;
+  reviewedAt?: string;
   updatedAt?: string;
   checklist?: ChecklistItem[];
   comments?: TaskComment[];

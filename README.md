@@ -7,7 +7,7 @@ Bản Expo + React Native + TypeScript dùng các collection `members` và `task
 | Vị trí | Trách nhiệm |
 | --- | --- |
 | `index.ts`, `App.tsx` | Điểm khởi động Expo, provider và chọn giao diện theo phiên đăng nhập. |
-| `src/screens/` | Các màn hình Đăng nhập, Công việc, Chi tiết công việc, Phê duyệt và Chi tiết lượt duyệt. |
+| `src/screens/` | Các màn hình Đăng nhập, Công việc, Chi tiết công việc, Phê duyệt, Chi tiết lượt duyệt, Dự án, Chấm công và Cài đặt. |
 | `src/navigation/` | `workspaceRoutes.ts` khai báo màn hình và các mục menu. `WorkspaceNavigator.tsx` chọn màn hình trong workspace và giữ bộ lọc công việc khi chuyển màn hình. |
 | `src/workspace/` | Khung workspace, thanh đầu trang và kết nối menu, thông báo với điều hướng. |
 | `src/features/` | Thành phần và logic theo nghiệp vụ như công việc, thông báo và xác thực. Popup giao việc nằm trong `features/tasks/`. |
@@ -34,13 +34,15 @@ npm.cmd run seed
 npm.cmd run web -- --localhost --port 8081
 ```
 
-1. Mở [bản thử](http://localhost:8081) và bấm **Đăng nhập Google (mô phỏng)**.
-2. Mở **Kiểm tra giao diện trên điện thoại**, đổi trạng thái hoặc phần trăm, rồi bấm **Lưu tiến độ**.
+1. Mở [bản thử](http://localhost:8081) và bấm **Đăng nhập Google (mô phỏng)**. App mở **Tổng quan**.
+2. Vào **Menu → Công việc**, mở **Kiểm tra giao diện trên điện thoại**, đổi trạng thái hoặc phần trăm, rồi bấm **Lưu tiến độ**.
 3. Mở lại công việc hoặc xem document `tasks/kiem-tra-giao-dien` trong [Emulator Suite](http://127.0.0.1:4000). Lệnh seed đưa các bản ghi demo về trạng thái ban đầu.
 4. Mở **Đối chiếu checklist phát hành**, đánh dấu mục còn lại và kiểm tra tiến độ lên 100%. Chọn **Báo hoàn thành**, sau đó lọc **Chờ duyệt** trong danh sách để mở lại việc.
 5. Đăng xuất, chọn **Đăng nhập người giao việc (mô phỏng)** và mở **Phê duyệt** trong sidebar. Chọn đánh giá rồi bấm **Duyệt** để chuyển việc sang **Xong**, hoặc nhập lý do và bấm **Trả lại** để chuyển về **Đang làm**. Đăng nhập lại bằng tài khoản nhân viên để xem nhận xét.
 6. Chọn **+ Giao việc**, nhập tên, chọn một hoặc nhiều thành viên, rồi chọn ngày bắt đầu và hạn chót trên lịch. Chạm lại tên để bỏ chọn. Dùng **+ Chọn tệp** để gửi tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi. Mỗi người nhận một việc riêng và tải được tệp trong **Trao đổi**. Mở **Tùy chọn thêm** để đặt dự án, checklist, lịch lặp, người theo dõi và lời nhắn.
 7. Bấm chuông **Thông báo** để xem thông báo của tài khoản và xóa số đang hiện trên chuông. Bấm một thông báo công việc để đánh dấu đã đọc và mở chi tiết công việc, hoặc chọn **Đánh dấu tất cả đã đọc** ngay trong popup.
+8. Mở **Dự án** từ menu, chọn **Marchix Mobile · Demo** rồi xem Tổng quan, Công việc đính kèm và Tài chính. Chọn một việc trong dự án để chuyển sang **Công việc** và mở popup chi tiết.
+9. Mở **Chấm công** từ menu để ghi giờ vào, giờ ra và xem bảng công theo tháng. Với tài khoản quản trị, chọn nhân viên và ngày cần điều chỉnh. Khi `settings/work.gpsOn` bật, thiết bị cần cấp quyền vị trí khi dùng ứng dụng. Hãy build lại development client hoặc APK để nhận module định vị.
 
 Firebase Auth Emulator cấp phiên từ ID token Google mô phỏng. Functions Emulator kiểm tra quyền, tính tiến độ theo tỷ lệ việc con đã xong và ghi trạng thái Chờ duyệt vào Firestore Emulator. Việc có checklist cần hoàn tất mọi mục trước khi gửi. Nếu `settings/work.requireReportNote` bật, nhân viên cần nhập kết quả thực hiện.
 
@@ -109,3 +111,7 @@ Trong Pilot, chỉ cần đặt `EXPO_PUBLIC_ENABLE_TASK_ASSIGNMENT=true` cùng 
 - **Phê duyệt** hiển thị công việc ở trạng thái **Chờ duyệt** theo hai nhóm. **Chờ tôi duyệt** dành cho người được chỉ định có quyền duyệt. **Chờ chỉ định người duyệt** hiển thị việc của người giao, hoặc mọi việc với quản trị viên trên Pilot, khi chưa có người duyệt hợp lệ. Bản Pilot lấy danh sách quyền duyệt từ cùng dữ liệu thành viên với web. Thao tác duyệt và trả lại trên staging cần bật cờ giao việc và triển khai callable `reviewTaskCompletion`.
 - Popup thông báo dùng chung collection `notifications` của Quản lý Marchix, hiển thị 30 thông báo mới nhất và lưu riêng những thông báo đã xem qua chuông theo tài khoản trên thiết bị. Mobile đồng bộ trường `read` với bản web khi người dùng mở từng thông báo hoặc đánh dấu tất cả đã đọc. Thông báo công việc ưu tiên `taskId`; các bản ghi cũ chỉ có tên được mở khi xác định được một công việc tương ứng trong danh sách của tài khoản.
 - Bản vá [quanly-web-task-notification-id.patch](patches/quanly-web-task-notification-id.patch) bổ sung `taskId` ngay khi mã web tạo thông báo công việc. Áp dụng từ thư mục gốc chứa `web/app.js`, đối chiếu với bản web `20261110-3` trước khi triển khai.
+
+**Thu chi** dùng chung collection `cash` và định dạng tệp `files/{id}/chunks/{index}` với web. Thành viên xem khoản mình lập hoặc được giao duyệt; người có quyền `cashRecord` và quản trị viên xem toàn sổ. Người lập có thể thêm chứng từ khi tạo khoản hoặc sửa khoản còn chờ duyệt. App xem ảnh, PDF và cho phép lưu tệp. Trình xem PDF trên Android và iOS cần build lại app khi cập nhật từ phiên bản cũ. Quản trị viên chỉ định người duyệt và xuất CSV theo tháng, dự án. Người được giao và có quyền `cashReview` xử lý; người xác nhận giao dịch phải khác người duyệt và nhập mã tham chiếu.
+
+Chạy `npm run test:rules` sau khi seed emulator để kiểm tra phân quyền và `npx playwright test tests/cash-preview.spec.ts` để thử luồng trên trình duyệt ở kích thước điện thoại. Bản pilot dùng Security Rules hiện có của Quản lý Marchix; rà soát riêng trước khi phát hành.

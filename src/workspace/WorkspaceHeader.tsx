@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkspaceNotifications } from '../features/notifications/WorkspaceNotifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
-import { screenStyles } from '../theme/screenStyles';
-import { colors } from '../theme/theme';
+import { useScreenStyles } from '../theme/screenStyles';
+import { createThemedStyles } from '../theme/theme';
 
 export const workspaceHeaderPadding = 20;
 
@@ -14,6 +14,8 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
   menuOpen?: boolean;
   inbox?: { email: string; onOpenNote: (note: WorkspaceNotification) => void };
 }) {
+  const styles = useStyles();
+  const screenStyles = useScreenStyles();
   const header = useRef<ComponentRef<typeof View>>(null);
 
   return (
@@ -40,14 +42,14 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   brand: { width: '100%', maxWidth: 560, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   workspaceBrand: { maxWidth: '100%', gap: 8 },
   menuButton: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.accentSoft,
     alignItems: 'center', justifyContent: 'center', gap: 4 },
   menuLine: { width: 18, height: 2, borderRadius: 1, backgroundColor: colors.accent },
-  mark: { fontSize: 20, fontWeight: '900', backgroundColor: colors.accent, color: colors.paper,
+  mark: { fontSize: 20, fontWeight: '900', backgroundColor: colors.accent, color: colors.onAccent,
     textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, width: 44, height: 44, lineHeight: 44 },
   brandDetails: { flex: 1, minWidth: 76 },
   brandName: { fontSize: 19, fontWeight: '800', color: colors.ink },
-});
+}));

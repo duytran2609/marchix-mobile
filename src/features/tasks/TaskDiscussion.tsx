@@ -8,12 +8,14 @@ import { formatVietnamDateTime } from '../../utils/dateTime';
 import { formatFileSize, saveTaskAttachment } from './taskAttachments';
 import { addTaskComment, commentMaxLength, getAssignmentComment } from './tasks';
 import type { Task, TaskAssignee, TaskAttachment } from './tasks';
-import { screenStyles } from '../../theme/screenStyles';
-import { colors } from '../../theme/theme';
+import { useScreenStyles } from '../../theme/screenStyles';
+import { createThemedStyles } from '../../theme/theme';
 
 export function TaskDiscussion({ task, email, name, members }: {
   task: Task; email: string; name: string; members: Map<string, TaskAssignee>;
 }) {
+  const styles = useStyles();
+  const screenStyles = useScreenStyles();
   const showToast = useToast();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -95,11 +97,11 @@ export function TaskDiscussion({ task, email, name, members }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   attachment: { padding: 10, gap: 3 },
   discussionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   discussionContent: { flex: 1, minWidth: 0, gap: 3 },
   discussionHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   discussionName: { flex: 1, minWidth: 0 },
   discussionTime: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-});
+}));

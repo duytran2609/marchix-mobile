@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/theme';
+import { createThemedStyles } from '../theme/theme';
 
 const TOAST_SLIDE_DISTANCE = 12;
 
@@ -29,6 +29,7 @@ export function useToast() {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const styles = useStyles();
   const [toast, setToast] = useState<Toast | null>(null);
   const [layers, setLayers] = useState<symbol[]>([]);
   const dismissCurrent = useRef<(() => void) | null>(null);
@@ -99,6 +100,7 @@ export function ToastLayer({ safeAreaApplied = false }: { safeAreaApplied?: bool
 }
 
 function ToastViewport({ layer, safeAreaApplied = false }: { layer?: symbol; safeAreaApplied?: boolean }) {
+  const styles = useStyles();
   const { toast, activeLayer, dismissToast } = useContext(ToastDisplay);
   const insets = useSafeAreaInsets();
   if (!toast || activeLayer !== layer) return null;
@@ -115,31 +117,32 @@ function ToastViewport({ layer, safeAreaApplied = false }: { layer?: symbol; saf
           </View>
         )}
         <Text accessibilityRole={isError ? 'alert' : undefined} accessibilityLiveRegion={isError ? 'assertive' : 'polite'}
-          pointerEvents="none" style={styles.message}>
+          pointerEvents="none" style={[styles.message, isError && styles.errorText]}>
           {toast.message}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Đóng thông báo nhanh"
           onPress={dismissToast} style={styles.closeButton}>
-          <Text style={styles.closeGlyph}>×</Text>
+          <Text style={[styles.closeGlyph, isError && styles.errorText]}>×</Text>
         </Pressable>
       </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles(colors => StyleSheet.create({
   root: { flex: 1 },
   viewport: { position: 'absolute', left: 16, right: 16, alignItems: 'center', zIndex: 100 },
   toast: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 380, paddingHorizontal: 14,
     borderRadius: 14, backgroundColor: colors.ink,
     boxShadow: '0 4px 12px rgba(33, 25, 53, 0.18)' },
-  message: { flexShrink: 1, paddingVertical: 9, color: colors.paper, fontSize: 14, lineHeight: 20 },
+  message: { flexShrink: 1, paddingVertical: 9, color: colors.inverseText, fontSize: 14, lineHeight: 20 },
   closeButton: { width: 44, height: 44, marginRight: -9, alignItems: 'center', justifyContent: 'center' },
-  closeGlyph: { color: colors.paper, fontSize: 20, lineHeight: 24 },
+  closeGlyph: { color: colors.inverseText, fontSize: 20, lineHeight: 24 },
   icon: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.successSoft },
   iconGlyph: { color: colors.success, fontSize: 14, lineHeight: 18, fontWeight: '700', includeFontPadding: false },
   error: { backgroundColor: colors.danger },
-  errorIcon: { backgroundColor: '#FBE8E5' },
+  errorText: { color: colors.onAccent },
+  errorIcon: { backgroundColor: colors.dangerSoft },
   errorGlyph: { color: colors.danger },
-});
+}));

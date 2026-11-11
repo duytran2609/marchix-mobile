@@ -13,6 +13,16 @@ service cloud.firestore {
       return verified() && exists(/databases/$(database)/documents/members/$(email()));
     }
 
+    function activeMember() {
+      return member()
+        && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
+    }
+
+    function attendanceAdmin() {
+      return activeMember()
+        && get(/databases/$(database)/documents/members/$(email())).data.get('role', '') == 'admin';
+    }
+
     function openStatus(status) {
       return status in ['Chưa làm', 'Đang làm', 'Vướng'];
     }
@@ -41,11 +51,593 @@ service cloud.firestore {
     }
 
     match /members/{id} {
+      function memberFields() {
+        return ['name', 'email', 'role', 'enabled', 'grants'];
+      }
+      function validSettingsMember(data) {
+        return data.name is string && data.name.size() > 0 && data.name.size() <= 250
+          && data.email is string && data.email.size() <= 250
+          && data.email.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$')
+          && data.role in ['admin', 'staff'] && data.enabled is bool
+          && data.grants is list && data.grants.size() <= 4
+          && data.grants.hasOnly(['taskReview', 'requestReview', 'cashReview', 'cashRecord'])
+          && (!(id in [email(), 'dungnlt.ops@gmail.com']) || (data.enabled && data.role == 'admin'));
+      }
       allow get: if verified() && email() == id;
+      allow read: if attendanceAdmin();
+      allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(memberFields())
+        && request.resource.data.email == id && validSettingsMember(request.resource.data);
+      allow update: if attendanceAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(memberFields())
+        && request.resource.data.email == resource.data.get('email', id)
+        && validSettingsMember(request.resource.data);
+    }
+
+    function shortText(value) {
+      return value is string && value.size() <= 250;
+    }
+
+    function validWorkSettings(data) {
+      let time = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+      let day = [0, 0.5, 1];
+      return data.shiftIn.matches(time) && data.shiftOut.matches(time)
+        && (data.lunchFrom == '' || data.lunchFrom.matches(time)) && (data.lunchTo == '' || data.lunchTo.matches(time))
+        && (data.remindIn == '' || data.remindIn.matches(time)) && (data.remindOut == '' || data.remindOut.matches(time))
+        && data.grace is int && data.grace >= 0
+        && data.days['0'] in day && data.days['1'] in day && data.days['2'] in day && data.days['3'] in day
+        && data.days['4'] in day && data.days['5'] in day && data.days['6'] in day
+        && data.gpsOn is bool && data.gpsLat is number && data.gpsLat >= -90 && data.gpsLat <= 90
+        && data.gpsLng is number && data.gpsLng >= -180 && data.gpsLng <= 180
+        && (!data.gpsOn || data.gpsLat != 0 || data.gpsLng != 0)
+        && data.gpsRadius is int && data.gpsRadius >= 50
+        && data.emailOn is bool && data.autoStart is bool && data.requireReview is bool
+        && data.requireReportNote is bool && data.updatedBy == email() && isoDate(data.updatedAt);
+    }
+
+    match /settings/work {
+      function fields() {
+        return ['shiftIn', 'shiftOut', 'lunchFrom', 'lunchTo', 'remindIn', 'remindOut', 'grace', 'days',
+          'gpsOn', 'gpsLat', 'gpsLng', 'gpsRadius', 'emailOn', 'autoStart', 'requireReview', 'requireReportNote', 'updatedBy', 'updatedAt'];
+      }
+      allow get: if activeMember();
+      allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(fields())
+        && validWorkSettings(request.resource.data);
+      allow update: if attendanceAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields())
+        && validWorkSettings(request.resource.data);
+    }
+
+    match /settings/budget {
+      function fields() {
+        return ['Chi phí cố định', 'Chi phí nhân sự', 'Chi phí hoạt động', 'Thuế, phí nhà nước', 'Tài chính & khác'];
+      }
+      function validBudget(data) {
+        return data['Chi phí cố định'] is int && data['Chi phí cố định'] >= 0
+          && data['Chi phí nhân sự'] is int && data['Chi phí nhân sự'] >= 0
+          && data['Chi phí hoạt động'] is int && data['Chi phí hoạt động'] >= 0
+          && data['Thuế, phí nhà nước'] is int && data['Thuế, phí nhà nước'] >= 0
+          && data['Tài chính & khác'] is int && data['Tài chính & khác'] >= 0;
+      }
+      allow get: if attendanceAdmin();
+      allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(fields())
+        && validBudget(request.resource.data);
+      allow update: if attendanceAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields())
+        && validBudget(request.resource.data);
+    }
+
+    match /settings/payroll {
+      function fields() {
+        return ['soDuDau', 'luongCoSo', 'lttVung', 'giamTruBanThan', 'giamTruPhuThuoc', 'ngayCongChuan',
+          'nldBHXH', 'nldBHYT', 'nldBHTN', 'dnBHXH', 'dnTNLD', 'dnBHYT', 'dnBHTN', 'dnKPCD', 'updatedBy', 'updatedAt'];
+      }
+      function percent(value) {
+        return value is number && value >= 0 && value <= 100;
+      }
+      function validPayroll(data) {
+        return data.soDuDau is int && data.soDuDau >= 0 && data.luongCoSo is int && data.luongCoSo >= 0
+          && data.lttVung is int && data.lttVung >= 0 && data.giamTruBanThan is int && data.giamTruBanThan >= 0
+          && data.giamTruPhuThuoc is int && data.giamTruPhuThuoc >= 0
+          && data.ngayCongChuan is number && data.ngayCongChuan >= 1 && data.ngayCongChuan <= 31
+          && percent(data.nldBHXH) && percent(data.nldBHYT) && percent(data.nldBHTN)
+          && percent(data.dnBHXH) && percent(data.dnTNLD) && percent(data.dnBHYT)
+          && percent(data.dnBHTN) && percent(data.dnKPCD)
+          && data.updatedBy == email() && isoDate(data.updatedAt);
+      }
+      allow get: if attendanceAdmin();
+      allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(fields())
+        && validPayroll(request.resource.data);
+      allow update: if attendanceAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields())
+        && validPayroll(request.resource.data);
+    }
+
+    match /recurring/{id} {
+      function fields() {
+        return ['name', 'category', 'amount', 'partyType', 'partyName', 'day', 'projectId', 'active'];
+      }
+      function validRecurring(data) {
+        return shortText(data.name) && data.name.size() > 0 && shortText(data.category)
+          && data.amount is int && data.amount > 0 && shortText(data.partyType) && shortText(data.partyName)
+          && data.day is int && data.day >= 1 && data.day <= 28 && shortText(data.projectId) && data.active is bool;
+      }
+      allow read, delete: if attendanceAdmin();
+      allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(fields())
+        && validRecurring(request.resource.data);
+      allow update: if attendanceAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields())
+        && validRecurring(request.resource.data);
+    }
+
+    // cash/{id}: web-compatible ledger. Creator and creation time are immutable.
+    // Only the assigned reviewer decides; a different recorder confirms movement with proof.
+    // Employee profiles and monthly payslips use the web workspace document schema.
+    function payrollMoney(value) {
+      return value is int && value >= 0 && value <= 9007199254740991;
+    }
+
+    match /employees/{id} {
+      function validEmployee(data) {
+        return shortText(data.name) && data.name.size() > 0 && shortText(data.email)
+          && (data.email == '' || data.email.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$'))
+          && shortText(data.position) && shortText(data.contract) && shortText(data.taxCode)
+          && data.startDate is string && (data.startDate == '' || data.startDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+          && data.status in ['Đang làm', 'Đã nghỉ']
+          && payrollMoney(data.salary) && payrollMoney(data.insSalary) && payrollMoney(data.allowTaxable)
+          && payrollMoney(data.allowFree) && payrollMoney(data.dependents)
+          && data.updatedBy == email() && isoDate(data.updatedAt);
+      }
+      allow read: if attendanceAdmin();
+      allow create, update: if attendanceAdmin() && validEmployee(request.resource.data);
+    }
+
+    match /payroll/{id} {
+      function validSlip(data) {
+        return data.month is string && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.empId is string && data.empId.size() > 0 && id == data.month + '_' + data.empId
+          && shortText(data.name) && shortText(data.email) && data.status in ['Nháp', 'Đã chốt']
+          && data.workDays is number && data.workDays >= 0 && data.workDays <= 31
+          && data.standardDays is number && data.standardDays > 0 && data.standardDays <= 31
+          && payrollMoney(data.salary) && payrollMoney(data.gross) && payrollMoney(data.bonus)
+          && payrollMoney(data.deduction) && payrollMoney(data.insEmp) && payrollMoney(data.insCo)
+          && payrollMoney(data.kpcd) && payrollMoney(data.taxable) && payrollMoney(data.pit)
+          && payrollMoney(data.advance) && payrollMoney(data.companyCost) && data.net is int
+          && data.net == data.gross - data.insEmp - data.pit - data.deduction - data.advance
+          && data.companyCost == data.gross + data.insCo + data.kpcd
+          && data.updatedBy == email() && isoDate(data.updatedAt)
+          && (data.status == 'Nháp' || (data.lockedBy == email() && data.lockedAt == data.updatedAt));
+      }
+      allow read: if activeMember() && (attendanceAdmin()
+        || (resource.data.email == email() && resource.data.status in ['Đã chốt', 'Đã trả']));
+      allow create: if attendanceAdmin() && validSlip(request.resource.data);
+      allow update: if attendanceAdmin() && (
+        (resource.data.get('status', 'Nháp') in ['', 'Nháp'] && validSlip(request.resource.data))
+        || (resource.data.status == 'Đã chốt' && request.resource.data.status == 'Nháp'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy'])
+          && request.resource.data.updatedBy == email() && isoDate(request.resource.data.updatedAt))
+      );
+    }
+    function hasCashGrant(account, grant) {
+      let membership = get(/databases/$(database)/documents/members/$(account)).data;
+      return membership.get('enabled', true) != false
+        && (membership.get('role', '') == 'admin' || grant in membership.get('grants', []));
+    }
+
+    function canReadCash(data) {
+      return hasCashGrant(email(), 'cashRecord')
+        || data.get('createdBy', '') == email() || data.get('approverEmail', '') == email();
+    }
+
+    function canEditCashDraft(data) {
+      return data.status == 'Chờ duyệt' && data.createdBy == email()
+        && data.get('approvedBy', '') == '' && data.get('requestId', '') == '';
+    }
+
+    function cashFileEntry(id, meta, type) {
+      return {'id': id, 'name': meta.name, 'size': meta.size, 'type': type};
+    }
+
+    // Attachments use the web's files/{id}/chunks/{index} layout. Each file is tied to a cash record.
+    match /files/{fileId} {
+      function cashPath(scopeId) {
+        return /databases/$(database)/documents/cash/$(scopeId);
+      }
+      function fileScope(meta) {
+        return meta.parent.split('/')[1];
+      }
+      function isCashFile(meta) {
+        return meta.parent is string && meta.parent.matches('^cash/[^/]+$')
+          && meta.get('scopeType', 'cash') == 'cash' && meta.get('scopeId', fileScope(meta)) == fileScope(meta);
+      }
+      function canReadFile(meta) {
+        let cash = get(cashPath(fileScope(meta))).data;
+        return canReadCash(cash) && cash.get('files', []).hasAny([
+          cashFileEntry(fileId, meta, meta.type), cashFileEntry(fileId, meta, '')
+        ]);
+      }
+      function validCashFile(meta) {
+        let cash = getAfter(cashPath(meta.scopeId)).data;
+        return meta.keys().hasOnly(['name', 'type', 'size', 'chunks', 'parent', 'scopeType', 'scopeId', 'by', 'at', 'sha256'])
+          && isCashFile(meta) && canEditCashDraft(cash) && cash.updatedAt == meta.at
+          && meta.by == email() && isoDate(meta.at)
+          && meta.name is string && meta.name.size() <= 255 && meta.name.matches('(?s).*[^\\s].*')
+          && meta.type is string && meta.type.size() <= 120 && meta.type.matches('^[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+$')
+          && meta.size is int && meta.size > 0 && meta.size <= 5242880
+          && meta.chunks is int && meta.chunks >= 1 && meta.chunks <= 6
+          && meta.size > (meta.chunks - 1) * 921600 && meta.size <= meta.chunks * 921600
+          && meta.sha256 is string && meta.sha256.matches('^[0-9a-f]{64}$')
+          && cash.get('files', []).hasAny([cashFileEntry(fileId, meta, meta.type)]);
+      }
+
+      allow get: if activeMember() && isCashFile(resource.data) && canReadFile(resource.data);
+      allow create: if activeMember() && isCashFile(request.resource.data) && validCashFile(request.resource.data);
+
+      match /chunks/{chunkId} {
+        function filePath() {
+          return /databases/$(database)/documents/files/$(fileId);
+        }
+        function readableCashChunk() {
+          let meta = get(filePath()).data;
+          return isCashFile(meta) && canReadFile(meta);
+        }
+        function validCashChunk(data) {
+          let meta = getAfter(filePath()).data;
+          return !exists(filePath()) && isCashFile(meta) && meta.by == email()
+            && data.keys().hasOnly(['i', 'data']) && data.i is int && chunkId.matches('^[0-5]$')
+            && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
+            && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
+        }
+        allow read: if activeMember() && readableCashChunk();
+        allow create: if activeMember() && validCashChunk(request.resource.data);
+      }
+    }
+
+    match /cash/{id} {
+      function validSalaryAdvanceExpense(data) {
+        let path = /databases/$(database)/documents/requests/$(data.requestId);
+        let before = get(path).data;
+        let after = getAfter(path).data;
+        let fields = ['type', 'status', 'requestId', 'date', 'amount', 'category', 'method',
+          'projectId', 'note', 'partyType', 'partyName', 'createdBy', 'createdAt', 'updatedAt', 'updatedBy'];
+        return data.keys().hasAll(fields) && data.keys().hasOnly(fields)
+          && id == 'tu_' + data.requestId && before.status == 'Chờ duyệt'
+          && after.status == 'Đã duyệt' && after.type == 'Tạm ứng lương' && after.decidedBy == email()
+          && data.type == 'chi' && data.status == 'Chờ duyệt' && data.amount == after.amount
+          && data.amount is int && data.amount > 0 && data.category == 'Tạm ứng nhân viên'
+          && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && data.method == 'Chuyển khoản' && data.projectId == '' && data.partyType == 'Nhân viên'
+          && data.note is string && data.note.size() <= 280 && shortText(data.partyName)
+          && data.createdBy == email() && data.updatedBy == email()
+          && data.createdAt == after.decidedAt && data.updatedAt == after.decidedAt;
+      }
+
+      allow create: if activeMember() && id.matches('tu_.+') && validSalaryAdvanceExpense(request.resource.data);
+      function dateOnly(value) {
+        return value is string && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+      }
+      function cashFields() {
+        return ['type', 'date', 'dueDate', 'amount', 'category', 'method', 'projectId',
+          'note', 'partyType', 'partyName', 'invoiceRef'];
+      }
+      function validCashCore(data) {
+        return data.type in ['thu', 'chi'] && dateOnly(data.date)
+          && data.amount is int && data.amount > 0 && data.amount <= 9007199254740991
+          && data.createdBy is string && data.createdBy.size() > 0 && data.createdBy.size() <= 250
+          && data.status in ['Chờ duyệt', 'Chờ chi', 'Chờ thu', 'Đã chi', 'Đã thu', 'Từ chối']
+          && data.updatedBy == email() && isoDate(data.updatedAt);
+      }
+      function validCashDraft(data) {
+        return validCashCore(data) && data.status == 'Chờ duyệt'
+          && (data.dueDate == '' || dateOnly(data.dueDate))
+          && shortText(data.category) && data.category.size() > 0 && shortText(data.projectId)
+          && (data.method == 'Chuyển khoản' || (data.type == 'thu' && data.method == 'Tiền mặt'))
+          && data.note is string && data.note.size() <= 1000 && data.note.matches('(?s).*[^\\s].*')
+          && shortText(data.partyType) && shortText(data.partyName)
+          && data.invoiceRef is string && data.invoiceRef.size() <= 150;
+      }
+      function eligibleApprover(account, creator) {
+        return account is string && account.size() <= 250
+          && account.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$') && account != creator
+          && exists(/databases/$(database)/documents/members/$(account)) && hasCashGrant(account, 'cashReview');
+      }
+      function verifiedApproval(data) {
+        return data.get('approvedBy', '') is string && data.get('approvedBy', '') != ''
+          && data.get('approvedBy', '') != data.createdBy;
+      }
+      function awaitingMoney(data) {
+        return data.status == (data.type == 'chi' ? 'Chờ chi' : 'Chờ thu');
+      }
+      function onlyCashChanges(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields.concat(['updatedBy', 'updatedAt']));
+      }
+      function validAddedFile(before, after, index, at) {
+        let entry = after[index];
+        let meta = getAfter(/databases/$(database)/documents/files/$(entry.id)).data;
+        return !before.hasAny([entry]) && entry == cashFileEntry(entry.id, meta, meta.type)
+          && meta.parent == 'cash/' + id && meta.scopeType == 'cash' && meta.scopeId == id
+          && meta.by == email() && meta.at == at;
+      }
+      function validCashFiles(before, after, at) {
+        let start = before.size();
+        let count = after.size() - start;
+        return before == after || (count > 0 && count <= 5 && (start == 0 || after[0:start] == before)
+          && validAddedFile(before, after, start, at)
+          && (count < 2 || validAddedFile(before, after, start + 1, at))
+          && (count < 3 || validAddedFile(before, after, start + 2, at))
+          && (count < 4 || validAddedFile(before, after, start + 3, at))
+          && (count < 5 || validAddedFile(before, after, start + 4, at)));
+      }
+      function validCashUpdate(before, after) {
+        return validCashCore(after) && (
+          (before.status == 'Chờ duyệt' && (
+            (onlyCashChanges(cashFields().concat(['files'])) && canEditCashDraft(before)
+              && after.type == before.type && validCashDraft(after)
+              && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['files'])
+                || (after.files is list && validCashFiles(before.get('files', []), after.files, after.updatedAt)))
+              && (!before.get('projectLinkLocked', false) || after.projectId == before.projectId))
+            || (attendanceAdmin() && after.status == before.status && onlyCashChanges(['approverEmail'])
+              && eligibleApprover(after.approverEmail, before.createdBy))
+            || (before.get('approverEmail', '') == email() && before.createdBy != email()
+              && hasCashGrant(email(), 'cashReview') && onlyCashChanges(['status', 'approvedBy', 'approvedAt', 'approvalNote'])
+              && after.approvedBy == email() && after.approvedAt == after.updatedAt
+              && after.approvalNote is string && after.approvalNote.size() <= 500
+              && (awaitingMoney(after) || (after.status == 'Từ chối' && after.approvalNote.matches('(?s).*[^\\s].*'))))
+          ))
+          || (awaitingMoney(before) && (
+            (hasCashGrant(email(), 'cashRecord') && verifiedApproval(before) && before.approvedBy != email()
+              && (before.type == 'thu' || before.method == 'Chuyển khoản')
+              && onlyCashChanges(['status', 'ref', 'paidBy', 'paidAt'])
+              && after.status == (before.type == 'chi' ? 'Đã chi' : 'Đã thu')
+              && after.paidBy == email() && after.paidAt == after.updatedAt
+              && after.ref is string && after.ref.size() <= 150 && after.ref.matches('(?s).*[^\\s].*'))
+            || (attendanceAdmin() && !verifiedApproval(before) && !('legacyApproval' in before)
+              && onlyCashChanges(['status', 'approvedBy', 'approvedAt', 'legacyApproval'])
+              && after.status == 'Chờ duyệt' && after.approvedBy == '' && after.approvedAt == ''
+              && after.legacyApproval == {'by': before.get('approvedBy', ''), 'at': before.get('approvedAt', '')})
+          ))
+        );
+      }
+      function validGeneratedExpense(data) {
+        let dateParts = data.date.split('-');
+        return data.keys().hasOnly(['type', 'date', 'amount', 'category', 'method', 'projectId', 'note',
+          'partyType', 'partyName', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'])
+          && data.type == 'chi' && data.method == 'Chuyển khoản' && data.status == 'Chờ duyệt'
+          && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && id.matches('cd_' + dateParts[0] + '-' + dateParts[1] + '_.+')
+          && data.amount is int && data.amount > 0 && shortText(data.category) && shortText(data.projectId)
+          && data.note is string && data.note.size() <= 280 && shortText(data.partyType) && shortText(data.partyName)
+          && data.createdBy == email() && data.updatedBy == email() && isoDate(data.createdAt) && isoDate(data.updatedAt);
+      }
+      function validPayrollExpense(data) {
+        return data.keys().hasOnly(['type', 'date', 'amount', 'category', 'method', 'projectId', 'note',
+          'partyType', 'partyName', 'partyEmail', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'])
+          && validCashCore(data) && data.type == 'chi' && data.status == 'Chờ chi'
+          && data.method == 'Chuyển khoản' && data.projectId == '' && data.createdBy == email()
+          && data.createdAt == data.updatedAt && shortText(data.partyName)
+          && data.note is string && data.note.size() > 0 && data.note.size() <= 320
+          && ((id.matches('luong_[0-9]{4}-[0-9]{2}_.+') && data.category == 'Lương'
+              && data.partyType == 'Nhân viên' && shortText(data.partyEmail))
+            || (data.partyType == 'Cơ quan nhà nước' && !('partyEmail' in data)
+              && ((id.matches('bhxh_[0-9]{4}-[0-9]{2}') && data.category == 'BHXH, BHYT, BHTN')
+                || (id.matches('kpcd_[0-9]{4}-[0-9]{2}') && data.category == 'Kinh phí công đoàn')
+                || (id.matches('tncn_[0-9]{4}-[0-9]{2}') && data.category == 'Thuế TNCN nộp thay'))));
+      }
+      allow read: if activeMember() && canReadCash(resource.data);
+      allow create: if activeMember() && !id.matches('tu_.+') && (
+        (!id.matches('^(cd|luong|bhxh|kpcd|tncn)_.*') && request.resource.data.keys().hasOnly(cashFields().concat(['approverEmail', 'ref', 'status',
+          'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'files']))
+          && validCashDraft(request.resource.data) && request.resource.data.createdBy == email()
+          && request.resource.data.get('files', []) is list
+          && validCashFiles([], request.resource.data.get('files', []), request.resource.data.updatedAt)
+          && request.resource.data.createdAt == request.resource.data.updatedAt && request.resource.data.ref == ''
+          && (request.resource.data.approverEmail == '' || (attendanceAdmin()
+            && eligibleApprover(request.resource.data.approverEmail, email()))))
+        || (attendanceAdmin() && (validGeneratedExpense(request.resource.data) || validPayrollExpense(request.resource.data)))
+      );
+      allow update: if activeMember() && validCashUpdate(resource.data, request.resource.data);
+    }
+
+    // weekPlans/{email}_{Monday}: shared with the web workspace.
+    match /weekPlans/{id} {
+      function validWeekPlan(data) {
+        let fields = ['email', 'week', 'priorities', 'blockers', 'updatedAt'];
+        return data.keys().hasAll(fields) && data.keys().hasOnly(fields)
+          && data.email == email()
+          && data.week is string && data.week.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && id == data.email + '_' + data.week
+          && data.priorities is string && data.priorities.size() <= 2000
+          && data.blockers is string && data.blockers.size() <= 2000
+          && isoDate(data.updatedAt);
+      }
+
+      allow read: if activeMember() && (attendanceAdmin() || resource.data.email == email());
+      allow create: if activeMember() && validWeekPlan(request.resource.data);
+      allow update: if activeMember() && resource.data.email == email()
+        && request.resource.data.week == resource.data.week && validWeekPlan(request.resource.data);
+    }
+
+    match /requests/{id} {
+      function requestReviewer(memberEmail) {
+        let profile = get(/databases/$(database)/documents/members/$(memberEmail)).data;
+        return profile.get('enabled', true) != false
+          && (profile.get('role', '') == 'admin' || 'requestReview' in profile.get('grants', []));
+      }
+
+      function validApprover(memberEmail, creator) {
+        return memberEmail is string && memberEmail.size() <= 320
+          && memberEmail.matches('^[^/@]+@[^/@]+$') && memberEmail != creator && requestReviewer(memberEmail);
+      }
+
+      function requestContentFields() {
+        return ['type', 'from', 'to', 'days', 'amount', 'month', 'reason'];
+      }
+
+      function validRequestDay(value) {
+        return value is string && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+      }
+
+      function validRequestContent(data) {
+        return data.keys().hasAll(requestContentFields())
+          && data.type in ['Nghỉ phép', 'Tạm ứng lương', 'Công tác', 'Làm thêm giờ', 'Đề xuất khác']
+          && validRequestDay(data.from) && validRequestDay(data.to)
+          && (data.from == '' || data.to == '' || data.from <= data.to)
+          && data.days is number && data.days >= 0 && data.days <= 366 && data.days * 2 == int(data.days * 2)
+          && data.amount is int && data.amount >= 0 && data.amount <= 999999999999999
+          && data.month is string && (data.month == '' || data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
+          && (data.type != 'Tạm ứng lương' || (data.amount > 0 && data.month != ''))
+          && data.reason is string && data.reason.size() <= 2000 && data.reason.matches('(?s).*[^\\s].*');
+      }
+
+      function validRequestAudit(data) {
+        return data.updatedBy == email() && isoDate(data.updatedAt);
+      }
+
+      function validRequestCreate(data) {
+        return data.keys().hasOnly(requestContentFields().concat(
+          ['status', 'createdBy', 'createdAt', 'updatedAt', 'updatedBy', 'approverEmail']))
+          && validRequestContent(data) && validRequestAudit(data)
+          && data.status == 'Chờ duyệt' && data.createdBy == email() && data.createdAt == data.updatedAt
+          && (data.get('approverEmail', '') == '' || validApprover(data.approverEmail, data.createdBy));
+      }
+
+      function validRequestDecision(data) {
+        let cash = /databases/$(database)/documents/cash/$('tu_' + id);
+        return resource.data.get('approverEmail', '') == email() && resource.data.createdBy != email()
+          && requestReviewer(email()) && data.status in ['Đã duyệt', 'Từ chối']
+          && data.decidedBy == email() && data.decidedAt == data.updatedAt
+          && data.reply is string && data.reply.size() <= 500
+          && (data.status != 'Từ chối' || data.reply.matches('(?s).*[^\\s].*'))
+          && (data.status != 'Đã duyệt' || data.type != 'Tạm ứng lương'
+            || (!exists(cash) && existsAfter(cash) && getAfter(cash).data.requestId == id));
+      }
+
+      function validRequestUpdate(data) {
+        let changed = data.diff(resource.data).affectedKeys();
+        return resource.data.status == 'Chờ duyệt' && validRequestAudit(data) && (
+          (resource.data.createdBy == email()
+            && changed.hasOnly(requestContentFields().concat(['updatedAt', 'updatedBy']))
+            && validRequestContent(data))
+          || (attendanceAdmin() && changed.hasOnly(['approverEmail', 'updatedAt', 'updatedBy'])
+            && validApprover(data.approverEmail, data.createdBy))
+          || (changed.hasOnly(['status', 'decidedBy', 'decidedAt', 'reply', 'updatedAt', 'updatedBy'])
+            && validRequestDecision(data)));
+      }
+
+      allow read: if activeMember() && (attendanceAdmin() || resource.data.createdBy == email()
+        || (resource.data.approverEmail == email() && requestReviewer(email())));
+      allow create: if activeMember() && validRequestCreate(request.resource.data);
+      allow update: if activeMember() && validRequestUpdate(request.resource.data);
+      allow delete: if activeMember() && (attendanceAdmin()
+        || (resource.data.createdBy == email() && resource.data.status == 'Chờ duyệt'));
+    }
+
+    // attendance/{email}_{YYYY-MM-DD}: machine timestamps and optional administrative adjustments.
+    match /attendance/{id} {
+      function validAttendance(data) {
+        return data.keys().hasAll(['email', 'name', 'date'])
+          && data.email is string && data.name is string && data.name.size() <= 320
+          && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && id == data.email + '_' + data.date;
+      }
+
+      function validDistance(distance) {
+        return distance == null || (distance is int && distance >= 0 && distance <= 20020000);
+      }
+
+      function validTime(time) {
+        return time is string && (time == '' || time.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'));
+      }
+
+      function validAdjustment(data) {
+        return data.editedBy == email() && validTime(data.manualIn) && validTime(data.manualOut)
+          && data.note is string && data.note.size() <= 1000 && data.note.matches('(?s).*[^\\s].*')
+          && data.get('manualWork', '') in ['', 0, 0.5, 1];
+      }
+
+      function adjustmentFields() {
+        return ['email', 'name', 'date', 'manualIn', 'manualOut', 'manualWork', 'note', 'editedBy'];
+      }
+
+      allow read: if activeMember() && (attendanceAdmin() || resource.data.email == email());
+      allow create: if activeMember() && validAttendance(request.resource.data) && (
+        (request.resource.data.email == email()
+          && request.resource.data.keys().hasOnly(['email', 'name', 'date', 'inTs', 'inDist'])
+          && request.resource.data.inTs == request.time && validDistance(request.resource.data.inDist))
+        || (attendanceAdmin() && request.resource.data.keys().hasOnly(adjustmentFields())
+          && validAdjustment(request.resource.data)));
+      allow update: if activeMember() && validAttendance(request.resource.data) && (
+        (resource.data.email == email()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['outTs', 'outDist'])
+          && request.resource.data.outTs == request.time && validDistance(request.resource.data.outDist))
+        || (attendanceAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(adjustmentFields())
+          && validAdjustment(request.resource.data)));
+      allow delete: if attendanceAdmin();
+    }
+
+    // Personal notes are independent of punch records and adjustment reasons.
+    match /members/{owner}/attendanceNotes/{date} {
+      function ownsNotes() {
+        return activeMember() && owner == email();
+      }
+
+      function validNote(data) {
+        return date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && data.keys().hasOnly(['text'])
+          && data.text is string && data.text.size() <= 1000 && data.text.matches('(?s).*[^\\s].*');
+      }
+
+      allow read, delete: if ownsNotes();
+      allow create, update: if ownsNotes() && validNote(request.resource.data);
+    }
+
+    // Project profile mirrors the web's flat fields. Financial records use separate collections.
+    match /projects/{id} {
+      function activeMember() {
+        return member()
+          && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
+      }
+
+      function projectAdmin() {
+        return activeMember()
+          && get(/databases/$(database)/documents/members/$(email())).data.get('role', '') == 'admin';
+      }
+
+      function profileFields() {
+        return ['name', 'owner', 'ownerEmail', 'status', 'budget', 'startDate', 'deadline', 'goal', 'phase', 'risks', 'note'];
+      }
+
+      function boundedText(value, max) {
+        return value is string && value.size() <= max;
+      }
+
+      function projectDate(value) {
+        return value is string && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+      }
+
+      function validProject(data) {
+        return data.keys().hasAll(profileFields())
+          && boundedText(data.name, 320) && data.name.matches('(?s).*[^\\s].*')
+          && boundedText(data.owner, 320) && boundedText(data.ownerEmail, 320)
+          && (data.ownerEmail == '' || data.ownerEmail.matches('^[^\\s@]+@[^\\s@]+[.][^\\s@]+$'))
+          && data.status in ['Đang chạy', 'Tạm dừng', 'Xong']
+          && data.budget is int && data.budget >= 0 && data.budget <= 9007199254740991
+          && projectDate(data.startDate) && projectDate(data.deadline)
+          && boundedText(data.phase, 320) && boundedText(data.goal, 4000)
+          && boundedText(data.risks, 4000) && boundedText(data.note, 4000);
+      }
+
+      allow read: if activeMember();
+      allow create: if projectAdmin() && validProject(request.resource.data)
+        && request.resource.data.keys().hasOnly(profileFields());
+      allow update: if projectAdmin() && validProject(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(profileFields());
     }
 
     // Shared web inbox. Trusted senders supply to, from, title, body, link and createdAt.
     // Recipients can only change read to true. The optional emailed flag is server-managed.
+    // Văn thư: assigneeEmail is an email string and watchers is a list of member emails.
+    match /correspondence/{id} {
+      allow read: if attendanceAdmin() || (activeMember()
+        && (resource.data.assigneeEmail == email() || email() in resource.data.watchers));
+    }
+
     match /notifications/{id} {
       function isRecipient() {
         return verified() && resource.data.to == email()
@@ -53,19 +645,36 @@ service cloud.firestore {
       }
 
       allow get, list: if isRecipient();
+      allow create: if attendanceAdmin()
+        && request.resource.data.keys().hasOnly(['to', 'from', 'title', 'body', 'link', 'createdAt', 'read', 'emailed'])
+        && request.resource.data.to is string
+        && exists(/databases/$(database)/documents/members/$(request.resource.data.to))
+        && request.resource.data.from == email()
+        && request.resource.data.title is string
+        && request.resource.data.title.matches('^Công ngày [0-9]{2}/[0-9]{2}/[0-9]{4} đã được điều chỉnh$')
+        && request.resource.data.body is string && request.resource.data.body.size() <= 1000
+        && request.resource.data.link == '#cham-cong'
+        && isoDate(request.resource.data.createdAt)
+        && request.resource.data.read == false && request.resource.data.emailed == false;
       allow update: if isRecipient() && request.resource.data.read == true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
     }
 
+    // KPI snapshots are written by the existing server-side monthly closing job.
+    match /kpi/{id} {
+      allow read: if activeMember() && (attendanceAdmin() || resource.data.email == email());
+    }
+
     match /tasks/{id} {
-      allow get, list: if member() && resource.data.assigneeEmail == email();
+      allow read: if attendanceAdmin();
+      allow get, list: if activeMember() && resource.data.assigneeEmail == email();
       // The server sets assignedBy at creation. Client updates cannot change it.
       allow read: if member() && resource.data.assignedBy == email()
         && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
       // A designated approver can read the task while its submission is pending.
-      allow get, list: if member() && resource.data.approverEmail == email()
+      allow get, list: if activeMember() && resource.data.approverEmail == email()
         && resource.data.status == 'Chờ duyệt' && hasReviewGrant();
-      allow update: if member() && resource.data.assigneeEmail == email()
+      allow update: if activeMember() && resource.data.assigneeEmail == email()
         && openStatus(resource.data.status) && openStatus(request.resource.data.status)
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'progress', 'updatedAt', 'updatedBy'])
@@ -75,7 +684,7 @@ service cloud.firestore {
           || (resource.data.get('checklist', []).size() == 0
             && request.resource.data.progress is int
             && request.resource.data.progress >= 0 && request.resource.data.progress <= 100));
-      allow update: if member() && resource.data.assigneeEmail == email() && appendsComment();
+      allow update: if activeMember() && resource.data.assigneeEmail == email() && appendsComment();
 
       function hasReviewGrant() {
         let profile = get(/databases/$(database)/documents/members/$(email())).data;

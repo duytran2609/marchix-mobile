@@ -32,12 +32,12 @@ export const db = getFirestore(app);
 export const taskFunctions = getFunctions(app);
 export const emulatorHost = process.env.EXPO_PUBLIC_EMULATOR_HOST?.trim() ||
   (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
-const authEmulatorUrl = `http://${emulatorHost}:9099`;
+const authEmulatorUrl = `http://${emulatorHost}:${process.env.EXPO_PUBLIC_AUTH_EMULATOR_PORT || 9099}`;
 
 if (emulatorMode) {
   connectAuthEmulator(auth, authEmulatorUrl, { disableWarnings: true });
-  connectFirestoreEmulator(db, emulatorHost, 8080);
-  connectFunctionsEmulator(taskFunctions, emulatorHost, 5001);
+  connectFirestoreEmulator(db, emulatorHost, Number(process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080));
+  connectFunctionsEmulator(taskFunctions, emulatorHost, Number(process.env.EXPO_PUBLIC_FUNCTIONS_EMULATOR_PORT || 5001));
 }
 
 export async function checkAuthEmulator() {

@@ -202,6 +202,41 @@ export async function pilotChecklist(input: { taskId: string; index: number; lab
   });
 }
 
+function stageNextOccurrence(tx: DocumentWriter, ref: DocumentReference,
+  task: Task & { spawned?: boolean; seriesId?: string }, by: string, now: string) {
+  if (!task.spawned && task.due && (task.repeat === 'Hằng tuần' || task.repeat === 'Hằng tháng')) {
+    const shift = (value?: string) => {
+      if (!value) return '';
+      const date = new Date(value + 'T00:00:00Z');
+      if (!Number.isFinite(date.getTime())) return '';
+      if (task.repeat === 'Hằng tuần') date.setUTCDate(date.getUTCDate() + 7);
+      else {
+        const day = date.getUTCDate();
+        date.setUTCDate(1);
+        date.setUTCMonth(date.getUTCMonth() + 1);
+        const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+        date.setUTCDate(Math.min(day, end));
+      }
+      return date.toISOString().slice(0, 10);
+    };
+    const due = shift(task.due);
+    if (due) {
+      const seriesId = task.seriesId ?? ref.id;
+      tx.set(doc(collection(db, 'tasks')), {
+        title: task.title, note: task.note ?? '', startDate: shift(task.startDate), due,
+        status: 'Chưa làm', progress: 0, priority: task.priority ?? 'Trung bình', repeat: task.repeat,
+        assigneeEmail: task.assigneeEmail, assignee: task.assignee ?? '', assignedBy: task.assignedBy ?? by,
+        approverEmail: task.approverEmail ?? '', projectId: task.projectId ?? '', watchers: task.watchers ?? [],
+        milestone: task.milestone ?? false, comments: [], doneAt: '', spawned: false, seriesId,
+        checklist: (task.checklist ?? []).map(item => ({ ...item, done: false })),
+        createdAt: now, ...updated(by, now),
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function pilotReport(input: { taskId: string; note: string }) {
   const by = email();
   const ref = doc(db, 'tasks', input.taskId);
@@ -209,18 +244,22 @@ export async function pilotReport(input: { taskId: string; note: string }) {
     const [snapshot, settings] = await Promise.all([tx.get(ref), tx.get(doc(db, 'settings', 'work'))]);
     const task = snapshot.data() as Task | undefined;
     if (!task || task.assigneeEmail !== by) throw new Error('Bạn không có quyền báo hoàn thành công việc này.');
-    if (task.status === 'Chờ duyệt') return;
+    if (task.status === 'Chờ duyệt' || (task.status === 'Xong' && task.progress === 100 && task.doneAt)) return;
     if (!open(task)) throw new Error('Công việc này hiện không thể báo hoàn thành.');
     if (task.checklist?.some(item => !item.done)) throw new Error('Hãy đánh dấu xong tất cả việc con.');
     const text = input.note.trim();
     if (text.length > 1000 || (settings.get('requireReportNote') === true && !text)) {
       throw new Error('Hãy ghi kết quả thực hiện trong tối đa 1.000 ký tự.');
     }
-    if (!task.approverEmail) throw new Error('Hãy nhờ người giao việc chỉ định người duyệt trước khi báo hoàn thành.');
+    const requiresReview = settings.get('requireReview') !== false;
+    if (requiresReview && !task.approverEmail) throw new Error('Hãy nhờ người giao việc chỉ định người duyệt trước khi báo hoàn thành.');
     const now = new Date().toISOString();
-    tx.update(ref, { status: 'Chờ duyệt', progress: 100, doneAt: now, ...updated(by, now),
+    const spawned = !requiresReview && stageNextOccurrence(tx, ref, task, by, now);
+    tx.update(ref, { status: requiresReview ? 'Chờ duyệt' : 'Xong', progress: 100, doneAt: now, ...updated(by, now),
+      ...(spawned ? { spawned } : {}),
       ...(text ? { comments: [...(task.comments ?? []), { by, at: now, text, files: [] }] } : {}) });
-    notify(tx, by, [task.assignedBy, task.approverEmail], ref.id, 'Công việc chờ duyệt', task.title, now);
+    const recipients = requiresReview ? [task.assignedBy, task.approverEmail] : [task.assignedBy];
+    notify(tx, by, recipients, ref.id, requiresReview ? 'Công việc chờ duyệt' : `Việc “${task.title}” chuyển sang Xong`, task.title, now);
   });
 }
 
@@ -239,37 +278,7 @@ export async function pilotReview(input: { taskId: string; submission: string; d
       progress: approved ? 100 : task.checklist?.length ? percent(task.checklist) : task.progress ?? 0,
       doneAt: approved ? task.doneAt || now : '', rating: approved ? input.rating : '',
       reviewNote, reviewedBy: by, reviewedAt: now, ...updated(by, now) };
-    if (approved && !task.spawned && task.due && task.assignedBy === by &&
-        (task.repeat === 'Hằng tuần' || task.repeat === 'Hằng tháng')) {
-      const shift = (value?: string) => {
-        if (!value) return '';
-        const date = new Date(value + 'T00:00:00Z');
-        if (!Number.isFinite(date.getTime())) return '';
-        if (task.repeat === 'Hằng tuần') date.setUTCDate(date.getUTCDate() + 7);
-        else {
-          const day = date.getUTCDate();
-          date.setUTCDate(1);
-          date.setUTCMonth(date.getUTCMonth() + 1);
-          const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-          date.setUTCDate(Math.min(day, end));
-        }
-        return date.toISOString().slice(0, 10);
-      };
-      const due = shift(task.due);
-      if (due) {
-        const seriesId = task.seriesId ?? ref.id;
-        tx.set(doc(collection(db, 'tasks')), {
-          title: task.title, note: task.note ?? '', startDate: shift(task.startDate), due,
-          status: 'Chưa làm', progress: 0, priority: task.priority ?? 'Trung bình', repeat: task.repeat,
-          assigneeEmail: task.assigneeEmail, assignee: task.assignee ?? '', assignedBy: by,
-          approverEmail: by, projectId: task.projectId ?? '', watchers: task.watchers ?? [],
-          milestone: task.milestone ?? false, comments: [], doneAt: '', spawned: false, seriesId,
-          checklist: (task.checklist ?? []).map(item => ({ ...item, done: false })),
-          createdAt: now, ...updated(by, now),
-        });
-        change.spawned = true;
-      }
-    }
+    if (approved && task.assignedBy === by && stageNextOccurrence(tx, ref, task, by, now)) change.spawned = true;
     tx.update(ref, change);
     notify(tx, by, [task.assigneeEmail, task.assignedBy], ref.id,
       approved ? 'Công việc đã được duyệt' : 'Công việc cần làm lại', reviewNote || task.title, now);

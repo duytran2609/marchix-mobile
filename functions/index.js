@@ -98,6 +98,21 @@ exports.listMobileTaskAssignees = onCall(async request => {
   };
 });
 
+exports.listMobileRequestMembers = onCall(async request => {
+  const runtimeProject = app.options.projectId || process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  const email = verifiedEmail(request, runtimeProject);
+  const members = getFirestore(app).collection('members');
+  if (!activeMember(await members.doc(email).get())) {
+    throw new HttpsError('permission-denied', 'Tài khoản chưa được cấp quyền truy cập đơn từ.');
+  }
+  const directory = await members.select('name', 'enabled', 'role', 'grants').get();
+  return directory.docs.filter(row => isMemberEmail(row.id) && activeMember(row)).map(row => {
+    const grants = row.get('grants');
+    return { email: row.id, name: memberName(row), canReview: row.get('role') === 'admin' ||
+      (Array.isArray(grants) && grants.includes('requestReview')) };
+  });
+});
+
 function validDay(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const day = new Date(value + 'T00:00:00Z');
@@ -437,8 +452,9 @@ exports.reportTaskCompletion = onCall(request => {
     throw new HttpsError('invalid-argument', 'Kết quả thực hiện tối đa 1.000 ký tự.');
   }
   const text = note.trim();
-  return editAssignedTask(request, async ({ task, transaction, db, email, now }) => {
-    if (task.status === 'Chờ duyệt') return;
+  return editAssignedTask(request, async context => {
+    const { task, transaction, db, email, now } = context;
+    if (task.status === 'Chờ duyệt' || (task.status === 'Xong' && task.progress === 100 && task.doneAt)) return;
     if (!openStatuses.includes(task.status)) {
       throw new HttpsError('failed-precondition', 'Công việc này hiện không thể báo hoàn thành.');
     }
@@ -449,10 +465,13 @@ exports.reportTaskCompletion = onCall(request => {
     if (settings.get('requireReportNote') === true && !text) {
       throw new HttpsError('failed-precondition', 'Hãy ghi kết quả thực hiện trước khi báo hoàn thành.');
     }
+    const requiresReview = settings.get('requireReview') !== false;
+    const spawned = !requiresReview && await createNextOccurrence(context);
     return {
-      status: 'Chờ duyệt',
+      status: requiresReview ? 'Chờ duyệt' : 'Xong',
       progress: 100,
       doneAt: now,
+      ...(spawned ? { spawned } : {}),
       ...(text ? { comments: [...(task.comments ?? []), { by: email, at: now, text, files: [] }] } : {}),
     };
   });
@@ -464,7 +483,13 @@ async function createNextOccurrence({ task, id, transaction, db, email, now }) {
     if (!validDay(value)) return '';
     const date = new Date(value + 'T00:00:00Z');
     if (task.repeat === 'Hằng tuần') date.setUTCDate(date.getUTCDate() + 7);
-    else date.setUTCMonth(date.getUTCMonth() + 1);
+    else {
+      const day = date.getUTCDate();
+      date.setUTCDate(1);
+      date.setUTCMonth(date.getUTCMonth() + 1);
+      const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+      date.setUTCDate(Math.min(day, lastDay));
+    }
     return date.toISOString().slice(0, 10);
   };
   const due = shift(task.due);
