@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
+import { SegmentedButtons } from '../components/SegmentedButtons';
 import { useToast } from '../components/Toast';
-import { offsetMonth } from '../features/attendance/attendance';
 import { EmployeeForm, PayBreakdown, PayEditor, PayrollModal } from '../features/payroll/PayrollForms';
 import { PayrollTable } from '../features/payroll/PayrollTable';
 import { exportPayroll, exportPayslip } from '../features/payroll/exportPayroll';
@@ -13,12 +13,21 @@ import type { PayrollRow } from '../features/payroll/payrollColumns';
 import { approvedAdvance, confirmOwnPayslip, createPayrollExpenses, importAttendance, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
 import type { Payslip } from '../features/payroll/payroll';
 import type { PayrollData } from '../features/payroll/payrollStore';
-import { todayInVietnam } from '../features/tasks/taskDates';
+import { formatTaskDate, todayInVietnam } from '../features/tasks/taskDates';
 import { useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
 type Editor = { kind: 'employee'; id?: string } | { kind: 'pay'; id: string };
 type Confirmation = { title: string; message: string; confirmLabel?: string; submit: () => void };
+
+const sections = [
+  { value: 'payroll', label: 'Bảng lương' },
+  { value: 'employees', label: 'Hồ sơ nhân sự' },
+] as const;
+const monthsOfYear = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, '0');
+  return { value, label: 'Tháng ' + value };
+});
 
 export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: boolean }) {
   const styles = useScreenStyles();
@@ -28,7 +37,8 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
   const currentMonth = todayInVietnam().slice(0, 7);
-  const [month, setMonth] = useState(currentMonth);
+  const [selectedPeriod, setMonth] = useState<string>();
+  const month = selectedPeriod ?? currentMonth;
   const [historyMonth, setHistoryMonth] = useState<string>();
   const [section, setSection] = useState<'payroll' | 'employees'>('payroll');
   const [editor, setEditor] = useState<Editor>();
@@ -144,16 +154,18 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
   const total = (key: 'gross' | 'net' | 'companyCost') => money(displayRows.reduce((sum, row) => sum + amount(row.pay[key]), 0));
   const label = monthLabel(month);
   const hasDraft = rows.some(row => !locked(row.slip));
+  const [year, monthNumber] = month.split('-');
+  const currentYear = Number(currentMonth.slice(0, 4));
+  const years = [...new Set([
+    ...Array.from({ length: 11 }, (_, index) => String(currentYear + 5 - index)),
+    ...slips.map(slip => slip.month.slice(0, 4)),
+    year,
+  ])].sort().reverse().map(value => ({ value, label: value }));
 
   return <View style={styles.stack}>
     <PageHeader title="Nhân sự & lương" />
-    <View style={styles.choices}>
-      {([['payroll', 'Bảng lương'], ['employees', 'Hồ sơ nhân sự']] as const).map(([value, title]) =>
-        <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: section === value }}
-          style={[styles.choice, section === value && styles.selected]} onPress={() => { setError(''); setSection(value); }}>
-          <Text style={styles.label}>{title}</Text>
-        </Pressable>)}
-    </View>
+    <SegmentedButtons label="Nhân sự & lương" value={section} choices={sections}
+      onChange={value => { setError(''); setSection(value); }} />
     {section === 'employees' ? <>
       <Button label="+ Thêm nhân sự" onPress={() => { setError(''); setEditor({ kind: 'employee' }); }} />
       {!employees.length && <View style={styles.panel}><Text style={styles.muted}>Chưa có hồ sơ nhân sự.</Text></View>}
@@ -162,29 +174,36 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
           <Text style={[styles.cardTitle, styles.listHeading]}>{item.name}</Text>
           <Text style={styles.badge}>{item.status || 'Đang làm'}</Text>
         </View>
-        <Text style={styles.muted}>{[item.email, item.position, item.contract].filter(Boolean).join(' · ')}</Text>
-        <Text style={styles.body}>Lương thỏa thuận · {money(item.salary)}</Text>
-        <Text style={styles.muted}>Lương đóng BH · {money(item.insSalary)}</Text>
-        <Text style={styles.muted}>Phụ cấp · {money(amount(item.allowTaxable) + amount(item.allowFree))} · Người phụ thuộc · {amount(item.dependents)}</Text>
+        <View style={{ gap: 4 }}>
+          {[
+            ['Email', item.email],
+            ['Chức danh', item.position],
+            ['Loại hợp đồng', item.contract],
+            ['Ngày vào làm', item.startDate && formatTaskDate(item.startDate)],
+            ['Mã số thuế cá nhân', item.taxCode],
+            ['Lương thỏa thuận', money(item.salary)],
+            ['Mức lương đóng BHXH', money(item.insSalary)],
+            ['Phụ cấp chịu thuế', money(item.allowTaxable)],
+            ['Phụ cấp miễn thuế', money(item.allowFree)],
+            ['Người phụ thuộc', amount(item.dependents)],
+          ].map(([field, value]) => <Text key={field} style={[styles.muted, { lineHeight: 23 }]}>
+            <Text style={{ fontSize: 16, fontWeight: '700' }}>{field}: </Text>{value === '' || value == null ? '—' : value}
+          </Text>)}
+        </View>
         <Button label={'Sửa hồ sơ ' + item.name} secondary onPress={() => { setError(''); setEditor({ kind: 'employee', id: item.id }); }} />
       </View>)}
     </> : <>
       <View style={styles.panel}>
         <View style={styles.listHeader}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Tháng trước" accessibilityState={{ disabled: busy }}
-            style={styles.choice} disabled={busy} onPress={() => setMonth(value => offsetMonth(value, -1))}>
-            <Text style={styles.label}>‹</Text>
-          </Pressable>
-          <Text accessibilityRole="header" style={[styles.cardTitle, styles.listHeading]}>Tháng {label}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Tháng sau" accessibilityState={{ disabled: busy }}
-            style={styles.choice} disabled={busy} onPress={() => setMonth(value => offsetMonth(value, 1))}>
-            <Text style={styles.label}>›</Text>
-          </Pressable>
+          <Dropdown label="Chọn tháng" hideLabel highlightSelection={false} value={monthNumber} choices={monthsOfYear}
+            disabled={busy} style={{ flex: 1 }} onChange={value => setMonth(year + '-' + value)} />
+          <Dropdown label="Chọn năm" hideLabel highlightSelection={false} value={year} choices={years}
+            disabled={busy} style={{ flex: 1 }} onChange={value => setMonth(value + '-' + monthNumber)} />
         </View>
         {!!displayRows.length && <>
-          <Text style={styles.body}>Tổng thu nhập · {total('gross')}</Text>
-          <Text style={styles.cardTitle}>Tổng thực lĩnh · {total('net')}</Text>
-          <Text style={styles.body}>Tổng chi phí · {total('companyCost')}</Text>
+          <Text style={styles.body}>Tổng thu nhập: {total('gross')}</Text>
+          <Text style={styles.cardTitle}>Tổng thực lĩnh: {total('net')}</Text>
+          <Text style={styles.body}>Tổng chi phí: {total('companyCost')}</Text>
         </>}
         {hasDraft && <>
           <Button label="Lấy ngày công từ Chấm công" secondary disabled={busy} onPress={() => {
@@ -228,7 +247,7 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
     </>}
     {!!error && !editor && !confirmation && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {editor && (editor.kind === 'employee' || selected) && <PayrollModal busy={busy} onClose={() => setEditor(undefined)}
-      title={editor.kind === 'employee' ? (editor.id ? 'Sửa hồ sơ nhân sự' : 'Thêm nhân sự') : 'Lương tháng ' + label + ' · ' + selected?.name}>
+      title={editor.kind === 'employee' ? (editor.id ? 'Sửa hồ sơ nhân sự' : 'Thêm nhân sự') : 'Lương tháng ' + label + ': ' + selected?.name}>
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {editor.kind === 'employee' ? <EmployeeForm employee={employee} busy={busy} onSave={fields =>
         void run(async () => { await saveEmployee(email, fields, editor.id); return 'Đã lưu hồ sơ nhân sự.'; }, true)} />

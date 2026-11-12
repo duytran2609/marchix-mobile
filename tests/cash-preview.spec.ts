@@ -9,20 +9,11 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
   const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
   const firestore = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
   const headers = { Authorization: 'Bearer owner' };
-  const reviewerMember = firestore + '/members/nguoigiao@example.test';
-  const before = await request.get(reviewerMember, { headers });
-  expect(before.ok()).toBe(true);
-  const savedMember = (await before.json()).fields;
-  const grants = (savedMember.grants?.arrayValue?.values || []) as { stringValue: string }[];
-  const changed = await request.patch(reviewerMember, { headers, data: { fields: {
-    ...savedMember, grants: { arrayValue: { values: [...grants.filter(grant => grant.stringValue !== 'cashReview'), { stringValue: 'cashReview' }] } },
-  } } });
-  expect(changed.ok()).toBe(true);
   const note = 'Chi phí kiểm tra thu chi ' + Date.now();
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
   const reviewer = await browser.newPage({ ...devices['iPhone 13'] });
   const button = (target: Page, name: string) => target.getByRole('button', { name, exact: true });
-  const status = (target: Page, value: string) => target.getByText(value, { exact: true });
+  const status = (target: Page | Locator, value: string) => target.getByText(value, { exact: true });
   const entry = (target: Page) => target.getByRole('button', { name: new RegExp(note) });
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==', 'base64');
   const pdf = Buffer.from('%PDF-1.4\n1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n' +
@@ -56,6 +47,8 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(page, '+ Tạo đề nghị thu').click();
     const proposal = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Tạo đề nghị thu' }) });
     await expect(proposal).toBeVisible();
+    await expect(proposal.getByText('Quản trị viên sẽ gán người duyệt.')).toBeVisible();
+    await expect(proposal.getByRole('textbox', { name: 'Tìm người duyệt', exact: true })).toHaveCount(0);
     const amountField = page.getByRole('textbox', { name: 'Số tiền (VNĐ)' });
     await amountField.fill('12a3456');
     await expect(amountField).toHaveValue('123.456');
@@ -99,7 +92,7 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await attach(page, 'hoa-don.png', 'hoa-don.pdf');
     await button(page, 'Gửi khoản chi').click();
     await expect(page.getByRole('heading', { name: note })).toBeVisible();
-    await expect(status(page, 'Chờ duyệt')).toBeVisible();
+    await expect(status(page.getByRole('dialog'), 'Chờ duyệt')).toBeVisible();
     await expect(button(page, 'Duyệt')).toHaveCount(0);
     await button(page, 'Xem hoa-don.png').click();
     await expect(page.getByRole('img', { name: 'hoa-don.png' })).toBeVisible();
@@ -114,11 +107,32 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(button(page, 'Xem hoa-don.png')).toBeVisible();
 
     await openCash(admin, 'Đăng nhập quản trị (mô phỏng)');
+    for (const kind of ['thu', 'chi']) {
+      await button(admin, '+ Tạo đề nghị ' + kind).click();
+      const dialog = admin.getByRole('dialog').filter({ has: admin.getByRole('heading', { name: 'Tạo đề nghị ' + kind }) });
+      const search = dialog.getByRole('textbox', { name: 'Tìm người duyệt', exact: true });
+      const approver = dialog.getByRole('checkbox', { name: 'Người giao việc demo' });
+      await expect(approver).toBeVisible();
+      await expect(dialog.getByText('Chỉ định sau')).toHaveCount(0);
+      await search.fill('khong co ten nay');
+      await expect(dialog.getByText('Không có người duyệt phù hợp.')).toBeVisible();
+      await search.fill('nguoi giao viec');
+      await approver.click();
+      await expect(approver).toBeChecked();
+      await approver.click();
+      await expect(approver).not.toBeChecked();
+      await dialog.getByRole('button', { name: 'Đóng đề nghị' }).click();
+    }
+    await expect(entry(admin)).toContainText('Hạng mục: Chi khác');
     await entry(admin).click();
-    await admin.getByRole('button', { name: /^Người duyệt:/ }).click();
-    await admin.getByRole('radio', { name: 'Người giao việc demo', exact: true }).click();
+    await expect(admin.getByRole('dialog').getByRole('heading', { name: note })).toBeVisible();
+    await expect(button(admin, 'Lưu người duyệt')).toBeDisabled();
+    await admin.getByRole('textbox', { name: 'Tìm người duyệt', exact: true }).fill('nguoi giao viec');
+    await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await button(admin, 'Lưu người duyệt').click();
     await expect(admin.getByText('nguoigiao@example.test', { exact: true })).toBeVisible();
+    await expect(page.getByText('nguoigiao@example.test', { exact: true })).toBeVisible();
+    await expect(button(page, 'Lưu người duyệt')).toHaveCount(0);
 
     await openCash(reviewer, 'Đăng nhập người giao việc (mô phỏng)');
     await button(reviewer, 'Mở menu').click();
@@ -134,16 +148,16 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(reviewer, 'Về Phê duyệt').click();
     await expect(reviewer.getByText('Không có hồ sơ.', { exact: true }).first()).toBeVisible();
     await expect(entry(reviewer)).toHaveCount(0);
-    await expect(status(admin, 'Chờ chi')).toBeVisible();
+    await expect(status(admin.getByRole('dialog'), 'Chờ chi')).toBeVisible();
     await admin.getByRole('textbox', { name: 'Mã chứng từ hoặc tham chiếu giao dịch' }).fill('BANK-CASH-TEST');
     await button(admin, 'Xác nhận đã chi').click();
     await button(admin, 'Xác nhận giao dịch đã hoàn tất').click();
-    await expect(status(page, 'Đã chi')).toBeVisible();
+    await expect(status(page.getByRole('dialog'), 'Đã chi')).toBeVisible();
     await expect(button(page, 'Sửa khoản này')).toHaveCount(0);
     await expect(button(page, 'Xem hoa-don.png')).toBeVisible();
     await expect(admin.getByText('BANK-CASH-TEST', { exact: true })).toBeVisible();
 
-    await button(admin, 'Về sổ thu chi').click();
+    await button(admin, 'Đóng chi tiết khoản thu chi').click();
     await admin.getByRole('button', { name: /^Trạng thái:/ }).click();
     await admin.getByRole('radio', { name: 'Chờ duyệt', exact: true }).click();
     await expect(entry(admin)).toHaveCount(0);
@@ -152,7 +166,6 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     expect((await download).suggestedFilename()).toMatch(/^so-thu-chi-\d{4}-\d{2}\.csv$/);
   } finally {
     await Promise.all([admin.close(), reviewer.close()]);
-    await request.patch(reviewerMember, { headers, data: { fields: savedMember } });
     const found = await request.post(firestore + ':runQuery', { headers, data: { structuredQuery: {
       from: [{ collectionId: 'cash' }], where: { fieldFilter: { field: { fieldPath: 'note' },
         op: 'EQUAL', value: { stringValue: note } } },

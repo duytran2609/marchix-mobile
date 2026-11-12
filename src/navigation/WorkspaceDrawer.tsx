@@ -158,7 +158,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   drawer: { zIndex: 1, backgroundColor: colors.paper, elevation: 12, boxShadow: '8px 0 24px rgba(33, 25, 53, 0.15)' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: colors.line },
-  logo: { width: 56, height: 56 },
+  logo: { width: 56, height: 56, transform: [{ scale: 1.4 }] },
   logoutButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background },
   list: { padding: 12, gap: 4 },

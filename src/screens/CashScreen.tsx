@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { FilePickerButton } from '../components/FilePickerButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
+import { SearchableChoiceList } from '../components/SearchableChoiceList';
 import { useToast } from '../components/Toast';
 import { canAct, cashStatus, cashStatuses, cashTotals, categories, changeCash, createCash, displayDate,
   expenseLimit, parties, verifiedCash, vnd, watchCash, watchCashApprovers } from '../features/cash/cash';
@@ -16,7 +17,7 @@ import { cashFileLimit, cashFileList, prepareCashFiles } from '../features/cash/
 import { CashProofs } from '../features/cash/CashProofs';
 import { watchProjects, type Project } from '../features/projects/projects';
 import { formatFileSize, pickTaskAttachments, type PickedAttachment } from '../features/tasks/taskAttachments';
-import { AssignmentCalendar, displayDay } from '../features/tasks/AssignmentCalendar';
+import { DateCalendarField } from '../features/tasks/CalendarDialog';
 import { todayInVietnam } from '../features/tasks/taskDates';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
@@ -53,44 +54,10 @@ function Field({ label, value, onChange, limit = 250, numeric = false, placehold
   </View>;
 }
 
-function CashDateField({ label, value, onChange, optional = false, disabled }: {
-  label: string; value: string; onChange: (value: string) => void; optional?: boolean; disabled: boolean;
-}) {
-  const styles = useScreenStyles();
-  const local = useLocalStyles();
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<ComponentRef<typeof Pressable>>(null);
-  const day = validDate(value) ? value : '';
-  const display = day ? displayDay(day) : 'Chọn ngày';
-  function close() {
-    setOpen(false);
-    if (Platform.OS === 'web') requestAnimationFrame(() => trigger.current?.focus());
-  }
-  return <View style={local.field}>
-    <Text style={styles.label}>{label}</Text>
-    <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${label}, ${display}`}
-      aria-expanded={open} disabled={disabled} style={[styles.input, local.dateButton]}
-      onPress={() => { Keyboard.dismiss(); setOpen(true); }}>
-      <Text style={day ? styles.label : styles.muted}>{display}</Text>
-      <Text style={styles.label} aria-hidden>▦</Text>
-    </Pressable>
-    {open && <Modal transparent animationType="none" onRequestClose={close}>
-      <View style={local.calendarOverlay}>
-        <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Đóng lịch" onPress={close} />
-        <ScrollView style={local.calendarPanel} contentContainerStyle={local.calendarContent} keyboardShouldPersistTaps="handled">
-          <Text accessibilityRole="header" style={styles.heading}>{label}</Text>
-          <AssignmentCalendar initialDay={day || todayInVietnam()} value={day} disabled={disabled}
-            onSelect={next => { onChange(next); close(); }} />
-          {optional && day && <Button label="Bỏ ngày" secondary onPress={() => { onChange(''); close(); }} />}
-          <Button label="Đóng" secondary onPress={close} />
-        </ScrollView>
-      </View>
-    </Modal>}
-  </View>;
-}
-
-function CashForm({ type, row, projects, ledger, approvers, access, onBack, onSaved }: {
+function CashForm({ type, row, projects, ledger, approvers, access, operationLock, inPopup, onBack, onSaved }: {
   type: CashType; row?: Cash; projects: Project[]; ledger: Cash[] | null; approvers: Option[]; access: CashAccess;
+  operationLock?: { current: boolean };
+  inPopup?: boolean;
   onBack: () => void; onSaved: (id: string, date: string) => void;
 }) {
   const styles = useScreenStyles();
@@ -106,7 +73,8 @@ function CashForm({ type, row, projects, ledger, approvers, access, onBack, onSa
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<PickedAttachment[]>([]);
   const [picking, setPicking] = useState(false);
-  const lock = useRef(false);
+  const formLock = useRef(false);
+  const lock = operationLock ?? formLock;
   const set = (key: keyof typeof values) => (value: string) => setValues(prev => ({ ...prev, [key]: value }));
   const amount = Number(values.amount);
   const cap = Number(projects.find(project => project.id === values.projectId)?.budget) || 0;
@@ -160,13 +128,13 @@ function CashForm({ type, row, projects, ledger, approvers, access, onBack, onSa
     onChange={set('projectId')} disabled={row?.projectLinkLocked} style={type === 'thu' ? local.half : undefined} />;
   const fields = <>
       <Text style={styles.muted}>{row ? 'Chỉ sửa được khi khoản còn chờ duyệt.'
-        : access.isAdmin ? 'Khoản mới sẽ ở trạng thái Chờ duyệt.'
-        : 'Khoản mới sẽ ở trạng thái Chờ duyệt. Quản trị viên sẽ chỉ định người xử lý.'}</Text>
+        : 'Khoản mới sẽ ở trạng thái Chờ duyệt.'}</Text>
       <Field label="Nội dung" value={values.note} onChange={set('note')} limit={1000} />
       <Field label="Số tiền (VNĐ)" value={formatAmount(values.amount)}
         onChange={value => set('amount')(amountDigits(value))} numeric limit={32} />
       {type === 'chi' && amount > expenseLimit && <Text style={styles.error}>Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>}
-      <CashDateField label="Ngày giao dịch" value={values.date} onChange={set('date')} disabled={busy} />
+      <DateCalendarField label="Ngày giao dịch" value={validDate(values.date) ? values.date : ''}
+        onChange={set('date')} disabled={busy} />
       <View style={local.pair}>
         {type === 'chi' && <Picker label="Nhóm hạng mục" value={group} choices={options(Object.keys(categoryGroups))} style={local.half}
           onChange={value => { setGroup(value); set('category')(''); }} />}
@@ -184,19 +152,21 @@ function CashForm({ type, row, projects, ledger, approvers, access, onBack, onSa
         <Picker label="Loại đối tượng" value={values.partyType} choices={options(parties)} onChange={set('partyType')} style={local.half} />
       </View>
       <Field label="Tên đối tượng" value={values.partyName} onChange={set('partyName')} />
-      <CashDateField label="Hạn thanh toán" value={values.dueDate} onChange={set('dueDate')} optional disabled={busy} />
+      <DateCalendarField label="Hạn thanh toán" value={validDate(values.dueDate) ? values.dueDate : ''}
+        onChange={set('dueDate')} clearLabel="Bỏ ngày" disabled={busy} />
       <Field label="Số hóa đơn / báo giá" value={values.invoiceRef} onChange={set('invoiceRef')} limit={150} />
-      {!row && access.isAdmin && <Picker label="Người duyệt" value={values.approver}
-        choices={[blank('Chỉ định sau'), ...approvers]} onChange={set('approver')} />}
+      {!row && <View style={local.field}>
+        <Text style={styles.label}>Người duyệt</Text>
+        {access.isAdmin ? <SearchableChoiceList items={approvers} selected={values.approver ? [values.approver] : []}
+          disabled={busy || picking} label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
+          onToggle={id => set('approver')(values.approver === id ? '' : id)} />
+          : <Text style={styles.muted}>Quản trị viên sẽ gán người duyệt.</Text>}
+      </View>}
       {row && cashFileList(row.files).length > 0 && <CashProofs cashId={row.id} files={cashFileList(row.files)} />}
       <View style={local.field}>
         <Text style={styles.label}>Đính kèm chứng từ</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm chứng từ"
-          disabled={busy || picking} onPress={() => void pick()}
-          style={({ pressed }) => [local.filePicker, (pressed || busy || picking) && styles.dimmed]}>
-          <Text style={local.fileAction}>{picking ? 'Đang chọn tệp…' : '+ Chọn tệp'}</Text>
-          <Text style={local.fileHint}>Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng.</Text>
-        </Pressable>
+        <FilePickerButton accessibilityLabel="Đính kèm chứng từ" disabled={busy} picking={picking}
+          onPress={() => void pick()} hint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng." />
       </View>
       {picked.map((file, index) => <View key={index} style={styles.detailRow}>
         <Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text>
@@ -207,7 +177,7 @@ function CashForm({ type, row, projects, ledger, approvers, access, onBack, onSa
       <Button label={busy ? 'Đang lưu…' : row ? 'Lưu thay đổi' : 'Gửi khoản ' + type} onPress={() => void save()} disabled={busy || picking} />
       <Button label={row ? 'Quay lại' : 'Hủy'} secondary onPress={onBack} disabled={busy || picking} />
   </>;
-  if (row) return <View style={styles.panel}>
+  if (row) return <View style={[styles.panel, inPopup && local.popupContent]}>
     <Text accessibilityRole="header" style={styles.heading}>Sửa khoản {type}</Text>
     {fields}
   </View>;
@@ -238,11 +208,13 @@ function writeError(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Không lưu được khoản thu chi.';
 }
 
-function CashDetail({ row, access, approvers, project, backLabel, onBack, onEdit }: {
-  row: Cash; access: CashAccess; approvers: Option[]; project: string; backLabel: string;
+function CashDetail({ row, access, approvers, project, backLabel, operationLock, onBack, onEdit }: {
+  row: Cash; access: CashAccess; approvers: Option[]; project: string; backLabel?: string;
+  operationLock: { current: boolean };
   onBack: () => void; onEdit: () => void;
 }) {
   const styles = useScreenStyles();
+  const local = useLocalStyles();
   const toast = useToast();
   const [assignee, setAssignee] = useState(row.approverEmail || '');
   const [note, setNote] = useState('');
@@ -250,8 +222,9 @@ function CashDetail({ row, access, approvers, project, backLabel, onBack, onEdit
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
+  const lock = operationLock;
   const can = (action: CashAction) => canAct(action, row, access);
+  const eligibleApprovers = approvers.filter(option => option.id !== row.createdBy);
   const files = cashFileList(row.files);
   async function handle(action: CashAction, raw = '') {
     if (lock.current) return;
@@ -278,23 +251,26 @@ function CashDetail({ row, access, approvers, project, backLabel, onBack, onEdit
     ['Ý kiến xử lý', row.approvalNote], ['Người xác nhận', row.paidBy], ['Ngày xác nhận', row.paidAt && displayDate(row.paidAt)],
     ['Hóa đơn / báo giá', row.invoiceRef], ['Mã chứng từ / giao dịch', row.ref], ['Mã hồ sơ', row.id],
   ];
-  return <View style={styles.panel}>
-    <Button label={backLabel} secondary onPress={onBack} disabled={busy} />
-    <Text style={styles.badge}>{cashStatus(row)}</Text>
+  return <View style={[styles.panel, !backLabel && local.popupContent]}>
+    {backLabel && <Button label={backLabel} secondary onPress={onBack} disabled={busy} />}
+    <View style={local.detailActions}>
+      <Text style={styles.badge}>{cashStatus(row)}</Text>
+      {can('edit') && <Button label="Sửa khoản này" secondary onPress={onEdit} disabled={busy} />}
+    </View>
     <Text accessibilityRole="header" style={styles.heading}>{row.note || (row.type === 'chi' ? 'Khoản chi' : 'Khoản thu')}</Text>
     <Text style={styles.cardTitle}>{row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}</Text>
     {fields.filter(([, value]) => !!value).map(([label, value]) => <View key={label} style={styles.detailRow}>
       <Text style={styles.label}>{label}</Text><Text selectable style={styles.body}>{value}</Text>
     </View>)}
     {files.length > 0 && <CashProofs cashId={row.id} files={files} />}
-    {can('edit') && <Button label="Sửa khoản này" secondary onPress={onEdit} disabled={busy} />}
-    {can('route') && <>
-      <Picker label="Người duyệt" value={assignee} highlightSelection
-        choices={[blank('Chọn người duyệt'), ...approvers.filter(option => option.id !== row.createdBy)]}
-        onChange={setAssignee} disabled={busy} />
-      <Button label="Lưu người duyệt" secondary onPress={() => void handle('route', assignee)}
-        disabled={busy || !assignee || assignee === row.approverEmail || !approvers.some(option => option.id === assignee)} />
-    </>}
+    {can('route') && <View style={local.field}>
+      <Text style={styles.label}>Người duyệt</Text>
+      <SearchableChoiceList items={eligibleApprovers} selected={assignee ? [assignee] : []}
+        disabled={busy} label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
+        onToggle={id => setAssignee(current => current === id ? '' : id)} />
+      <Button label="Lưu người duyệt" onPress={() => void handle('route', assignee)}
+        disabled={busy || !assignee || assignee === row.approverEmail || !eligibleApprovers.some(option => option.id === assignee)} />
+    </View>}
     {can('approve') && <>
       <Field label="Ý kiến xử lý" value={note} onChange={setNote} limit={500} />
       <View style={styles.choices}>
@@ -341,6 +317,7 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
   const [selected, setSelected] = useState(initialCashId ?? '');
   const [awaiting, setAwaiting] = useState('');
   const [editor, setEditor] = useState<{ type: CashType; row?: Cash }>();
+  const detailLock = useRef(false);
   const [exporting, setExporting] = useState(false);
   const { email, isAdmin, canReadCash, canReviewCash } = access;
   useEffect(() => watchCash({ email, isAdmin, canReadCash, canReviewCash }, setRows,
@@ -358,10 +335,11 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
   const months = [...new Set([currentMonth, ...(rows || []).map(row => row.date?.slice(0, 7)).filter(value => /^\d{4}-\d{2}$/.test(value || ''))])]
     .sort().reverse().map(id => ({ id, name: `Tháng ${id.slice(5)}/${id.slice(0, 4)}` }));
   const totals = cashTotals(base);
-  const backLabel = onBackToReview ? 'Về Phê duyệt' : 'Về sổ thu chi';
+  const backLabel = 'Về Phê duyệt';
   function back() {
+    if (detailLock.current) return;
     if (onBackToReview) return onBackToReview();
-    setEditor(undefined); setSelected(''); setAwaiting(''); onScrollTop();
+    setEditor(undefined); setSelected(''); setAwaiting('');
   }
   function reload() { setRows(null); setError(false); setLookupError(false); setRetry(n => n + 1); }
   async function download() {
@@ -374,28 +352,33 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
   function renderForm(kind: CashType, row?: Cash) {
     return <CashForm type={kind} row={row} access={access} projects={projects} ledger={rows}
       approvers={approvers.filter(option => option.id !== email)}
-      onBack={() => { setEditor(undefined); if (row) onScrollTop(); }}
+      operationLock={row ? detailLock : undefined}
+      inPopup={!!row && !onBackToReview}
+      onBack={() => { setEditor(undefined); if (row && onBackToReview) onScrollTop(); }}
       onSaved={(id, date) => {
         if (!row) {
           setAwaiting(id); setMonth(date.slice(0, 7)); setType(''); setStatus(''); setProject(''); setLimit(pageSize);
         }
-        setSelected(id); setEditor(undefined); onScrollTop(); toast('Đã lưu khoản thu chi.', 'success');
+        setSelected(id); setEditor(undefined); toast('Đã lưu khoản thu chi.', 'success');
       }} />;
   }
+  const showDetail = !!selected && !error;
+  const detail = editRow ? renderForm(editRow.type, editRow) : selectedRow ? <CashDetail
+      key={selectedRow.id + ':' + (selectedRow.updatedAt || '')} row={selectedRow} access={access}
+      approvers={approvers} project={projectName(selectedRow.projectId)}
+      backLabel={onBackToReview ? backLabel : undefined} onBack={back} operationLock={detailLock}
+      onEdit={() => { setEditor({ type: selectedRow.type, row: selectedRow }); if (onBackToReview) onScrollTop(); }} /> : <View style={[styles.panel, !onBackToReview && local.popupContent]}>
+      {!rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
+        : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
+      {onBackToReview && <Button label={backLabel} secondary onPress={back} />}
+    </View>;
   return <View style={styles.stack}>
-    {(!selected || error) && <PageHeader title="Thu chi" />}
+    {(!onBackToReview || !showDetail) && <PageHeader title="Thu chi" />}
     {!!lookupError && <View style={styles.panel}>
       <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
       <Button label="Tải lại danh mục" secondary onPress={reload} />
     </View>}
-    {editRow ? <View key={editRow.id}>{renderForm(editRow.type, editRow)}</View> : selected && selectedRow && !error ? <CashDetail
-      key={selectedRow.id + ':' + (selectedRow.updatedAt || '')} row={selectedRow} access={access}
-      approvers={approvers} project={projectName(selectedRow.projectId)} backLabel={backLabel} onBack={back}
-      onEdit={() => { setEditor({ type: selectedRow.type, row: selectedRow }); onScrollTop(); }} /> : selected && !error ? <View style={styles.panel}>
-      {!rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
-        : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
-      <Button label={backLabel} secondary onPress={back} />
-    </View> : <>
+    {onBackToReview && showDetail ? detail : <>
       <View style={styles.stack}>
         <Text style={styles.muted}>{canReadCash ? 'Theo dõi dòng tiền và các khoản đang chờ xử lý.'
           : 'Bạn thấy khoản mình lập và khoản được giao duyệt.'}</Text>
@@ -444,12 +427,17 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
             secondary onPress={() => void download()} disabled={exporting || !base.length} />}
           {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
           {visible.slice(0, limit).map(row => <Pressable key={row.id} accessibilityRole="button"
-            onPress={() => { setSelected(row.id); onScrollTop(); }}
+            onPress={() => setSelected(row.id)}
             style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
             <Text style={styles.badge}>{cashStatus(row)}</Text>
             <Text style={styles.label}>{row.note || row.category || 'Khoản ' + row.type}</Text>
             <Text style={row.type === 'chi' ? styles.error : styles.cardTitle}>{row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}</Text>
-            <Text style={styles.muted}>{[displayDate(row.date), row.category, row.partyName, projectName(row.projectId)].filter(Boolean).join(' · ')}</Text>
+            {([
+              ['Ngày giao dịch', displayDate(row.date)], ['Hạng mục', row.category], ['Đối tượng', row.partyName],
+            ] as const).filter(([, value]) => !!value).map(([label, value]) => (
+              <Text key={label} style={styles.muted}><Text style={local.metaLabel}>{label}: </Text>{value}</Text>
+            ))}
+            {row.projectId ? <Text style={local.entryTag}>Dự án: {projectName(row.projectId)}</Text> : null}
           </Pressable>)}
           {visible.length > limit && <Button label="Xem thêm" secondary onPress={() => setLimit(n => n + pageSize)} />}
         </View>
@@ -464,6 +452,21 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
         </View>
       </>}
       {editor && !editor.row && renderForm(editor.type)}
+      {showDetail && <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={back}>
+        <SafeAreaView style={local.formOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={local.formKeyboard}>
+            <View style={[local.formPanel, local.detailPopup]}>
+              <View style={[local.formHeader, local.detailHeader]}>
+                <Text style={styles.cardTitle}>Chi tiết khoản thu chi</Text>
+                <PopupCloseButton label="Đóng chi tiết khoản thu chi" onPress={back} />
+              </View>
+              <ScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
+                {detail}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>}
     </>}
   </View>;
 }
@@ -476,18 +479,18 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   formPanel: { width: '100%', maxWidth: 560, maxHeight: '100%', flexShrink: 1 },
   formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   formBody: { gap: 12, paddingBottom: 2 },
+  detailPopup: { backgroundColor: colors.paper, borderRadius: 16, overflow: 'hidden' },
+  detailHeader: { paddingLeft: 16, paddingRight: 8, paddingTop: 4 },
+  detailBody: { flexGrow: 0 },
+  detailActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  popupContent: { borderWidth: 0, borderRadius: 0 },
+  metaLabel: { fontWeight: '700' },
+  entryTag: { alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: colors.accentSoft, color: colors.accent, fontSize: 12, fontWeight: '700' },
   ledgerTitle: { gap: 2 },
   positive: { color: colors.success },
   negative: { color: colors.danger },
   field: { gap: 6 },
-  dateButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  calendarOverlay: { flex: 1, padding: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  calendarPanel: { flexGrow: 0, width: '100%', maxWidth: 440, maxHeight: '90%', backgroundColor: colors.paper, borderRadius: 12 },
-  calendarContent: { padding: 12, gap: 10 },
-  filePicker: { padding: 16, alignItems: 'center', gap: 6, borderRadius: 9, borderWidth: 1, borderStyle: 'dashed',
-    borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  fileAction: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  fileHint: { color: colors.muted, fontSize: 12, textAlign: 'center' },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexBasis: '46%', flexGrow: 1, padding: 10, borderRadius: 9, backgroundColor: colors.accentSoft, gap: 4 },
   entry: { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 12, gap: 6 },

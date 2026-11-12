@@ -64,25 +64,28 @@ async function officeDistance(schedule: Schedule) {
     throw new Error('Vị trí văn phòng chưa được cấu hình. Hãy liên hệ quản trị viên.');
   }
 
+  const permissionRequired = new Error('Cần cấp quyền truy cập vị trí để chấm công. Hãy cấp quyền vị trí rồi thử lại.');
   let coords: { latitude: number; longitude: number };
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     if (Platform.OS === 'web') {
       coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(position => resolve(position.coords), reject,
+        navigator.geolocation.getCurrentPosition(position => resolve(position.coords),
+          error => reject(error.code === error.PERMISSION_DENIED ? permissionRequired : error),
           { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
       });
     } else {
       const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) throw new Error();
+      if (!permission.granted) throw permissionRequired;
       const location = await Promise.race([
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
         new Promise<never>((_, reject) => { timeout = setTimeout(reject, 12000); }),
       ]);
       coords = location.coords;
     }
-  } catch {
-    throw new Error('Không lấy được vị trí. Hãy bật GPS, cấp quyền vị trí chính xác rồi thử lại.');
+  } catch (error) {
+    if (error === permissionRequired) throw error;
+    throw new Error('Không lấy được vị trí. Hãy bật GPS rồi thử lại.');
   } finally {
     clearTimeout(timeout);
   }

@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, or, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, or, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import type { Task } from '../tasks/tasks';
 
@@ -35,12 +35,15 @@ export function watchPilotProjectTasks(email: string, isAdmin: boolean, onTasks:
   }, onError);
 }
 
-export async function saveProject(profile: ProjectProfile, id?: string) {
-  if (id) {
-    await updateDoc(doc(db, 'projects', id), profile);
-    return id;
-  }
-  return (await addDoc(collection(db, 'projects'), profile)).id;
+export function generateProjectId() {
+  return doc(collection(db, 'projects')).id;
+}
+
+export async function saveProject(profile: ProjectProfile, id: string, mode: 'create' | 'edit') {
+  const project = doc(db, 'projects', id);
+  if (mode === 'create') await setDoc(project, profile);
+  else await updateDoc(project, profile);
+  return id;
 }
 
 const workDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });

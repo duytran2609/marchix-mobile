@@ -14,7 +14,7 @@ const recordDefaults = {
 const fixtures = {
   [`members/${staff}`]: { name: 'Nhân viên demo', email: staff, role: 'staff' },
   [`members/${colleague}`]: { name: 'Đồng nghiệp demo', email: colleague, role: 'staff' },
-  [`members/${reviewer}`]: { name: 'Người giao việc demo', email: reviewer, role: 'staff', grants: ['requestReview'] },
+  [`members/${reviewer}`]: { name: 'Người giao việc demo', email: reviewer, role: 'staff', grants: ['requestReview', 'cashReview'] },
   'members/quantri@example.test': { name: 'Quản trị demo', email: 'quantri@example.test', role: 'admin' },
   'correspondence/in-2025-1': {
     ...recordDefaults, direction: 'in', status: 'assigned', kind: 'letter', serial: '1',

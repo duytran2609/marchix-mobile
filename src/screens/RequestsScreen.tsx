@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PageHeader } from '../components/PageHeader';
@@ -8,6 +7,7 @@ import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { SearchableChoiceList } from '../components/SearchableChoiceList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DeleteIconButton } from '../components/DeleteIconButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { useToast } from '../components/Toast';
 import { displayDate, vnd } from '../features/cash/cash';
@@ -16,7 +16,7 @@ import {
   pendingRequest, requestTypes, watchRequests,
 } from '../features/requests/requests';
 import type { RequestAccess, RequestAction, RequestFields, StaffRequest } from '../features/requests/requests';
-import { AssignmentCalendar } from '../features/tasks/AssignmentCalendar';
+import { CalendarDialog, DateCalendarButton } from '../features/tasks/CalendarDialog';
 import { shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
 import { useScreenStyles } from '../theme/screenStyles';
@@ -24,7 +24,6 @@ import { createThemedStyles, useTheme } from '../theme/theme';
 
 type Member = Awaited<ReturnType<typeof loadRequestMembers>>[number];
 type RequestTasks = { tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void };
-type CalendarField = 'from' | 'to' | 'month';
 const requestTypeChoices = requestTypes.map(value => ({ value, label: value }));
 const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
 const displayMonth = (value: string) => value.split('-').reverse().join('/');
@@ -53,6 +52,9 @@ function RequestStatus({ status }: { status: string }) {
   return <Text style={[shared.badge, tone]}>{status}</Text>;
 }
 
+const requestDeleteMessage = (row: StaffRequest) =>
+  `Đơn “${row.type}” tạo ngày ${displayDate(row.createdAt)} sẽ bị xóa vĩnh viễn.`;
+
 export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialRequestId, onBackToReview, ...access }:
   RequestAccess & RequestTasks & { name: string; initialRequestId?: string; onBackToReview?: () => void }) {
   const { email, isAdmin, canReviewRequests } = access;
@@ -66,6 +68,11 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
   const [retry, setRetry] = useState(0);
   const [directoryRetry, setDirectoryRetry] = useState(0);
   const [selectedId, setSelected] = useState<string | null>(initialRequestId ?? null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffRequest | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteLock = useRef(false);
+  const toast = useToast();
   useEffect(() => watchRequests({ email, isAdmin, canReviewRequests }, setRows, () => setError(true)),
     [email, isAdmin, canReviewRequests, retry]);
   useEffect(() => {
@@ -81,6 +88,25 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
 
   const memberName = (id: string) => id === email ? name : getMemberName(id, members);
   const selected = selectedId === 'new' ? 'new' : rows?.find(row => row.id === selectedId);
+
+  const cancelDelete = () => { if (!deleteLock.current) setDeleteTarget(null); };
+  async function confirmListDelete() {
+    if (!deleteTarget || deleteLock.current) return;
+    deleteLock.current = true;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await changeRequest(deleteTarget, access, 'delete');
+      setDeleteTarget(null);
+      toast('Đã xóa đơn.');
+    } catch (cause) {
+      setDeleteError(cause instanceof Error && !('code' in cause) ? cause.message :
+        'Không thể xóa đơn. Kiểm tra kết nối, quyền xử lý và thử lại.');
+    } finally {
+      deleteLock.current = false;
+      setDeleting(false);
+    }
+  }
 
   return <>
     <PageHeader title="Đơn từ">
@@ -108,15 +134,25 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
     </View>}
     {!initialRequestId && !error && rows !== null && <View style={shared.stack}>
       {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
-      {rows.map(row => <Pressable key={row.id} testID={`request-${row.id}`} accessibilityRole="button"
-        onPress={() => setSelected(row.id)} style={({ pressed }) => [shared.panel, styles.requestCard, pressed && shared.dimmed]}>
-        <View style={styles.cardHeader}>
-          <Text style={[shared.cardTitle, shared.listHeading]}>{row.type}</Text>
-          <RequestStatus status={row.status} />
-        </View>
-        <Text style={shared.muted}>Ngày tạo: {displayDate(row.createdAt)}</Text>
-      </Pressable>)}
+      {rows.map(row => <View key={row.id} style={[shared.panel, styles.requestRow]}>
+        <Pressable testID={`request-${row.id}`} accessibilityRole="button"
+          onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, pressed && shared.dimmed]}>
+          <View style={styles.cardHeader}>
+            <Text style={[shared.cardTitle, shared.listHeading]}>{row.type}</Text>
+            <RequestStatus status={row.status} />
+          </View>
+          <Text style={shared.muted}>Ngày tạo: {displayDate(row.createdAt)}</Text>
+        </Pressable>
+        {canActOnRequest(row, 'delete', access) && <DeleteIconButton
+          label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
+          onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />}
+      </View>)}
     </View>}
+    {deleteTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelDelete}>
+      <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?" message={requestDeleteMessage(deleteTarget)}
+        action="Xác nhận xóa" pendingAction="Đang xóa…" pending={deleting} error={deleteError}
+        onCancel={cancelDelete} onConfirm={() => void confirmListDelete()} />
+    </Modal>}
     {selected && <RequestDialog row={selected === 'new' ? null : selected} access={access}
       tasks={tasks} tasksError={tasksError} onRetryTasks={onRetryTasks}
       members={members} memberName={memberName} directoryState={directoryState}
@@ -154,12 +190,6 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   const [reason, setReason] = useState(row?.reason || '');
   const [approver, setApprover] = useState(row?.approverEmail || '');
   const [reply, setReply] = useState('');
-  const [calendar, setCalendar] = useState<{ field: CalendarField; top: number; bottom: number } | null>(null);
-  const [popupHeight, setPopupHeight] = useState(0);
-  const popup = useRef<ComponentRef<typeof View>>(null);
-  const fromButton = useRef<ComponentRef<typeof Pressable>>(null);
-  const toButton = useRef<ComponentRef<typeof Pressable>>(null);
-  const monthButton = useRef<ComponentRef<typeof Pressable>>(null);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
@@ -213,25 +243,6 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     setFrom(start);
     setTo(end);
     if (range) setDays(String(rangeDays(start, end)));
-    closeCalendar();
-  }
-
-  function calendarButton(field: CalendarField) {
-    return field === 'from' ? fromButton : field === 'to' ? toButton : monthButton;
-  }
-
-  function openCalendar(field: CalendarField) {
-    popup.current?.measureInWindow((_, popupY) => {
-      calendarButton(field).current?.measureInWindow((_, y, _width, height) => {
-        if (field === 'month') setMonthPickerYear(Number(month.slice(0, 4)));
-        setCalendar({ field, top: y - popupY, bottom: y - popupY + height });
-      });
-    });
-  }
-
-  function closeCalendar() {
-    setCalendar(null);
-    if (Platform.OS === 'web' && calendar) calendarButton(calendar.field).current?.focus();
   }
 
   function changeDays(value: string) {
@@ -278,40 +289,27 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function dateField(field: 'from' | 'to', label: string, value: string) {
-    const open = calendar?.field === field;
-    return <View style={styles.field}>
-      <View style={styles.dateRow}>
-        <Text style={[shared.label, styles.dateLabel]}>{label}</Text>
-        <Pressable ref={calendarButton(field)} collapsable={false} accessibilityRole="button" accessibilityLabel={`${label}, ${displayDate(value)}`}
-          aria-expanded={open} disabled={busy} style={[shared.input, styles.picker, styles.dropdown]}
-          onPress={() => openCalendar(field)}>
-          <Text style={shared.label}>{displayDate(value)}</Text><Text aria-hidden style={styles.pickerIcon}>▦</Text>
-        </Pressable>
-      </View>
+    return <View style={styles.dateRow}>
+      <Text style={[shared.label, styles.dateLabel]}>{label}</Text>
+      <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
+        disabled={busy} style={styles.dropdown} onChange={day => selectDate(field, day)} />
     </View>;
   }
 
-  const calendarHeight = Math.min(calendar?.field === 'month' ? 250 : 360, Math.max(0, popupHeight - 16));
-  const below = (calendar?.bottom ?? 0) + 6;
-  const calendarPosition = below + calendarHeight <= popupHeight - 8 ? { top: below }
-    : calendar && calendar.top >= calendarHeight + 14 ? { bottom: popupHeight - calendar.top + 6 } : { top: 8 };
-  const monthYear = monthPickerYear ?? Number(month.slice(0, 4));
   const cancelDelete = () => {
     setError('');
     setConfirmDelete(false);
   };
 
   return <Modal visible transparent animationType="fade" onRequestClose={() => {
-    if (calendar) closeCalendar();
-    else if (confirmDelete && !busy) cancelDelete();
+    if (confirmDelete && !busy) cancelDelete();
     else if (!busy) onClose();
   }}>
     <SafeAreaView style={styles.modal}>
-      <View ref={popup} collapsable={false} onLayout={event => setPopupHeight(event.nativeEvent.layout.height)}
-        role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal={!confirmDelete}
+      <View role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal={!confirmDelete}
         aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}
         style={[styles.popup, { width: Math.min(560, width - insets.left - insets.right - 32) }]}>
-        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} scrollEnabled={!calendar}>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.popupContent}>
             <View style={shared.listHeader}>
               <Text accessibilityRole="header" style={[shared.heading, shared.listHeading]}>{row ? 'Chi tiết đơn' : 'Tạo đơn'}</Text>
@@ -334,9 +332,12 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                 {input('Số tiền tạm ứng (VND)', groupDigits(amount), value => setAmount(digitsOnly(value)),
                   { keyboardType: 'number-pad', maxLength: 24 })}
                 <Text style={shared.label}>Trừ vào lương tháng</Text>
-                <Pressable ref={monthButton} collapsable={false} accessibilityRole="button" accessibilityLabel={`Đổi tháng năm, ${displayMonth(month)}`}
-                  aria-expanded={calendar?.field === 'month'} disabled={busy} style={[shared.input, styles.picker]}
-                  onPress={() => openCalendar('month')}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Đổi tháng năm, ${displayMonth(month)}`}
+                  aria-expanded={monthPickerYear !== null} disabled={busy} style={[shared.input, styles.picker]}
+                  onPress={() => {
+                    if (Keyboard.isVisible()) Keyboard.dismiss();
+                    setMonthPickerYear(Number(month.slice(0, 4)));
+                  }}>
                   <Text style={shared.label}>{displayMonth(month)}</Text><Text aria-hidden style={styles.pickerIcon}>▦</Text>
                 </Pressable>
               </> : <>
@@ -420,35 +421,26 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             {busy && !confirmDelete && <ActivityIndicator accessibilityLabel="Đang lưu đơn" color={colors.accent} />}
           </View>
         </ScrollView>
-        {calendar && <View style={StyleSheet.absoluteFill}>
-          <Pressable accessible={false} aria-hidden tabIndex={-1} style={StyleSheet.absoluteFill} onPress={closeCalendar} />
-          <View style={[styles.calendarPopover, calendarPosition]}>
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: calendarHeight }}>
-              {calendar.field === 'month' ? <View style={styles.monthBody}>
-                <View style={shared.listHeader}>
-                  <Button label="Năm trước" secondary disabled={busy || monthYear <= 1} onPress={() => setMonthPickerYear(monthYear - 1)} />
-                  <Text accessibilityLiveRegion="polite" style={shared.label}>{monthYear}</Text>
-                  <Button label="Năm sau" secondary disabled={busy || monthYear >= 9999} onPress={() => setMonthPickerYear(monthYear + 1)} />
-                </View>
-                <View style={shared.choices}>
-                  {months.map(item => {
-                    const value = String(monthYear).padStart(4, '0') + '-' + item;
-                    return <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Tháng ${item}`}
-                      accessibilityState={{ selected: value === month }} style={[shared.choice, value === month && shared.selected]}
-                      disabled={busy} onPress={() => { setMonth(value); closeCalendar(); }}>
-                      <Text style={shared.label}>{item}</Text>
-                    </Pressable>;
-                  })}
-                </View>
-              </View> : <AssignmentCalendar key={calendar.field} initialDay={calendar.field === 'from' ? from : to}
-                value={calendar.field === 'from' ? from : to} min={calendar.field === 'to' ? from : undefined}
-                disabled={busy} onSelect={day => selectDate(calendar.field === 'to' ? 'to' : 'from', day)} />}
-            </ScrollView>
-          </View>
-        </View>}
       </View>
-      {confirmDelete && <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?"
-        message="Đơn này sẽ bị xóa vĩnh viễn." action="Xác nhận xóa" pendingAction="Đang xóa…"
+      {monthPickerYear !== null && <CalendarDialog title="Trừ vào lương tháng" onClose={() => setMonthPickerYear(null)}>
+        <View style={shared.listHeader}>
+          <Button label="Năm trước" secondary disabled={busy || monthPickerYear <= 1} onPress={() => setMonthPickerYear(monthPickerYear - 1)} />
+          <Text accessibilityLiveRegion="polite" style={shared.label}>{monthPickerYear}</Text>
+          <Button label="Năm sau" secondary disabled={busy || monthPickerYear >= 9999} onPress={() => setMonthPickerYear(monthPickerYear + 1)} />
+        </View>
+        <View style={shared.choices}>
+          {months.map(item => {
+            const value = String(monthPickerYear).padStart(4, '0') + '-' + item;
+            return <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Tháng ${item}`}
+              accessibilityState={{ selected: value === month }} style={[shared.choice, value === month && shared.selected]}
+              disabled={busy} onPress={() => { setMonth(value); setMonthPickerYear(null); }}>
+              <Text style={shared.label}>{item}</Text>
+            </Pressable>;
+          })}
+        </View>
+      </CalendarDialog>}
+      {confirmDelete && row && <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?"
+        message={requestDeleteMessage(row)} action="Xác nhận xóa" pendingAction="Đang xóa…"
         pending={busy} error={error} onCancel={cancelDelete} onConfirm={() => void submit('delete')} />}
     </SafeAreaView>
   </Modal>;
@@ -459,11 +451,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popup: { maxHeight: '92%', borderRadius: 18, overflow: 'hidden', backgroundColor: colors.paper,
     borderWidth: 1, borderColor: colors.line },
   popupContent: { gap: 14, padding: 20 },
-  calendarPopover: { position: 'absolute', left: 16, right: 16, borderRadius: 10, backgroundColor: colors.paper,
-    boxShadow: '0 4px 16px rgba(33, 25, 53, 0.2)' },
-  monthBody: { padding: 8 },
   field: { gap: 6 },
-  requestCard: { gap: 4 },
+  requestRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  requestCard: { flex: 1, minWidth: 0, gap: 4 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dateLabel: { width: 76 },

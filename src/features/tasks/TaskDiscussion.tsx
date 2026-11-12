@@ -21,7 +21,7 @@ export function TaskDiscussion({ task, email, name, members }: {
   const [sending, setSending] = useState(false);
   const [downloading, setDownloading] = useState('');
   const isAssignee = task.assigneeEmail === email;
-  const canComment = isAssignee && (!pilotMode || taskAssignmentEnabled);
+  const canComment = isAssignee && task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
   const assignmentMessage = getAssignmentComment(task);
   const comments = task.comments?.filter(comment => comment !== assignmentMessage).slice(-20) ?? [];
   const messages = assignmentMessage?.text ? [assignmentMessage, ...comments] : comments;

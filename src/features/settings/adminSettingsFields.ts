@@ -11,6 +11,7 @@ export type Field = {
   choices?: readonly Choice[];
   required?: boolean;
   time?: boolean;
+  money?: boolean;
   integer?: boolean;
   min?: number;
   max?: number;
@@ -25,7 +26,7 @@ const categories = {
 };
 const partyTypes = ['Nhà cung cấp', 'Khách hàng', 'Nhân viên', 'Cơ quan nhà nước', 'Ngân hàng / tổ chức tín dụng', 'Chủ sở hữu', 'Khác'];
 const choices = (values: string[]): Choice[] => values.map(value => [value, value]);
-const money = (key: string, label: string, initial = 0): Field => ({ key, label, initial, min: 0, integer: true });
+const money = (key: string, label: string, initial = 0): Field => ({ key, label, initial, min: 0, integer: true, money: true });
 const percent = (key: string, label: string, initial: number): Field => ({ key, label, initial, min: 0, max: 100 });
 
 export const grants = {
@@ -64,12 +65,12 @@ export const workFields: Field[] = [
   ...[1, 2, 3, 4, 5, 6, 0].map(day => ({
     key: `day${day}`, label: day === 0 ? 'Chủ nhật' : `Thứ ${day + 1}`, initial: defaultSchedule.days[day], choices: dayChoices,
   })),
+  { key: 'remindIn', label: 'Nhắc quên chấm vào lúc', initial: '08:30', time: true },
+  { key: 'remindOut', label: 'Nhắc quên chấm ra lúc', initial: '17:45', time: true },
   { key: 'gpsOn', label: 'Chỉ cho chấm công tại văn phòng (GPS)', initial: false },
   { key: 'gpsLat', label: 'Vĩ độ văn phòng', initial: 0, min: -90, max: 90 },
   { key: 'gpsLng', label: 'Kinh độ văn phòng', initial: 0, min: -180, max: 180 },
   { key: 'gpsRadius', label: 'Bán kính cho phép (m)', initial: 300, min: 50, integer: true },
-  { key: 'remindIn', label: 'Nhắc quên chấm vào lúc', initial: '08:30', time: true },
-  { key: 'remindOut', label: 'Nhắc quên chấm ra lúc', initial: '17:45', time: true },
   { key: 'emailOn', label: 'Bật nhắc qua email theo lịch', initial: true },
   { key: 'autoStart', label: 'Tự chuyển việc sang “Đang làm” khi đến ngày bắt đầu', initial: true },
   { key: 'requireReview', label: 'Yêu cầu người giao duyệt và đánh giá khi báo xong', initial: true },

@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
-import { AssignmentCalendar, displayDay } from '../tasks/AssignmentCalendar';
-import { todayInVietnam } from '../tasks/taskDates';
-import { projectStatuses, projectTextFields, saveProject } from './projects';
+import { DateCalendarField } from '../tasks/CalendarDialog';
+import { generateProjectId, projectStatuses, projectTextFields, saveProject } from './projects';
 import type { Project, ProjectProfile } from './projects';
 
 const fields = Object.keys(projectTextFields) as (keyof typeof projectTextFields)[];
@@ -24,12 +23,12 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
 }) {
   const styles = useScreenStyles();
   const popup = usePopupStyles();
+  const [projectId] = useState(() => project?.id ?? generateProjectId());
   const [values, setValues] = useState(() => Object.fromEntries(
     fields.map(field => [field, project?.[field] || '']),
   ) as Record<typeof fields[number], string>);
   const [status, setStatus] = useState(project?.status || projectStatuses[0]);
   const [budget, setBudget] = useState(project?.budget ? String(project.budget) : '');
-  const [calendar, setCalendar] = useState<'startDate' | 'deadline' | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
@@ -37,11 +36,6 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
 
   function close() {
     if (!pending.current) onCancel();
-  }
-
-  function selectDate(field: 'startDate' | 'deadline', value: string) {
-    setValues(current => ({ ...current, [field]: value }));
-    setCalendar(null);
   }
 
   async function submit() {
@@ -63,7 +57,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
     setSaving(true);
     setError('');
     try {
-      onSaved(await saveProject(profile, project?.id));
+      onSaved(await saveProject(profile, projectId, project ? 'edit' : 'create'));
     } catch {
       setError('Không lưu được dự án. Kiểm tra kết nối và quyền chỉnh sửa rồi thử lại.');
     } finally {
@@ -72,10 +66,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
     }
   }
 
-  return <Modal transparent visible onRequestClose={() => {
-    if (calendar) setCalendar(null);
-    else close();
-  }} statusBarTranslucent navigationBarTranslucent>
+  return <Modal transparent visible onRequestClose={close} statusBarTranslucent navigationBarTranslucent>
     <SafeAreaView style={popup.overlay}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={popup.center}>
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={popup.panel}>
@@ -84,6 +75,9 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
             <PopupCloseButton label="Đóng biểu mẫu dự án" onPress={close} disabled={saving} />
           </View>
           <ScrollView style={popup.scroll} contentContainerStyle={popup.body} keyboardShouldPersistTaps="handled">
+            {!project && <Text selectable style={styles.muted}>
+              <Text style={popup.codeLabel}>Mã dự án: </Text>DA-{projectId}
+            </Text>}
             {fields.map(field => {
               const label = projectTextFields[field];
               if (field === 'startDate' || field === 'deadline') {
@@ -91,25 +85,10 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
                 const otherDate = values[field === 'startDate' ? 'deadline' : 'startDate'];
                 const limit = validDate(otherDate) && otherDate ? otherDate : undefined;
                 const day = validDate(value) && value ? value : '';
-                const expanded = calendar === field;
-                return <View key={field} style={popup.field}>
-                  <Text style={styles.label}>{label}</Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`${label}, ${day ? displayDay(day) : 'chọn ngày'}`}
-                    aria-expanded={expanded} disabled={saving} style={popup.dateButton} onPress={() => {
-                      Keyboard.dismiss();
-                      setCalendar(expanded ? null : field);
-                    }}>
-                    <Text style={day ? styles.label : styles.muted}>{day ? displayDay(day) : 'Chọn ngày'}</Text>
-                    <Text aria-hidden style={popup.calendarIcon}>▦</Text>
-                  </Pressable>
-                  {expanded && <>
-                    <AssignmentCalendar initialDay={day || limit || todayInVietnam()} value={day}
-                      min={field === 'deadline' ? limit : undefined} max={field === 'startDate' ? limit : undefined}
-                      disabled={saving} onSelect={date => selectDate(field, date)} />
-                    {value ? <Button label={`Bỏ ${label.toLocaleLowerCase('vi')}`} secondary disabled={saving}
-                      onPress={() => selectDate(field, '')} /> : null}
-                  </>}
-                </View>;
+                return <DateCalendarField key={field} label={label} value={day} initialDay={day || limit}
+                  min={field === 'deadline' ? limit : undefined} max={field === 'startDate' ? limit : undefined}
+                  clearLabel={`Bỏ ${label.toLocaleLowerCase('vi')}`} disabled={saving}
+                  onChange={date => setValues(current => ({ ...current, [field]: date }))} />;
               }
               const multiline = multilineFields.includes(field);
               return <View key={field} style={popup.field}>
@@ -152,8 +131,6 @@ const usePopupStyles = createThemedStyles(colors => StyleSheet.create({
     paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   scroll: { flexShrink: 1, minHeight: 0 },
   body: { padding: 16, gap: 12 },
+  codeLabel: { fontWeight: '700' },
   field: { gap: 6 },
-  dateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 46,
-    paddingHorizontal: 12, borderWidth: 1, borderRadius: 9, borderColor: colors.line },
-  calendarIcon: { color: colors.accent, fontSize: 16 },
 }));

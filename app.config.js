@@ -9,6 +9,9 @@ const pilot = process.env.EXPO_PUBLIC_FIREBASE_MODE === 'pilot';
 const lanApk = process.env.MARCHIX_LAN_APK === '1';
 const id = pilot ? 'vn.marchix.quanly.pilot' : staging ? 'vn.marchix.quanly.staging' : 'vn.marchix.quanly.emulator';
 const plugins = lanApk || pilot ? [] : ['expo-dev-client'];
+const pushProjectId = (staging || pilot) ? process.env.MARCHIX_EAS_PROJECT_ID?.trim() : undefined;
+const googleServicesFile = pushProjectId ? process.env.MARCHIX_GOOGLE_SERVICES_FILE?.trim() : undefined;
+if (pushProjectId) plugins.push(['expo-notifications', { defaultChannel: 'workspace' }]);
 plugins.push(['expo-location', {
   locationWhenInUsePermission: 'Cho phép Quản lý Marchix kiểm tra vị trí văn phòng khi bạn chấm công.',
 }]);
@@ -65,8 +68,10 @@ module.exports = {
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
-  android: { package: id, ...(pilot ? { versionCode: 6, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
+  android: { package: id, ...(googleServicesFile ? { googleServicesFile } : {}),
+    ...(pilot ? { versionCode: 6, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
   ios: { bundleIdentifier: id, supportsTablet: false },
   web: { favicon: './assets/favicon.png' },
+  ...(pushProjectId ? { extra: { eas: { projectId: pushProjectId }, workspacePushEnabled: true } } : {}),
   plugins,
 };

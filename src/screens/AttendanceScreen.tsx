@@ -4,6 +4,8 @@ import { PageHeader } from '../components/PageHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DeleteIconButton } from '../components/DeleteIconButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
@@ -297,12 +299,26 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
     }
   }
 
-  return <Modal visible animationType="slide" onRequestClose={() => { if (!pending) onClose(); }}>
+  const cancelDelete = () => {
+    if (lock.current) return;
+    setError('');
+    setConfirmDelete(false);
+  };
+
+  return <Modal visible animationType="slide" onRequestClose={() => {
+    if (confirmDelete) cancelDelete();
+    else if (!lock.current) onClose();
+  }}>
     <SafeAreaView style={styles.editor}>
-      <ScrollView contentContainerStyle={ui.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={ui.scroll} keyboardShouldPersistTaps="handled"
+        aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}>
         <View style={ui.page}>
           <View style={ui.panel}>
-            <Text accessibilityRole="header" style={ui.heading}>Sửa công</Text>
+            <View style={ui.listHeader}>
+              <Text accessibilityRole="header" style={[ui.heading, ui.listHeading]}>Sửa công</Text>
+              {record && <DeleteIconButton label="Xóa bản ghi chấm công" disabled={pending || confirmDelete}
+                onPress={() => { setError(''); setConfirmDelete(true); }} />}
+            </View>
             <Text style={ui.label}>{member.name} · {showAttendanceDate(date)}/{date.slice(0, 4)}</Text>
             <Text style={ui.muted}>Giờ ghi nhận {clock(machineTime(record?.inTs))}–{clock(machineTime(record?.outTs))} · Công hiện tại {calculatedWork}</Text>
             <Text style={ui.label}>Giờ vào điều chỉnh</Text>
@@ -322,19 +338,17 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
             <Text style={ui.label}>Lý do điều chỉnh</Text>
             <TextInput accessibilityLabel="Lý do điều chỉnh" value={note} onChangeText={setNote} maxLength={1000}
               editable={!pending && !confirmDelete} style={ui.input} />
-            {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
-            {confirmDelete ? <>
-              <Text style={ui.error}>Xóa bản ghi chấm công ngày này?</Text>
-              <Button label="Xác nhận xóa" disabled={pending} onPress={() => void submit(true)} />
-              <Button label="Quay lại sửa công" secondary disabled={pending} onPress={() => setConfirmDelete(false)} />
-            </> : <>
-              <Button label={pending ? 'Đang lưu…' : 'Lưu điều chỉnh'} disabled={pending} onPress={() => void submit(false)} />
-              {record && <Button label="Xóa bản ghi" secondary disabled={pending} onPress={() => setConfirmDelete(true)} />}
-              <Button label="Đóng" secondary disabled={pending} onPress={onClose} />
-            </>}
+            {!!error && !confirmDelete && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+            <Button label={pending && !confirmDelete ? 'Đang lưu…' : 'Lưu điều chỉnh'}
+              disabled={pending || confirmDelete} onPress={() => void submit(false)} />
+            <Button label="Đóng" secondary disabled={pending || confirmDelete} onPress={onClose} />
           </View>
         </View>
       </ScrollView>
+      {confirmDelete && <ConfirmDialog label="Xác nhận xóa bản ghi chấm công" title="Xóa bản ghi chấm công?"
+        message={`Bản ghi của ${member.name} ngày ${showAttendanceDate(date)}/${date.slice(0, 4)} sẽ bị xóa vĩnh viễn.`}
+        action="Xác nhận xóa" pendingAction="Đang xóa…" pending={pending} error={error}
+        onCancel={cancelDelete} onConfirm={() => void submit(true)} />}
       <ToastLayer />
     </SafeAreaView>
   </Modal>;

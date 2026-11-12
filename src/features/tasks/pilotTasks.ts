@@ -135,6 +135,7 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
   await runTransaction(db, async tx => {
     const task = (await tx.get(ref)).data() as Task | undefined;
     if (task?.assignedBy !== by) throw new Error('Chỉ người giao việc mới được chỉnh sửa công việc này.');
+    if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
     if ((task.updatedAt ?? '') !== input.revision) throw new Error('Công việc vừa thay đổi. Hãy mở lại để chỉnh sửa.');
     const now = new Date(Math.max(Date.now(), (Date.parse(input.revision) || 0) + 1)).toISOString();
     const comments = [...(task.comments ?? [])];

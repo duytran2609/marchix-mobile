@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import type { MemberSession } from '../features/auth/useSession';
 import { notificationTaskTarget } from '../features/notifications/notifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
+import { useWorkspacePush } from '../features/notifications/workspacePush';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
 import { workspaceTabForLink } from '../navigation/workspaceRoutes';
@@ -24,6 +25,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const [route, setRoute] = useState<WorkspaceRoute>({ screen: 'tong-quan' });
   const [showAssignment, setShowAssignment] = useState(false);
   const [draggingTask, setDraggingTask] = useState(false);
+  const unregisterPush = useWorkspacePush(email, openNote);
 
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
@@ -41,6 +43,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   }
 
   function openNote(note: WorkspaceNotification) {
+    setMenuOpen(false);
     const recordId = /^#van-thu\/([A-Za-z0-9-]+)$/.exec(note.link)?.[1];
     if (recordId) {
       setShowAssignment(false);
@@ -54,6 +57,12 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     }
     setShowAssignment(false);
     setRoute({ screen: 'task-detail', task: 'id' in task ? { id: task.id, direct: true } : task });
+  }
+
+  async function logout() {
+    setMenuOpen(false);
+    await unregisterPush();
+    await signOut(auth);
   }
 
   return (
@@ -74,7 +83,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       </ScrollView>
       <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
         isAdmin={isAdmin} name={name} photoURL={photoURL}
-        onClose={() => setMenuOpen(false)} onSelect={selectTab} onLogout={() => signOut(auth)} />
+        onClose={() => setMenuOpen(false)} onSelect={selectTab} onLogout={logout} />
     </>
   );
 }

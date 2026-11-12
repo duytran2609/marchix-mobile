@@ -20,6 +20,7 @@ connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 const tick = httpsCallable(functions, 'setTaskChecklistItem', { timeout: 35000 });
 const report = httpsCallable(functions, 'reportTaskCompletion', { timeout: 35000 });
 const review = httpsCallable(functions, 'reviewTaskCompletion', { timeout: 35000 });
+const editAssignment = httpsCallable(functions, 'updateMobileTask', { timeout: 35000 });
 const login = (email, sub) => signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({
   sub, email, email_verified: true,
 })));
@@ -132,6 +133,15 @@ try {
   assert.equal(approved.reviewedAt, approved.updatedAt);
   assert.equal(approved.rating, approve.rating);
   assert.equal(approved.reviewNote, approve.note);
+  await assert.rejects(updateDoc(ref, { comments: [...(approved.comments ?? []), {
+    by: staff, at: new Date().toISOString(), text: 'Trao đổi sau khi xong', files: [],
+  }] }), { code: 'permission-denied' });
+  await login(reviewer, 'marchix-mobile-demo-reviewer');
+  await assert.rejects(editAssignment({
+    taskId, title: 'Đổi tên sau khi xong', assigneeEmails: [staff], due: approved.due, revision: approved.updatedAt,
+  }), { code: 'functions/failed-precondition', message: /đã xong/ });
+  await login(staff, 'marchix-mobile-demo-staff');
+  assert.deepEqual(await readTask(), approved);
   const next = (await getDocFromServer(doc(db, 'tasks', nextId))).data();
   assert.equal(approved.spawned, true);
   assert.equal(next.status, 'Chưa làm');

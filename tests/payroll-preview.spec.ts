@@ -45,11 +45,29 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
 
     await openPayroll(admin, true);
     await admin.getByRole('button', { name: 'Hồ sơ nhân sự', exact: true }).click();
+    await admin.getByRole('button', { name: '+ Thêm nhân sự', exact: true }).click();
+    const addEmployee = admin.getByRole('dialog', { name: 'Thêm nhân sự', exact: true });
+    await expect(addEmployee.getByRole('button', { name: 'Lưu hồ sơ' })).toBeVisible();
+    await addEmployee.getByRole('button', { name: 'Đóng', exact: true }).click();
     await admin.getByRole('button', { name: 'Sửa hồ sơ Nhân viên lương demo' }).click();
     await admin.getByLabel('Chức danh').fill('Kiểm thử lương');
     await admin.getByRole('button', { name: 'Lưu hồ sơ' }).click();
-    await expect(admin.getByText(/Kiểm thử lương · Thử việc/)).toBeVisible();
+    await expect(admin.getByText('Chức danh: Kiểm thử lương', { exact: true })).toBeVisible();
+    await expect(admin.getByText('Loại hợp đồng: Thử việc', { exact: true })).toBeVisible();
     await admin.getByRole('button', { name: 'Bảng lương', exact: true }).click();
+    await expect(admin.getByText(/^Tổng thu nhập:/)).toBeVisible();
+    const [year, monthNumber] = month.split('-');
+    const otherMonth = monthNumber === '01' ? '02' : '01';
+    await admin.getByRole('button', { name: 'Chọn tháng: Tháng ' + monthNumber }).click();
+    await admin.getByRole('radio', { name: 'Tháng ' + otherMonth, exact: true }).click();
+    await expect(admin.getByRole('button', { name: 'Chọn tháng: Tháng ' + otherMonth })).toBeVisible();
+    await admin.getByRole('button', { name: 'Chọn năm: ' + year }).click();
+    const nextYear = String(Number(year) + 1);
+    await admin.getByRole('radio', { name: nextYear, exact: true }).click();
+    await admin.getByRole('button', { name: 'Chọn năm: ' + nextYear }).click();
+    await admin.getByRole('radio', { name: year, exact: true }).click();
+    await admin.getByRole('button', { name: 'Chọn tháng: Tháng ' + otherMonth }).click();
+    await admin.getByRole('radio', { name: 'Tháng ' + monthNumber, exact: true }).click();
     await expect(admin.getByRole('table').getByRole('columnheader')).toHaveText(columns);
 
     await admin.getByRole('button', { name: 'Lấy ngày công từ Chấm công' }).click();
@@ -58,8 +76,8 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await admin.getByRole('button', { name: 'Xem dòng lương Nhân viên lương demo' }).click();
     await admin.getByLabel('Ngày công thực tế').fill('13');
     await admin.getByLabel('Ngày công chuẩn').fill('26');
-    await admin.getByLabel('Thưởng / khoản thêm').fill('500000');
-    await admin.getByLabel('Khấu trừ khác').fill('200000');
+    await admin.getByLabel('Thưởng / khoản thêm (VNĐ)').fill('500000');
+    await admin.getByLabel('Khấu trừ khác (VNĐ)').fill('200000');
     await admin.getByRole('button', { name: 'Lưu dòng lương' }).click();
     await expect(admin.getByText('Đã lưu dòng lương.')).toBeVisible();
     await expect(page.getByText('Tháng ' + label, { exact: true })).toHaveCount(0);

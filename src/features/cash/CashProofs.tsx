@@ -11,7 +11,7 @@ import { formatFileSize } from '../tasks/taskAttachments';
 import { readCashFile, type CashAttachment, type OpenCashFile } from './cashAttachments';
 import { CashPdf } from './CashPdf';
 
-async function saveProof(file: OpenCashFile) {
+export async function saveAttachmentBytes(file: { bytes: Uint8Array; name: string; type: string }, dialogTitle = 'Lưu chứng từ') {
   if (Platform.OS === 'web') {
     const url = URL.createObjectURL(new Blob([new Uint8Array(file.bytes)], { type: 'application/octet-stream' }));
     const link = document.createElement('a');
@@ -44,7 +44,7 @@ async function saveProof(file: OpenCashFile) {
   try {
     const saved = folder.createFile(file.name, file.type);
     await saved.write(file.bytes);
-    await shareAsync(saved.uri, { mimeType: file.type, dialogTitle: 'Lưu chứng từ' });
+    await shareAsync(saved.uri, { mimeType: file.type, dialogTitle });
   } finally {
     folder.delete();
   }
@@ -64,7 +64,7 @@ function Preview({ file, onClose }: { file: OpenCashFile; onClose: () => void })
     if (saving) return;
     setSaving(true);
     setSaveError('');
-    try { await saveProof(file); }
+    try { await saveAttachmentBytes(file); }
     catch { setSaveError('Không lưu được chứng từ. Vui lòng thử lại.'); }
     finally { setSaving(false); }
   }

@@ -98,7 +98,7 @@ export function WorkspaceNavigator({
   if (route.screen === 'cai-dat') return <SettingsScreen key={String(isAdmin)} reminders={reminders}
     isAdmin={isAdmin} email={email} onScrollTop={onScrollTop} />;
   if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, isAdmin])}
-    email={email} isAdmin={isAdmin} recordId={route.recordId} onScrollTop={onScrollTop}
+    email={email} isAdmin={isAdmin} recordId={route.recordId}
     onBackToReview={route.fromReview ? openReviewQueue : undefined}
     onSelect={recordId => setRoute({ screen: 'van-thu', recordId, fromReview: route.fromReview })} />;
   if (route.screen === 'cho-duyet') return <ReviewQueueScreen key={JSON.stringify([email, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests])}

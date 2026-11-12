@@ -1,4 +1,5 @@
-import { collection, doc, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
+import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import type { Task } from '../tasks/tasks';
 
@@ -38,22 +39,30 @@ export function findNotificationTask(target: { title: string; assignment?: true 
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+function readNotification(row: QueryDocumentSnapshot<DocumentData>): WorkspaceNotification {
+  const data = row.data();
+  return {
+    id: row.id,
+    title: typeof data.title === 'string' ? data.title : 'Thông báo',
+    body: typeof data.body === 'string' ? data.body : '',
+    link: typeof data.link === 'string' ? data.link : '',
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+    read: data.read === true,
+    taskId: typeof data.taskId === 'string' && /^[^/\s]+$/.test(data.taskId) && !/^\.{1,2}$/.test(data.taskId)
+      ? data.taskId : undefined,
+  };
+}
+
+export async function loadNotification(id: string, email: string) {
+  if (!id || id.length > 1500 || id.includes('/') || id === '.' || id === '..') return undefined;
+  const row = await getDocFromServer(doc(db, 'notifications', id));
+  return row.exists() && row.get('to') === email ? readNotification(row) : undefined;
+}
+
 export function watchNotifications(email: string, onChange: (notes: WorkspaceNotification[]) => void, onError: () => void) {
   const inbox = query(collection(db, 'notifications'), where('to', '==', email));
   return onSnapshot(inbox, snapshot => {
-    const notes = snapshot.docs.map(row => {
-      const data = row.data();
-      return {
-        id: row.id,
-        title: typeof data.title === 'string' ? data.title : 'Thông báo',
-        body: typeof data.body === 'string' ? data.body : '',
-        link: typeof data.link === 'string' ? data.link : '',
-        createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
-        read: data.read === true,
-        taskId: typeof data.taskId === 'string' && /^[^/\s]+$/.test(data.taskId) && !/^\.{1,2}$/.test(data.taskId)
-          ? data.taskId : undefined,
-      };
-    });
+    const notes = snapshot.docs.map(readNotification);
     onChange(notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }, onError);
 }

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
-import { useTheme } from '../../theme/theme';
+import { DateCalendarField } from '../tasks/CalendarDialog';
 import { amount, calculatePay, contracts, employeeStatuses, emptyEmployee, locked, money } from './payroll';
 import type { Employee, EmployeeFields, PayAmounts, PayInputs, Payslip, Rates } from './payroll';
 import { payrollMetrics, payrollMoney, payrollWork } from './payrollColumns';
@@ -29,47 +29,65 @@ export function PayrollModal({ title, busy, onClose, children }: {
   title: string; busy: boolean; onClose: () => void; children: React.ReactNode;
 }) {
   const styles = useScreenStyles();
-  const { colors } = useTheme();
-  return <Modal visible animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.paper }}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
-        <View style={styles.page}>
-          <View style={styles.panel}>
-            <View style={styles.listHeader}>
-              <Text accessibilityRole="header" style={[styles.heading, styles.listHeading]}>{title}</Text>
-              <PopupCloseButton label="Đóng" onPress={onClose} disabled={busy} />
-            </View>
-            {children}
+  return <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent
+    onRequestClose={() => { if (!busy) onClose(); }}>
+    <SafeAreaView style={popup.overlay}>
+      <KeyboardAvoidingView style={popup.center} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={[styles.panel, popup.panel]}>
+          <View style={styles.listHeader}>
+            <Text accessibilityRole="header" style={[styles.cardTitle, styles.listHeading]}>{title}</Text>
+            <PopupCloseButton label="Đóng" onPress={onClose} disabled={busy} />
           </View>
+          <ScrollView style={popup.scroll} contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   </Modal>;
 }
 
+const popup = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  panel: { width: '100%', maxWidth: 560, flexShrink: 1 },
+  scroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
+});
+
 const employeeTextFields = [
   ['name', 'Họ tên'], ['email', 'Email nhận phiếu lương'], ['position', 'Chức danh'],
-  ['startDate', 'Ngày vào làm (YYYY-MM-DD)'], ['taxCode', 'Mã số thuế cá nhân'],
+  ['startDate', 'Ngày vào làm'], ['taxCode', 'Mã số thuế cá nhân'],
 ] as const;
 const employeeNumbers = [
-  ['salary', 'Lương thỏa thuận / tháng'], ['insSalary', 'Mức lương đóng BHXH'],
-  ['allowTaxable', 'Phụ cấp chịu thuế / tháng'], ['allowFree', 'Phụ cấp không chịu thuế / tháng'],
-  ['dependents', 'Số người phụ thuộc'],
+  ['salary', 'Lương thỏa thuận / tháng', 'money'], ['insSalary', 'Mức lương đóng BHXH', 'money'],
+  ['allowTaxable', 'Phụ cấp chịu thuế / tháng', 'money'], ['allowFree', 'Phụ cấp không chịu thuế / tháng', 'money'],
+  ['dependents', 'Số người phụ thuộc', 'integer'],
 ] as const;
 const payFields = [
-  ['workDays', 'Ngày công thực tế'], ['standardDays', 'Ngày công chuẩn'],
-  ['bonus', 'Thưởng / khoản thêm'], ['deduction', 'Khấu trừ khác'],
+  ['workDays', 'Ngày công thực tế', 'decimal'], ['standardDays', 'Ngày công chuẩn', 'decimal'],
+  ['bonus', 'Thưởng / khoản thêm', 'money'], ['deduction', 'Khấu trừ khác', 'money'],
 ] as const;
 
-function TextField({ label, value, onChange, busy, keyboardType }: {
+function TextField({ label, value, onChange, busy, kind = 'text' }: {
   label: string; value: string; onChange: (value: string) => void; busy: boolean;
-  keyboardType?: 'email-address' | 'decimal-pad' | 'number-pad';
+  kind?: 'text' | 'email' | 'integer' | 'decimal' | 'money';
 }) {
   const styles = useScreenStyles();
+  const fieldLabel = kind === 'money' ? label + ' (VNĐ)' : label;
+  const displayValue = kind === 'money' ? value.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : value;
+  const inputMode = kind === 'money' || kind === 'integer' ? 'numeric' : kind;
+
+  function change(text: string) {
+    const next = kind === 'money' ? text.replace(/\./g, '') : text;
+    if ((kind === 'money' || kind === 'integer') && !/^\d*$/.test(next)) return;
+    if (kind === 'decimal' && !/^\d*(?:[.,]\d*)?$/.test(next)) return;
+    onChange(next);
+  }
+
   return <View style={{ gap: 5 }}>
-    <Text style={styles.label}>{label}</Text>
-    <TextInput style={styles.input} accessibilityLabel={label} value={value} onChangeText={onChange}
-      editable={!busy} keyboardType={keyboardType} autoCapitalize={keyboardType ? 'none' : 'sentences'} maxLength={250} />
+    <Text style={styles.label}>{fieldLabel}</Text>
+    <TextInput style={styles.input} accessibilityLabel={fieldLabel} value={displayValue} onChangeText={change}
+      editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'} maxLength={250} />
   </View>;
 }
 
@@ -90,7 +108,7 @@ export function EmployeeForm({ employee, busy, onSave }: {
     }
     if (startDate && (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
       !Number.isFinite(Date.parse(startDate)) || new Date(startDate).toISOString().slice(0, 10) !== startDate)) {
-      setError('Nhập ngày vào làm hợp lệ theo định dạng YYYY-MM-DD.');
+      setError('Chọn ngày vào làm hợp lệ.');
       return;
     }
     if (Object.values(numbers).some(value => !/^\d*$/.test(value) || !Number.isSafeInteger(Number(value)))) {
@@ -102,8 +120,11 @@ export function EmployeeForm({ employee, busy, onSave }: {
       allowTaxable: Number(numbers.allowTaxable), allowFree: Number(numbers.allowFree), dependents: Number(numbers.dependents) });
   }
   return <>
-    {employeeTextFields.map(([key, label]) => <TextField key={key} label={label} value={fields[key]}
-      onChange={value => change(key, value)} busy={busy} keyboardType={key === 'email' ? 'email-address' : undefined} />)}
+    {employeeTextFields.map(([key, label]) => key === 'startDate'
+      ? <DateCalendarField key={key} label={label} value={fields[key]} clearLabel="Bỏ ngày"
+          disabled={busy} onChange={day => change(key, day)} />
+      : <TextField key={key} label={label} value={fields[key]}
+          onChange={value => change(key, value)} busy={busy} kind={key === 'email' ? 'email' : key === 'taxCode' ? 'integer' : 'text'} />)}
     {([['contract', 'Loại hợp đồng', contracts], ['status', 'Tình trạng', employeeStatuses]] as const).map(([key, label, items]) =>
       <View key={key} style={styles.stack}>
         <Text style={styles.label}>{label}</Text>
@@ -113,8 +134,8 @@ export function EmployeeForm({ employee, busy, onSave }: {
             <Text style={styles.label}>{item}</Text>
           </Pressable>)}</View>
       </View>)}
-    {employeeNumbers.map(([key, label]) => <TextField key={key} label={label} value={numbers[key]} busy={busy}
-      keyboardType="number-pad" onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
+    {employeeNumbers.map(([key, label, kind]) => <TextField key={key} label={label} value={numbers[key]} busy={busy}
+      kind={kind} onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     <Button label="Lưu hồ sơ" disabled={busy} onPress={save} />
   </>;
@@ -138,11 +159,11 @@ export function PayEditor({ employee, month, rates, advance, slip, pay, busy, on
   const preview = !isLocked && valid ? calculatePay(employee, values, month, rates, advance) : pay;
   return <>
     <Text style={styles.badge}>{slip?.status || 'Nháp'}</Text>
-    {!isLocked && payFields.map(([key, label]) => <TextField key={key} label={label} value={input[key]} busy={busy}
-      keyboardType={key === 'workDays' || key === 'standardDays' ? 'decimal-pad' : 'number-pad'}
+    {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
     <PayBreakdown pay={preview} />
-    <Text style={styles.muted}>Thu nhập tính thuế · {money(preview.taxable)} · Tạm ứng đã duyệt · {money(preview.advance)}</Text>
+    <Text style={styles.muted}>Thu nhập tính thuế: {money(preview.taxable)}</Text>
+    <Text style={styles.muted}>Tạm ứng đã duyệt: {money(preview.advance)}</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
       : <Button label="Lưu dòng lương" disabled={busy} onPress={() => {

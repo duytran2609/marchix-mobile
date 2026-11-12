@@ -980,7 +980,8 @@ service cloud.firestore {
           || (resource.data.get('checklist', []).size() == 0
             && request.resource.data.progress is int
             && request.resource.data.progress >= 0 && request.resource.data.progress <= 100));
-      allow update: if activeMember() && resource.data.assigneeEmail == email() && appendsComment();
+      allow update: if activeMember() && resource.data.assigneeEmail == email()
+        && resource.data.status != 'Xong' && appendsComment();
 
       function hasReviewGrant() {
         let profile = get(/databases/$(database)/documents/members/$(email())).data;

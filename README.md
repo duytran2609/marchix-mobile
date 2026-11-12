@@ -93,6 +93,35 @@ Có thể dùng Edge đã cài bằng cách đặt `$env:PLAYWRIGHT_CHANNEL='mse
 
 ## Khi có Firebase staging của công ty
 
+### Thông báo đẩy trên Android và iOS
+
+App native đăng ký thiết bị sau khi thành viên đăng nhập và cấp quyền thông báo.
+Mỗi tài liệu mới trong `notifications` sẽ kích hoạt gửi push cho các thiết bị
+đã đăng ký của người nhận. Màn hình khóa chỉ hiện lời nhắc chung. Khi chạm vào
+push, app đọc thông báo theo quyền của tài khoản hiện tại rồi mở mục tương ứng.
+
+1. Chọn EAS project cho bản staging hoặc pilot và đặt `MARCHIX_EAS_PROJECT_ID`
+   trong môi trường build. Với Android, đặt `MARCHIX_GOOGLE_SERVICES_FILE` trỏ
+   tới `google-services.json` của đúng package và cấu hình FCM v1 cho EAS.
+   Với iOS, cấu hình APNs và provisioning profile cho đúng bundle ID.
+   Xem [hướng dẫn cấu hình Expo Push](https://docs.expo.dev/push-notifications/push-notifications-setup/).
+2. Đặt `MARCHIX_WORKSPACE_PUSH_ENABLED=true` trong cấu hình môi trường của Cloud
+   Functions. Triển khai có chọn lọc hai hàm vào đúng dự án Firebase đã xác nhận,
+   ví dụ `firebase deploy --only functions:setWorkspacePushDevice,functions:sendWorkspacePush --project <project-id>`.
+   Hai collection `workspacePushDevices` và `workspacePushDispatches` do backend
+   quản lý. Có thể bật Firestore TTL trên trường `expiresAt` của hai collection
+   để dọn bản ghi hết hạn.
+3. Tạo lại và cài native build. Nếu đã có thư mục `android/` hoặc `ios/` từ bản
+   cũ, chạy lại Expo prebuild để áp dụng plugin. Trên thiết bị thật, đăng nhập
+   bằng tài khoản staging, cấp quyền, đưa app xuống nền rồi giao một việc cho
+   tài khoản đó. Kiểm tra push, thao tác mở đúng việc từ push và kiểm tra lại
+   sau khi đăng xuất. Bản web và Firebase Emulator dùng chuông trong app.
+
+Push dùng Expo Push Service. Backend ghi log kết quả lỗi trả về ngay khi gửi,
+và hộp thông báo trong app vẫn chứa bản ghi gốc khi hệ điều hành không hiển thị push.
+
+### Cấu hình Firebase và kiểm thử staging
+
 1. Tạo dự án Firebase riêng. Bật Google trong Authentication, tạo Firestore và đăng ký một Firebase Web app để lấy cấu hình SDK. Nếu thử giao diện web, thêm hostname tương ứng vào Authorized Domains.
 2. Sao chép `.env.example` thành `.env`, đặt chế độ `staging` và điền cấu hình của đúng dự án. SDK dùng auth domain mặc định `<project-id>.firebaseapp.com`. App chặn project ID production trong gói bàn giao.
 3. Đăng ký Android và iOS với package/bundle ID `vn.marchix.quanly.staging`. Cấu hình OAuth client Android theo package và SHA-1 của certificate ký bản thử. Điền **Web OAuth client ID** vào `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` và **iOS OAuth client ID** vào `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`. Build lại development client để nhận cấu hình iOS URL scheme. [Hướng dẫn Expo Google Authentication](https://docs.expo.dev/guides/google-authentication/)

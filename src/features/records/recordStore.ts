@@ -29,6 +29,7 @@ type RecordSave = {
   confirmed: boolean;
   note: string;
   assigneeEmail: string;
+  watchers: string[];
   pdf?: PickedAttachment;
 };
 
@@ -71,6 +72,8 @@ function validDate(value: string) {
 
 export async function saveRecord(input: RecordSave) {
   const { email, isAdmin, direction, draft, existing, target, pdf } = input;
+  const watchers = [...new Set(input.watchers)];
+  if (watchers.length > 5) throw new Error('Chọn tối đa 5 người theo dõi.');
   const today = todayInVietnam();
   const year = today.slice(0, 4);
   const incoming = direction === 'in';
@@ -162,6 +165,21 @@ export async function saveRecord(input: RecordSave) {
         ((await getDocFromServer(counter)).data()?.last ?? 0) === lastRead) throw error;
     }
   }
+  let watchersFailed = false;
+  if (!existing && watchers.length) {
+    try {
+      const ref = doc(records, saved.id);
+      const event = doc(collection(ref, 'events'));
+      await runTransaction(db, async tx => {
+        const row = (await tx.get(ref)).data();
+        if (!row || row.lastEventId !== saved.eventId) throw new Error('Hồ sơ vừa được cập nhật.');
+        tx.update(ref, { watchers, updatedBy: email, updatedAt: serverTimestamp(), lastEventId: event.id });
+        tx.set(event, { actor: email, at: serverTimestamp(), from: row.status, to: row.status,
+          note: 'Cập nhật danh sách người theo dõi.' });
+      });
+      saved = { ...saved, eventId: event.id, watchers };
+    } catch { watchersFailed = true; }
+  }
   const recipients = [...new Set(saved.watchers)].filter(to => to !== email);
   let notificationFailed = false;
   if (recipients.length) {
@@ -176,5 +194,5 @@ export async function saveRecord(input: RecordSave) {
       await batch.commit();
     } catch { notificationFailed = true; }
   }
-  return { ...saved, notificationFailed };
+  return { ...saved, notificationFailed, watchersFailed };
 }

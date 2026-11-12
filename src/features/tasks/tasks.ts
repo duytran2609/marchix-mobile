@@ -223,6 +223,7 @@ export async function addTaskComment(taskId: string, email: string, message: str
     if (!task || task.assigneeEmail !== email) {
       throw new Error('Bạn không còn quyền gửi trao đổi cho công việc này.');
     }
+    if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
     transaction.update(ref, { comments: [...(task.comments ?? []), comment] });
   });
 }

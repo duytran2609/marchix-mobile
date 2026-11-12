@@ -16,20 +16,24 @@ export function taskStatus(task: Task) {
   return task.status || 'Chưa làm';
 }
 
+export function taskProgressValue(task: Task, status = taskStatus(task), previewProgress?: number) {
+  const value = previewProgress ?? Number(task.progress ?? (status === 'Xong' ? 100 : 0));
+  return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+}
+
 export function statusTone(status: string, colors: Palette) {
   const tones = statusTones(colors);
   return Object.hasOwn(tones, status) ? tones[status as keyof typeof tones] : tones.Khác;
 }
 
-export function TaskProgress({ task, previewStatus, previewProgress }: {
-  task: Task; previewStatus?: EditableStatus; previewProgress?: number;
+export function TaskProgress({ task, previewStatus, previewProgress, variant }: {
+  task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list';
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const status = previewStatus ?? taskStatus(task);
   const tone = statusTone(status, colors);
-  const value = previewProgress ?? Number(task.progress ?? (status === 'Xong' ? 100 : 0));
-  const progress = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+  const progress = taskProgressValue(task, status, previewProgress);
   return (
     <View style={styles.progressBlock}>
       <View style={styles.progressHeader}>
@@ -37,7 +41,8 @@ export function TaskProgress({ task, previewStatus, previewProgress }: {
         <Text style={styles.progressValue}>{progress}%</Text>
       </View>
       <View accessibilityRole="progressbar" accessibilityLabel="Tiến độ công việc"
-        aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} style={styles.track}>
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}
+        style={[styles.track, variant === 'list' && styles.listTrack]}>
         <View style={[styles.progressFill, { width: `${progress}%` }]} />
       </View>
     </View>
@@ -50,5 +55,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   pill: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 12, fontWeight: '700' },
   progressValue: { color: colors.ink, fontWeight: '800', fontSize: 13 },
   track: { height: 5, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
+  listTrack: { height: 7, marginTop: 3 },
   progressFill: { height: '100%', borderRadius: 4, backgroundColor: colors.accent },
 }));

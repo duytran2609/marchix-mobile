@@ -2,45 +2,68 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
 import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskDiscussion } from '../features/tasks/TaskDiscussion';
+import { TaskPriority } from '../features/tasks/TaskPriority';
 import { TaskProgress } from '../features/tasks/TaskProgress';
 import {
   commentMaxLength, editableStatus, editableStatuses, listTaskAssignees, parseTaskProgress, reportTaskCompletion,
   saveProgress, setTaskChecklistItem, watchTask,
 } from '../features/tasks/tasks';
 import type { AssignmentProject, EditableStatus, Task, TaskAssignee } from '../features/tasks/tasks';
-import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
+import { auth, emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { useScreenStyles } from '../theme/screenStyles';
 
 type TaskDirectory = { members: TaskAssignee[]; projects?: AssignmentProject[] };
 
-function TaskMetadata({ task, assigneeName, members, project }: {
-  task: Task; assigneeName?: string; members: Map<string, TaskAssignee>; project?: string;
+function TaskMetadata({ task, email, name, members, project }: {
+  task: Task; email: string; name: string; members: Map<string, TaskAssignee>; project?: string;
 }) {
   const styles = useStyles();
   const watchers = Array.isArray(task.watchers) ? task.watchers : [];
+  const assignee = task.assignee?.trim();
+
+  function renderPerson(personEmail: string, storedName?: string) {
+    const member = members.get(personEmail);
+    const self = personEmail === email;
+    const displayName = (self && name.trim()) || storedName || member?.name?.trim() || personEmail;
+    const photoURL = member?.photoURL || (self ? auth.currentUser?.photoURL : undefined);
+    return (
+      <View key={personEmail} style={styles.metadataPerson}>
+        <MemberAvatar name={displayName} photoURL={photoURL} compact />
+        <Text style={styles.metadataValue}>{displayName}</Text>
+      </View>
+    );
+  }
+
   const fields = [
     ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
-    ['Mức độ ưu tiên', task.priority || 'Chưa đặt'],
+    ['Mức độ ưu tiên', <Text style={styles.metadataValue}><TaskPriority priority={task.priority} /></Text>],
     ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
-    ['Người thực hiện', assigneeName || task.assignee || task.assigneeEmail || 'Chưa rõ'],
+    ['Người thực hiện', task.assigneeEmail || assignee ? <View style={styles.metadataPeople}>
+      {renderPerson(task.assigneeEmail, assignee)}
+    </View> : 'Chưa rõ'],
     ['Dự án', project || task.projectId || 'Chung toàn công ty'],
     ['Lặp lại', task.repeat || 'Không lặp'],
-    ['Người theo dõi', watchers.map(email => members.get(email)?.name || email).join(', ') || 'Chưa chọn'],
-    ['Người duyệt', task.approverEmail ? members.get(task.approverEmail)?.name || task.approverEmail : 'Chưa chỉ định'],
+    ['Người theo dõi', watchers.length ? <View style={styles.metadataPeople}>
+      {watchers.map(personEmail => renderPerson(personEmail))}
+    </View> : 'Chưa chọn'],
+    ['Người duyệt', task.approverEmail ? <View style={styles.metadataPeople}>
+      {renderPerson(task.approverEmail)}
+    </View> : 'Chưa chỉ định'],
     ['Mốc bàn giao dự án', task.milestone ? 'Có' : 'Không'],
-  ];
+  ] as const;
 
   return <View style={styles.taskMetadata}>
     {fields.map(([label, value], index) => (
       <View key={label} style={[styles.metadataField, index > 0 && styles.metadataDivider]}>
         <Text style={styles.metadataLabel}>{label}:</Text>
-        <Text style={styles.metadataValue}>{value}</Text>
+        {typeof value === 'string' ? <Text style={styles.metadataValue}>{value}</Text> : value}
       </View>
     ))}
   </View>;
@@ -58,7 +81,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const isAssignee = liveTask.assigneeEmail === email;
   const canEdit = isAssignee && (!pilotMode || taskAssignmentEnabled) && editableStatus(liveTask.status);
   const canReport = canEdit && (emulatorMode || pilotMode);
-  const canEditAssignment = taskAssignmentEnabled && liveTask.assignedBy === email;
+  const canEditAssignment = taskAssignmentEnabled && liveTask.status !== 'Xong' && liveTask.assignedBy === email;
   const [assignmentDraft, setAssignmentDraft] = useState<Task>();
   const [savedAssignment, setSavedAssignment] = useState<Task>();
   const [progressBaseline, setProgressBaseline] = useState(liveTask);
@@ -74,7 +97,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const [busy, setBusy] = useState<'progress' | 'checklist' | 'report' | null>(null);
   const [reportNote, setReportNote] = useState('');
   const [directory, setDirectory] = useState<TaskDirectory>();
-  const needsDirectory = taskAssignmentEnabled && Boolean(liveTask.projectId || liveTask.watchers?.length ||
+  const needsDirectory = taskAssignmentEnabled && Boolean(liveTask.assigneeEmail || liveTask.projectId || liveTask.watchers?.length ||
     liveTask.approverEmail || liveTask.comments?.some(comment => comment.by !== email));
   const members = new Map(directory?.members.map(member => [member.email, member]));
   const project = directory?.projects?.find(item => item.id === liveTask.projectId)?.name;
@@ -145,7 +168,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
           }} /> : null}
         </View>}
         <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
-        <TaskMetadata task={liveTask} assigneeName={isAssignee ? name : undefined} members={members} project={project} />
+        <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
         <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} />
         {liveTask.note ? <View style={screenStyles.detailRow}>
           <Text style={screenStyles.label}>Mô tả / chỗ vướng</Text>
@@ -296,10 +319,12 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskMetadata: { paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surfaceMuted },
-  metadataField: { flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingVertical: 9 },
+  metadataField: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 9 },
   metadataDivider: { borderTopWidth: 1, borderTopColor: colors.line },
-  metadataLabel: { width: '44%', color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '700' },
+  metadataLabel: { width: '44%', color: colors.ink, fontSize: 15, lineHeight: 24, fontWeight: '700' },
   metadataValue: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 17, lineHeight: 24 },
+  metadataPeople: { flex: 1, minWidth: 0, gap: 6 },
+  metadataPerson: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: colors.line, borderRadius: 5,
     alignItems: 'center', justifyContent: 'center' },

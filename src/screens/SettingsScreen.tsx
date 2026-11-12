@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { AdminSettings } from '../features/settings/AdminSettings';
@@ -15,13 +15,13 @@ const appearanceOptions = [
   { value: 'dark', label: 'Tối' },
 ] as const satisfies readonly { value: ThemeMode; label: string }[];
 
-const generalTab = { id: 'general', label: 'Chung' } as const;
+const generalTab = { id: 'general', tabLabel: 'Chung' } as const;
 const adminTabs = [
-  { id: 'members', label: 'Tài khoản đăng nhập', description: 'Quản lý tài khoản, vai trò và quyền truy cập.' },
-  { id: 'recurring', label: 'Chi phí cố định hằng tháng', description: 'Thiết lập các khoản chi định kỳ và tạo khoản chi cho tháng hiện tại.' },
-  { id: 'work', label: 'Chấm công & công việc', description: 'Thiết lập lịch làm việc, quy tắc chấm công, nhắc qua email và duyệt công việc.' },
-  { id: 'budget', label: 'Ngân sách chi hằng tháng theo nhóm', description: 'Đặt hạn mức chi theo nhóm để nhận cảnh báo ngân sách.' },
-  { id: 'payroll', label: 'Lương & bảo hiểm', description: 'Thiết lập các thông số tính lương và tỷ lệ đóng bảo hiểm.' },
+  { id: 'members', tabLabel: 'Tài khoản', label: 'Tài khoản đăng nhập', description: 'Quản lý tài khoản, vai trò và quyền truy cập.' },
+  { id: 'recurring', tabLabel: 'Chi cố định', label: 'Chi phí cố định hằng tháng', description: 'Thiết lập các khoản chi định kỳ và tạo khoản chi cho tháng hiện tại.' },
+  { id: 'work', tabLabel: 'Công & việc', label: 'Chấm công & công việc', description: 'Thiết lập lịch làm việc, quy tắc chấm công, nhắc qua email và duyệt công việc.' },
+  { id: 'budget', tabLabel: 'Ngân sách', label: 'Ngân sách chi hằng tháng theo nhóm', description: 'Đặt hạn mức chi theo nhóm để nhận cảnh báo ngân sách.' },
+  { id: 'payroll', tabLabel: 'Lương & BH', label: 'Lương & bảo hiểm', description: 'Thiết lập các thông số tính lương và tỷ lệ đóng bảo hiểm.' },
 ] as const;
 const allTabs = [generalTab, ...adminTabs] as const;
 
@@ -67,15 +67,24 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
   return (
     <View style={styles.stack}>
       <PageHeader title="Cài đặt" />
-      <View accessibilityRole="tablist" accessibilityLabel="Nhóm cài đặt" style={styles.choices}>
-        {(isAdmin ? allTabs : [generalTab]).map(tab => (
-          <Pressable key={tab.id} accessibilityRole="tab" aria-selected={tab.id === activeTab.id}
-            onPress={() => { setSelectedTab(tab.id); onScrollTop(); }}
-            style={({ pressed }) => [styles.choice, tab.id === activeTab.id && styles.selected, pressed && styles.dimmed]}>
-            <Text style={styles.label}>{tab.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <ScrollView horizontal style={[tabStyles.scroller, { backgroundColor: theme.colors.surfaceMuted }]}
+        contentContainerStyle={tabStyles.content}>
+        <View accessibilityRole="tablist" accessibilityLabel="Nhóm cài đặt" style={tabStyles.row}>
+          {(isAdmin ? allTabs : [generalTab]).map(tab => {
+            const selected = tab.id === activeTab.id;
+            return (
+              <Pressable key={tab.id} accessibilityRole="tab" aria-selected={selected}
+                onPress={() => { setSelectedTab(tab.id); onScrollTop(); }}
+                style={[tabStyles.tab, selected && { backgroundColor: theme.colors.paper }]}>
+                <Text style={[tabStyles.label, { color: theme.colors.muted },
+                  selected && { color: theme.colors.accent, fontWeight: '800' }]}>
+                  {tab.tabLabel}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
       {adminTab ? (
         <View style={styles.panel}>
           <Text accessibilityRole="header" style={styles.cardTitle}>{adminTab.label}</Text>
@@ -100,3 +109,12 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
     </View>
   );
 }
+
+const tabStyles = StyleSheet.create({
+  scroller: { borderRadius: 10, flexGrow: 0 },
+  content: { flexGrow: 1 },
+  row: { flexDirection: 'row', flexGrow: 1, gap: 4, padding: 3 },
+  tab: { flexGrow: 1, flexShrink: 0, minHeight: 44, paddingHorizontal: 6, paddingVertical: 8,
+    borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+});

@@ -2,6 +2,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { HttpsError, onCall } = require('firebase-functions/v2/https');
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { createHash } = require('node:crypto');
 
 const projectId = 'demo-marchix-mobile';
@@ -31,6 +32,93 @@ function verifiedEmail(request, expectedProject) {
 function activeMember(snapshot) {
   return snapshot.exists && snapshot.get('enabled') !== false;
 }
+
+const pushEnabled = () => !emulator && process.env.MARCHIX_WORKSPACE_PUSH_ENABLED === 'true';
+const validPushToken = token => typeof token === 'string' &&
+  /^(?:Expo|Exponent)PushToken\[[A-Za-z0-9_-]{1,200}\]$/.test(token);
+const pushRegistrationDays = 60;
+
+exports.setWorkspacePushDevice = onCall(async request => {
+  if (!pushEnabled()) throw new HttpsError('failed-precondition', 'Thông báo đẩy chưa được bật.');
+  const email = verifiedEmail(request, process.env.GCLOUD_PROJECT || app.options.projectId);
+  const { token, previousToken } = request.data ?? {};
+  if (!(token === null || validPushToken(token)) ||
+      !(previousToken === null || validPushToken(previousToken))) {
+    throw new HttpsError('invalid-argument', 'Mã đăng ký thiết bị không hợp lệ.');
+  }
+  const db = getFirestore(app);
+  if (token && !activeMember(await db.collection('members').doc(email).get())) {
+    throw new HttpsError('permission-denied', 'Tài khoản chưa được cấp quyền.');
+  }
+  // Use the token digest as the document ID so a device is assigned to one account at a time.
+  const device = value => db.collection('workspacePushDevices').doc(createHash('sha256').update(value).digest('hex'));
+  await db.runTransaction(async transaction => {
+    if (previousToken && previousToken !== token) {
+      const previous = await transaction.get(device(previousToken));
+      if (previous.get('uid') === request.auth.uid) transaction.delete(previous.ref);
+    }
+    if (token) transaction.set(device(token), {
+      token, email, uid: request.auth.uid,
+      expiresAt: new Date(Date.now() + pushRegistrationDays * 86_400_000),
+    });
+  });
+});
+
+exports.sendWorkspacePush = onDocumentCreated('notifications/{notificationId}', async event => {
+  if (!pushEnabled()) return;
+  const note = event.data;
+  const email = note?.get('to');
+  if (!note || !isMemberEmail(email) || note.get('read') === true) return;
+  const db = getFirestore(app);
+  const [member, devices] = await Promise.all([
+    db.collection('members').doc(email).get(),
+    db.collection('workspacePushDevices').where('email', '==', email).get(),
+  ]);
+  if (!activeMember(member)) return;
+  const now = Date.now();
+  const targets = devices.docs.filter(device =>
+    device.get('expiresAt')?.toMillis() > now && validPushToken(device.get('token')));
+  if (!targets.length) return;
+
+  try {
+    await db.collection('workspacePushDispatches').doc(event.params.notificationId).create({
+      expiresAt: new Date(now + 7 * 86_400_000),
+    });
+  } catch (error) {
+    if (error?.code === 6) return;
+    throw error;
+  }
+
+  for (let start = 0; start < targets.length; start += 100) {
+    const batch = targets.slice(start, start + 100);
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify(batch.map(device => ({
+          to: device.get('token'), title: 'Quản lý Marchix', body: 'Bạn có thông báo mới.',
+          channelId: 'workspace', sound: 'default', ttl: 3600,
+          data: { workspaceNotificationId: event.params.notificationId },
+        }))),
+      });
+      if (!response.ok) throw new Error(`Expo Push HTTP ${response.status}`);
+      const { data } = await response.json();
+      if (!Array.isArray(data) || data.length !== batch.length) throw new Error('Invalid Expo push tickets');
+      await Promise.all(data.map(async (ticket, index) => {
+        if (ticket.status === 'ok') return;
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          const device = batch[index];
+          await device.ref.delete({ lastUpdateTime: device.updateTime });
+        } else {
+          console.warn('Expo rejected a Marchix push.', ticket.details?.error ?? 'unknown');
+        }
+      }));
+    } catch (error) {
+      console.warn('Marchix push batch failed.', error?.message);
+    }
+  }
+});
 
 function memberName(snapshot) {
   const name = snapshot.get('name');
@@ -284,6 +372,9 @@ exports.updateMobileTask = onCall(async request => {
     const task = snapshot.data();
     if (!activeMember(member) || task?.assignedBy !== email) {
       throw new HttpsError('permission-denied', 'Chỉ người giao việc mới được chỉnh sửa công việc này.');
+    }
+    if (task.status === 'Xong') {
+      throw new HttpsError('failed-precondition', 'Công việc đã xong và chỉ có thể xem chi tiết.');
     }
     if ((task.updatedAt || '') !== revision) {
       throw new HttpsError('failed-precondition', 'Công việc vừa thay đổi. Hãy đóng form và mở lại để chỉnh sửa.');

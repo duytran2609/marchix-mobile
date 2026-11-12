@@ -76,7 +76,11 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
     </View>
     {project && <>
       <View role="region" accessibilityLabel="Thông tin dự án" style={styles.panel}>
-        <Text accessibilityRole="header" style={styles.heading}>{project.name}</Text>
+        <View style={local.projectTitleRow}>
+          <Text accessibilityRole="header" style={[styles.heading, local.projectTitle]}>{project.name}</Text>
+          {isAdmin && <Button label="Chỉnh sửa" secondary style={local.editButton}
+            onPress={() => setEditor(project)} />}
+        </View>
         <Text style={styles.badge}>{project.status || 'Chưa cập nhật trạng thái'}</Text>
         <View style={local.metadata}>
           <Text selectable style={styles.muted}><Text style={local.metaLabel}>Mã dự án: </Text>DA-{project.id}</Text>
@@ -89,7 +93,6 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
             <Text style={local.metaLabel}>Người phụ trách: </Text>{project.owner || project.ownerEmail || 'Chưa có'}
           </Text>
         </View>
-        {isAdmin && <Button label="Chỉnh sửa dự án" secondary onPress={() => setEditor(project)} />}
         <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
           style={[local.tabs, { backgroundColor: colors.surfaceMuted }]}>
           {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
@@ -164,6 +167,9 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 }
 
 const local = StyleSheet.create({
+  projectTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  projectTitle: { flex: 1, minWidth: 0 },
+  editButton: { flexShrink: 0 },
   tabs: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10 },
   tab: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 8,
     justifyContent: 'center' },

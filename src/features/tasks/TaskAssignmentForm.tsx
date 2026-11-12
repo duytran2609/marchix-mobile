@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
 import {
   ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AssignmentCalendar, displayDay } from './AssignmentCalendar';
+import { DateCalendarButton, DateCalendarField } from './CalendarDialog';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { auth, emulatorMode, pilotMode } from '../../services/firebase/firebase';
 import { SearchableChoiceList } from '../../components/SearchableChoiceList';
+import { Button } from '../../components/Button';
 import { ChoiceButtons as Choices } from '../../components/ChoiceButtons';
+import { Dropdown } from '../../components/Dropdown';
+import { FilePickerButton } from '../../components/FilePickerButton';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachments } from './taskAttachments';
 import type { PickedAttachment } from './taskAttachments';
@@ -26,9 +28,6 @@ const quickDates = [
 const initialOptions: AssignmentOptions = {
   priority: 'Trung bình', status: 'Chưa làm', repeat: 'Không lặp', projectId: '', milestone: false,
 };
-const calendarMargin = 8;
-const calendarGap = 6;
-const calendarMaxHeight = 360;
 
 function functionError(error: unknown, fallback: string) {
   const code = error instanceof Error && 'code' in error ? error.code : '';
@@ -72,11 +71,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   const [approver, setApprover] = useState(task?.approverEmail ?? '');
   const [start, setStart] = useState(() => task ? task.startDate ?? '' : todayInVietnam());
   const [due, setDue] = useState(task?.due ?? '');
-  const [calendar, setCalendar] = useState<{ field: 'start' | 'due'; top: number; bottom: number } | null>(null);
-  const [formHeight, setFormHeight] = useState(0);
-  const formBody = useRef<ComponentRef<typeof View>>(null);
-  const startButton = useRef<ComponentRef<typeof Pressable>>(null);
-  const dueButton = useRef<ComponentRef<typeof Pressable>>(null);
   const [retained, setRetained] = useState(assignment?.files ?? []);
   const [files, setFiles] = useState<PickedAttachment[]>([]);
   const [picking, setPicking] = useState(false);
@@ -99,12 +93,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   const earliestDue = task || start > today ? start : today;
   const allFiles = [...retained, ...files];
   const fileLimit = attachmentLimit(allFiles, assignees.length);
-  const calendarHeight = Math.min(calendarMaxHeight, Math.max(0, formHeight - 2 * calendarMargin));
-  const calendarBelow = (calendar?.bottom ?? 0) + calendarGap;
-  const calendarPosition = calendar && calendarBelow + calendarHeight <= formHeight - calendarMargin
-    ? { top: calendarBelow }
-    : calendar && calendar.top >= calendarHeight + calendarGap + calendarMargin
-      ? { bottom: formHeight - calendar.top + calendarGap } : { top: calendarMargin };
 
   useEffect(() => {
     let active = true;
@@ -122,27 +110,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
     setOptions(current => ({ ...current, [key]: value }));
   }
 
-  function openCalendar(field: 'start' | 'due') {
-    if (calendar?.field === field) {
-      setCalendar(null);
-      return;
-    }
-    const button = field === 'start' ? startButton : dueButton;
-    formBody.current?.measureInWindow((_, formY) => {
-      button.current?.measureInWindow((_, y, _width, height) => {
-        setCalendar({ field, top: y - formY, bottom: y - formY + height });
-      });
-    });
-  }
-
-  function closeCalendar() {
-    setCalendar(null);
-    if (Platform.OS === 'web') {
-      const button = calendar?.field === 'start' ? startButton : dueButton;
-      button.current?.focus();
-    }
-  }
-
   function toggleMember(member: string, selected: string[], update: (value: string[]) => void) {
     if (selected.includes(member)) return update(selected.filter(value => value !== member));
     if (selected.length >= 30) return showToast('Mỗi danh sách chọn tối đa 30 người.', 'error');
@@ -156,8 +123,9 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   }
 
   function addItem() {
-    if (!newItem.trim() || items.length >= 30) return;
-    setItems(current => [...current, newItem.trim()]);
+    const item = newItem.trim();
+    if (!item || saving || workflowLocked) return;
+    setItems(current => current.length < 30 ? [...current, item] : current);
     setNewItem('');
   }
 
@@ -221,10 +189,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   }
 
   return (
-    <Modal transparent visible onRequestClose={() => {
-      if (calendar) closeCalendar();
-      else if (!pending.current) onClose();
-    }} statusBarTranslucent>
+    <Modal transparent visible onRequestClose={() => { if (!pending.current) onClose(); }} statusBarTranslucent>
       <SafeAreaView style={styles.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
           <View style={styles.panel}>
@@ -232,8 +197,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
               <Text accessibilityRole="header" style={styles.heading}>{task ? 'Chỉnh sửa công việc' : 'Giao việc mới'}</Text>
               <PopupCloseButton label={task ? 'Đóng chỉnh sửa' : 'Đóng giao việc'} onPress={onClose} disabled={saving} />
             </View>
-            <View ref={formBody} collapsable={false} style={styles.formBody}
-              onLayout={({ nativeEvent }) => setFormHeight(nativeEvent.layout.height)}>
+            <View style={styles.formBody}>
               <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
                 {!task ? <Text style={styles.muted}>Mỗi người được chọn sẽ nhận một công việc riêng.</Text> : null}
                 <View style={styles.field}>
@@ -266,32 +230,22 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                   <Choices items={choices(taskPriorities)} value={options.priority} disabled={saving}
                     onChange={value => updateOption('priority', value)} />
                 </View>
-                <View style={styles.field}>
-                  <Text style={styles.label}>Ngày bắt đầu</Text>
-                  <Pressable ref={startButton} collapsable={false} accessibilityRole="button"
-                    accessibilityLabel={`Ngày bắt đầu, ${start ? displayDay(start) : 'chọn ngày'}`}
-                    aria-expanded={calendar?.field === 'start'} disabled={saving} style={styles.dateButton}
-                    onPress={() => openCalendar('start')}>
-                    <Text style={start ? styles.label : styles.muted}>{start ? displayDay(start) : 'Chọn ngày'}</Text>
-                    <Text style={styles.actionText} aria-hidden>▦</Text>
-                  </Pressable>
-                </View>
+                <DateCalendarField label="Ngày bắt đầu" value={start} initialDay={start || due || today}
+                  disabled={saving} onChange={day => {
+                    setStart(day);
+                    if (due && day > due) setDue('');
+                  }} />
                 <View style={styles.field}>
                   <Text style={styles.label}>Hạn chót</Text>
-                  <Pressable ref={dueButton} collapsable={false} accessibilityRole="button"
-                    accessibilityLabel={`Hạn chót, ${due ? displayDay(due) : 'chọn ngày'}`}
-                    aria-expanded={calendar?.field === 'due'} disabled={saving} style={styles.dateButton}
-                    onPress={() => openCalendar('due')}>
-                    <Text style={due ? styles.label : styles.muted}>{due ? displayDay(due) : 'Chọn ngày'}</Text>
-                    <Text style={styles.actionText} aria-hidden>▦</Text>
-                  </Pressable>
+                  <DateCalendarButton label="Hạn chót" value={due} min={earliestDue}
+                    initialDay={due && due >= earliestDue ? due : earliestDue || today} disabled={saving} onChange={setDue} />
                   <View style={styles.quickDates}>
                     {quickDates.map(({ label, days }) => {
                       const day = shiftDay(today, days);
                       const disabled = saving || day < earliestDue;
                       return <Pressable key={label} accessibilityRole="button" aria-pressed={due === day}
                         style={[styles.back, disabled && styles.saving]} disabled={disabled}
-                        onPress={() => { setDue(day); setCalendar(null); }}>
+                        onPress={() => setDue(day)}>
                         <Text style={styles.actionText}>{label}</Text>
                       </Pressable>;
                     })}
@@ -299,7 +253,8 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                 </View>
                 <View style={styles.field}>
                   <Text style={styles.label}>Tệp đính kèm{allFiles.length ? ` · ${allFiles.length}` : ''}</Text>
-                  <Text style={styles.muted}>Tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi.</Text>
+                  <FilePickerButton disabled={saving} picking={picking} onPress={() => void chooseFiles()}
+                    hint="Tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi." />
                   {allFiles.map((file, index) => <View key={'id' in file ? file.id : index - retained.length} style={styles.person}>
                     <View style={styles.personLabel}>
                       <Text style={styles.label}>{file.name}</Text>
@@ -313,10 +268,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                       <Text style={styles.actionText}>Bỏ</Text>
                     </Pressable>
                   </View>)}
-                  <Pressable accessibilityRole="button" style={[styles.choice, (saving || picking) && styles.saving]}
-                    disabled={saving || picking} onPress={() => void chooseFiles()}>
-                    <Text style={styles.actionText}>{picking ? 'Đang chọn tệp…' : '+ Chọn tệp'}</Text>
-                  </Pressable>
                 </View>
                 <Pressable accessibilityRole="button" aria-expanded={advanced} onPress={() => setAdvanced(value => !value)}
                   style={[styles.choice, styles.advancedToggle]}>
@@ -326,7 +277,8 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                 {advanced ? <>
                   <View style={styles.field}>
                     <Text style={styles.label}>Dự án</Text>
-                    <Choices items={[{ value: '', label: 'Chung toàn công ty' }, ...projects.map(project => ({ value: project.id, label: project.name }))]}
+                    <Dropdown label="Dự án" hideLabel singleLineValue
+                      choices={[{ value: '', label: 'Chung toàn công ty' }, ...projects.map(project => ({ value: project.id, label: project.name }))]}
                       value={options.projectId} onChange={value => updateOption('projectId', value)} disabled={saving} />
                   </View>
                   <View style={styles.field}>
@@ -357,9 +309,9 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                     </View>)}
                     {!workflowLocked && items.length < 30 ? <>
                       <TextInput accessibilityLabel="Tên việc con" style={styles.input} value={newItem} editable={!saving}
-                        onChangeText={setNewItem} placeholder="Nhập tên việc con" maxLength={160} />
-                      <Pressable accessibilityRole="button" onPress={addItem} disabled={saving || !newItem.trim()}
-                        style={styles.back}><Text style={styles.actionText}>+ Thêm việc con</Text></Pressable>
+                        onChangeText={setNewItem} onSubmitEditing={addItem} returnKeyType="done"
+                        submitBehavior="submit" blurOnSubmit={false} placeholder="Nhập tên việc con" maxLength={160} />
+                      <Button label="+ Thêm việc con" onPress={addItem} disabled={saving || !newItem.trim()} style={styles.addItem} />
                     </> : null}
                   </View>
                   {members ? <View style={styles.field}>
@@ -394,26 +346,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                   </View>
                 </> : null}
               </ScrollView>
-              {calendar ? <View style={StyleSheet.absoluteFill}>
-                <Pressable accessible={false} aria-hidden tabIndex={-1} style={StyleSheet.absoluteFill}
-                  onPress={closeCalendar} />
-                <View style={[styles.calendarPopover, calendarPosition]}>
-                  <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: calendarHeight }}>
-                    {calendar.field === 'start'
-                      ? <AssignmentCalendar key="start" initialDay={start || due || today} value={start}
-                          disabled={saving} onSelect={day => {
-                            setStart(day);
-                            if (due && day > due) setDue('');
-                            closeCalendar();
-                          }} />
-                      : <AssignmentCalendar key="due" initialDay={due && due >= earliestDue ? due : earliestDue || today}
-                          value={due} min={earliestDue} disabled={saving} onSelect={day => {
-                            setDue(day);
-                            closeCalendar();
-                          }} />}
-                  </ScrollView>
-                </View>
-              </View> : null}
             </View>
             <View style={styles.footer}>
               <Pressable accessibilityRole="button" disabled={saving || picking}
@@ -438,17 +370,14 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     padding: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   heading: { fontSize: 23, fontWeight: '800', color: colors.ink, flexShrink: 1 },
   formBody: { flexShrink: 1, minHeight: 0 },
-  calendarPopover: { position: 'absolute', left: 16, right: 16, borderRadius: 10, backgroundColor: colors.paper,
-    boxShadow: '0 4px 16px rgba(33, 25, 53, 0.2)' },
   body: { gap: 16, padding: 16 },
   footer: { padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: colors.line },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   field: { gap: 7 },
+  addItem: { alignSelf: 'flex-end' },
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderRadius: 9,
     borderColor: colors.line, color: colors.ink, fontSize: 16 },
-  dateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 46,
-    paddingHorizontal: 12, borderWidth: 1, borderRadius: 9, borderColor: colors.line },
   person: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,
     backgroundColor: colors.surfaceMuted, borderRadius: 9, minHeight: 48, borderWidth: 1, borderColor: colors.line },
   highlight: { borderColor: colors.accent, backgroundColor: colors.accentSoft },

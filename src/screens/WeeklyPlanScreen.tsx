@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
-import { PopupCloseButton } from '../components/PopupCloseButton';
 import { AssignmentCalendar } from '../features/tasks/AssignmentCalendar';
+import { CalendarDialog } from '../features/tasks/CalendarDialog';
 import { formatDue, formatTaskDate, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
 import { mondayOf, planContent, summarizeWeek, weeklyPlanTextLimit } from '../features/weekly-plan/weeklyPlan';
@@ -54,7 +54,10 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Chọn tuần trên lịch" disabled={saving}
           accessibilityState={{ disabled: saving, expanded: calendarOpen }} aria-pressed={calendarSelected}
-          onPress={() => setCalendarOpen(true)}
+          onPress={() => {
+            if (Keyboard.isVisible()) Keyboard.dismiss();
+            setCalendarOpen(true);
+          }}
           style={({ pressed }) => [ui.secondary, styles.calendarButton, calendarSelected && ui.selected,
             (pressed || saving) && ui.dimmed]}>
           <Text aria-hidden style={styles.calendarIcon}>▦</Text>
@@ -63,22 +66,13 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
     </View>
     <WeekContent key={week} {...props} week={week} saving={saving} onSavingChange={setSaving}
       draftStorage={draftStorage} />
-    {calendarOpen && <Modal transparent visible onRequestClose={() => setCalendarOpen(false)}
-      statusBarTranslucent navigationBarTranslucent>
-      <View style={styles.calendarOverlay}>
-        <View role="dialog" accessibilityLabel="Chọn tuần" accessibilityViewIsModal style={[ui.panel, styles.calendarPanel]}>
-          <View style={styles.calendarHeader}>
-            <Text accessibilityRole="header" style={ui.cardTitle}>Chọn tuần</Text>
-            <PopupCloseButton label="Đóng lịch" onPress={() => setCalendarOpen(false)} />
-          </View>
-          <Text style={ui.muted}>Chọn một ngày để xem cả tuần.</Text>
-          <AssignmentCalendar initialDay={week} value={week} rangeEnd={sunday} disabled={saving} onSelect={day => {
-            onSelectWeek(mondayOf(day));
-            setCalendarOpen(false);
-          }} />
-        </View>
-      </View>
-    </Modal>}
+    {calendarOpen && <CalendarDialog title="Chọn tuần" onClose={() => setCalendarOpen(false)}>
+      <Text style={ui.muted}>Chọn một ngày để xem cả tuần.</Text>
+      <AssignmentCalendar initialDay={week} value={week} rangeEnd={sunday} disabled={saving} onSelect={day => {
+        onSelectWeek(mondayOf(day));
+        setCalendarOpen(false);
+      }} />
+    </CalendarDialog>}
   </>;
 }
 
@@ -217,9 +211,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   weekStep: { paddingHorizontal: 6, flexShrink: 1 },
   calendarButton: { width: 44, height: 44, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   calendarIcon: { color: colors.accent, fontSize: 22, fontWeight: '700' },
-  calendarOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
-  calendarPanel: { width: '100%', maxWidth: 380, padding: 12 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summary: { gap: 4 },
   field: { gap: 6 },
   task: { minHeight: 44, paddingBottom: 4 },

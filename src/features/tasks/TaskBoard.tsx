@@ -1,13 +1,18 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Dropdown } from '../../components/Dropdown';
+import { MemberAvatar } from '../../components/MemberAvatar';
 import { SearchInput } from '../../components/SearchInput';
+import { SegmentedButtons } from '../../components/SegmentedButtons';
 import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
+import { TaskGantt } from './TaskGantt';
 import { TaskKanban } from './TaskKanban';
+import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
 import { searchByName } from '../../utils/search';
-import { taskPriorities, taskStatuses } from './tasks';
-import type { Task } from './tasks';
+import { listTaskAssignees, taskPriorities, taskStatuses } from './tasks';
+import type { Task, TaskAssignee } from './tasks';
+import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 
 const taskFilters = ['Tất cả', 'Chưa xong', 'Quá hạn', ...taskStatuses] as const;
@@ -16,7 +21,7 @@ const priorityFilters = ['', ...taskPriorities, 'Chưa đặt'] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
 type TaskFilter = typeof taskFilters[number];
 type PriorityFilter = typeof priorityFilters[number];
-type TaskView = 'list' | 'kanban';
+type TaskView = 'list' | 'kanban' | 'gantt';
 
 export type TaskBoardOptions = { search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; view: TaskView };
 export const initialTaskBoardOptions: TaskBoardOptions = { search: '', filter: 'Tất cả', assignee: '', priority: '', view: 'list' };
@@ -39,40 +44,62 @@ function assigneeKey(task: Task) {
   return task.assigneeEmail || (name ? `name:${name}` : '');
 }
 
-const TaskCard = memo(function TaskCard({ task, today, onOpen, kanban = false, assigneeName }: {
-  task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
+function TaskPerson({ label, name, photoURL, selectable, fallback = 'Chưa rõ' }: {
+  label: string; name?: string; photoURL?: string | null; selectable?: boolean; fallback?: string;
 }) {
   const styles = useStyles();
+  return (
+    <View style={[styles.metadataRow, styles.personRow]}>
+      <Text selectable={selectable} style={[styles.muted, styles.metaLabel]}>{label}: </Text>
+      {name ? <MemberAvatar name={name} photoURL={photoURL} compact /> : null}
+      <Text selectable={selectable} style={[styles.muted, styles.personName]}>{name || fallback}</Text>
+    </View>
+  );
+}
+
+const TaskCard = memo(function TaskCard({
+  task, today, onOpen, kanban = false, assigneeName, assigneePhoto, assignerName, assignerPhoto,
+}: {
+  task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
+  assigneePhoto?: string | null; assignerName?: string; assignerPhoto?: string | null;
+}) {
+  const styles = useStyles();
+  const selectable = kanban ? false : undefined;
   const overdueDays = daysOverdue(task, today);
   const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
   const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
-      accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdueLabel ? `${overdueLabel}. ` : ''}${due}.`}
+      accessibilityHint={`Người giao việc: ${assignerName || 'Chưa rõ'}. Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdueLabel ? `${overdueLabel}. ` : ''}${due}.`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardHeader}>
-        <Text numberOfLines={2} ellipsizeMode="tail" selectable={kanban ? false : undefined}
+        <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
           style={styles.cardTitle}>{task.title}</Text>
         <Text style={styles.chevron}>›</Text>
       </View>
       <View style={styles.metadata}>
-        <Text selectable={kanban ? false : undefined} style={styles.muted}>
-          <Text style={styles.metaLabel}>Người thực hiện: </Text>{assigneeName}
-        </Text>
-        <Text selectable={kanban ? false : undefined} style={styles.muted}>
-          <Text style={styles.metaLabel}>Hạn chót: </Text>
-          <Text style={overdueLabel ? styles.danger : undefined}>
-            {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
+        <TaskPerson label="Người giao việc" name={assignerName} photoURL={assignerPhoto} selectable={selectable} />
+        <TaskPerson label="Người thực hiện" name={assigneeKey(task) ? assigneeName : undefined}
+          photoURL={assigneePhoto} fallback={assigneeName} selectable={selectable} />
+        <View style={styles.metadataRow}>
+          <Text selectable={selectable} style={styles.muted}>
+            <Text style={styles.metaLabel}>Hạn chót: </Text>
+            <Text style={overdueLabel ? styles.danger : undefined}>
+              {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
+            </Text>
           </Text>
-        </Text>
-        <Text selectable={kanban ? false : undefined} style={[styles.muted, task.priority === 'Cao' && styles.danger]}>
-          <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>{task.priority || 'Chưa đặt'}
-        </Text>
+        </View>
+        <View style={styles.metadataRow}>
+          <Text selectable={selectable} style={styles.muted}>
+            <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>
+            <TaskPriority priority={task.priority} />
+          </Text>
+        </View>
       </View>
       {overdueLabel ? (
-        <Text selectable={kanban ? false : undefined} style={styles.overdueTag}>{overdueLabel}</Text>
+        <Text selectable={selectable} style={styles.overdueTag}>{overdueLabel}</Text>
       ) : null}
-      {!kanban && <TaskProgress task={task} />}
+      <TaskProgress task={task} variant="list" />
     </Pressable>
   );
 });
@@ -86,6 +113,19 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
   const { colors } = useTheme();
   const styles = useStyles();
   const { search, filter, priority, view } = options;
+  const [directory, setDirectory] = useState<{ email: string; members: Map<string, TaskAssignee> }>();
+  const memberEmail = member.email;
+  const needsDirectory = taskAssignmentEnabled && tasks.length > 0;
+  const members = directory?.email === memberEmail ? directory.members : undefined;
+  const hasDirectory = Boolean(members);
+  useEffect(() => {
+    if (!needsDirectory || hasDirectory) return;
+    let active = true;
+    void listTaskAssignees().then(({ data }) => {
+      if (active) setDirectory({ email: memberEmail, members: new Map(data.members.map(person => [person.email, person])) });
+    }).catch(() => { /* Task data still provides a fallback when the directory is unavailable. */ });
+    return () => { active = false; };
+  }, [hasDirectory, memberEmail, needsDirectory]);
   const assigneeNames = new Map<string, string>();
   for (const task of tasks) {
     const key = assigneeKey(task);
@@ -131,6 +171,22 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
     return assigneeNames.get(assigneeKey(task)) ?? 'Chưa chỉ định';
   }
 
+  function photoFor(email?: string) {
+    if (!email) return undefined;
+    return members?.get(email)?.photoURL || (email === memberEmail ? auth.currentUser?.photoURL : undefined);
+  }
+
+  function renderTaskCard(task: Task, open: (task: Task) => void, kanban = false) {
+    const assigner = task.assignedBy?.trim();
+    const assignee = task.assigneeEmail;
+    const storedAssigneeName = assigneeName(task);
+    return <TaskCard key={task.id} task={task} today={today} onOpen={open} kanban={kanban}
+      assigneeName={storedAssigneeName === assignee ? members?.get(assignee)?.name || storedAssigneeName : storedAssigneeName}
+      assigneePhoto={photoFor(assignee)}
+      assignerName={assigner === memberEmail ? member.name : assigner && (members?.get(assigner)?.name || assigner)}
+      assignerPhoto={photoFor(assigner)} />;
+  }
+
   return (
     <View style={styles.board}>
       <View style={styles.stats}>
@@ -153,17 +209,10 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
           <Dropdown style={styles.filterField} label="Mức độ ưu tiên" menuLabel="Lọc theo mức độ ưu tiên" fallbackLabel="Tất cả" value={priority} choices={priorityOptions}
             onChange={value => onOptionsChange({ ...options, priority: value })} />
         </View>
-        <View style={styles.views} accessibilityLabel="Kiểu xem công việc">
-          {(['list', 'kanban'] as const).map((value: TaskView) => (
-            <Pressable key={value} accessibilityRole="button" aria-pressed={view === value}
-              onPress={() => onOptionsChange({ ...options, view: value })}
-              style={[styles.viewButton, view === value && styles.activeView]}>
-              <Text style={[styles.controlLabel, view === value && styles.activeLabel]}>
-                {value === 'list' ? 'Danh sách' : 'Bảng Kanban'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedButtons label="Kiểu xem công việc" value={view}
+          choices={[{ value: 'list', label: 'Danh sách' }, { value: 'kanban', label: 'Bảng Kanban' },
+            { value: 'gantt', label: 'Biểu đồ Gantt' }]}
+          onChange={view => onOptionsChange({ ...options, view })} />
       </View>
       <View style={styles.results}>
         <Text accessibilityRole="header" style={styles.resultTitle}>{visibleTasks.length} công việc</Text>
@@ -175,12 +224,12 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
       {visibleTasks.length === 0 ? <View style={styles.card}>
         <Text accessibilityLiveRegion="polite" style={styles.cardTitle}>{showNoMatch ? 'Không có việc phù hợp' : 'Chưa có công việc được giao'}</Text>
         <Text style={styles.muted}>{showNoMatch ? 'Thử đổi từ khóa hoặc xóa bộ lọc.' : 'Việc mới sẽ xuất hiện ở đây khi được giao cho bạn.'}</Text>
-      </View> : view === 'list' ? visibleTasks.map(task => (
-        <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} assigneeName={assigneeName(task)} />
-      )) : (
+      </View> : view === 'list' ? visibleTasks.map(task => renderTaskCard(task, onOpen)) : view === 'gantt' ? (
+        <TaskGantt tasks={visibleTasks} today={today} onOpen={onOpen} />
+      ) : (
         <TaskKanban columns={columns} columnWidth={Math.min(290, width * 0.74)} email={member.email}
           columnColor={status => statusTone(status, colors).text} onOpen={onOpen} onDragChange={onDragChange}
-          renderCard={(task, open) => <TaskCard task={task} today={today} onOpen={open} assigneeName={assigneeName(task)} kanban />} />
+          renderCard={(task, open) => renderTaskCard(task, open, true)} />
       )}
     </View>
   );
@@ -194,11 +243,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   statValue: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
   statLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   controls: { padding: 12, gap: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.paper },
-  views: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10, backgroundColor: colors.surfaceMuted },
-  viewButton: { flex: 1, minHeight: 44, paddingHorizontal: 6, paddingVertical: 8, borderRadius: 8,
-    justifyContent: 'center', alignItems: 'center' },
-  activeView: { backgroundColor: colors.paper },
-  controlLabel: { color: colors.muted, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   activeLabel: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   search: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
     color: colors.ink, fontSize: 16 },
@@ -213,6 +257,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   cardTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '800' },
   chevron: { fontSize: 20, lineHeight: 22, color: colors.muted },
   metadata: { gap: 5 },
+  metadataRow: { minHeight: 22, justifyContent: 'center' },
+  personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
+  personName: { flexShrink: 1 },
   metaLabel: { fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },
