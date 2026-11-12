@@ -90,9 +90,9 @@ export function PersonalAttendanceTable({ days, dailyNotes }: { days: Attendance
           const late = !!day.result?.late;
           return <View key={date} accessibilityRole="row" style={[styles.row, !weight && styles.dayOff]}>
             <Text accessibilityRole="rowheader" style={[styles.text, styles.date]}>{label}</Text>
-            <Text style={[styles.text, styles.total]}>{entered}</Text>
-            <Text style={[styles.text, styles.total]}>{exited}</Text>
-            <Text style={[styles.text, styles.total]}>{worked}</Text>
+            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{entered}</Text>
+            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{exited}</Text>
+            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{worked}</Text>
             <View accessibilityRole="cell" style={[styles.workCell, !!late && styles.lateCell]}>
               <Text style={[styles.text, styles.marker, !!late && styles.lateMark, work === '!' && styles.red]}>{work}</Text>
             </View>

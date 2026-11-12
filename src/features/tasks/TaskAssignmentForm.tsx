@@ -7,10 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AssignmentCalendar, displayDay } from './AssignmentCalendar';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { auth, emulatorMode, pilotMode } from '../../services/firebase/firebase';
-import { MemberAvatar } from '../../components/MemberAvatar';
+import { SearchableChoiceList } from '../../components/SearchableChoiceList';
+import { ChoiceButtons as Choices } from '../../components/ChoiceButtons';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { SearchInput } from '../../components/SearchInput';
-import { searchByName } from '../../utils/search';
 import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachments } from './taskAttachments';
 import type { PickedAttachment } from './taskAttachments';
 import {
@@ -43,54 +42,10 @@ function MemberPicker({ members, selected, email, disabled, label, emptyMessage,
   members: TaskAssignee[]; selected: string[]; email: string; disabled: boolean; label: string; emptyMessage: string;
   onToggle: (member: string) => void;
 }) {
-  const styles = useStyles();
-  const [search, setSearch] = useState('');
-  const matches = searchByName(members, search, member => member.name);
-  const visible = matches.slice(0, 6);
-  return (
-    <View style={styles.field}>
-      <SearchInput accessibilityLabel={label} style={styles.input} value={search} onChangeText={setSearch}
-        editable={!disabled} placeholder="Tìm theo tên" autoCapitalize="none" />
-      {visible.map(member => {
-        const checked = selected.includes(member.email);
-        return (
-          <Pressable key={member.email} accessibilityRole="checkbox" aria-checked={checked} disabled={disabled}
-            accessibilityLabel={member.name}
-            onPress={() => onToggle(member.email)} style={[styles.person, checked && styles.highlight]}>
-            <MemberAvatar name={member.name} photoURL={member.photoURL || (member.email === email ? auth.currentUser?.photoURL : null)} />
-            <Text style={[styles.personLabel, styles.label, checked && styles.actionText]}>
-              {member.name}{member.email === email ? ' (Bạn)' : ''}
-            </Text>
-            <Text style={[styles.mark, checked && styles.markChecked]}>{checked ? '✓' : ''}</Text>
-          </Pressable>
-        );
-      })}
-      {visible.length === 0 ? <Text accessibilityLiveRegion="polite" style={styles.muted}>{emptyMessage}</Text> : null}
-      {matches.length > visible.length ? <Text style={styles.muted}>Tìm theo tên để xem thêm.</Text> : null}
-      <View style={styles.quickDates}>
-        {members.filter(member => selected.includes(member.email) && !visible.includes(member)).map(member => (
-          <Pressable key={member.email} accessibilityRole="button" accessibilityLabel={`Bỏ chọn ${member.name}`}
-            onPress={() => onToggle(member.email)} disabled={disabled} style={[styles.back, styles.personChip]}>
-            <MemberAvatar name={member.name} photoURL={member.photoURL || (member.email === email ? auth.currentUser?.photoURL : null)} />
-            <Text style={styles.actionText}>{member.name} ×</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function Choices<T extends string>({ items, value, onChange, disabled }: {
-  items: readonly { value: T; label: string }[]; value: T; onChange: (value: T) => void; disabled: boolean;
-}) {
-  const styles = useStyles();
-  return <View style={styles.quickDates}>{items.map(item => (
-    <Pressable key={item.value} accessibilityRole="radio" aria-checked={value === item.value}
-      onPress={() => onChange(item.value)} disabled={disabled}
-      style={[styles.choice, value === item.value && styles.highlight]}>
-      <Text style={[styles.label, value === item.value && styles.actionText]}>{item.label}</Text>
-    </Pressable>
-  ))}</View>;
+  return <SearchableChoiceList items={members.map(member => ({
+    id: member.email, name: member.name, self: member.email === email,
+    photoURL: member.photoURL || (member.email === email ? auth.currentUser?.photoURL : null),
+  }))} selected={selected} disabled={disabled} label={label} emptyMessage={emptyMessage} onToggle={onToggle} />;
 }
 
 function choices<T extends string>(values: readonly T[]) {
@@ -501,7 +456,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     color: colors.onAccent, textAlign: 'center', fontWeight: '800' },
   markChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
   personLabel: { flex: 1, gap: 2 },
-  personChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   quickDates: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   choice: { minHeight: 44, justifyContent: 'center', borderRadius: 9, borderWidth: 1,
     borderColor: colors.line, paddingHorizontal: 10 },

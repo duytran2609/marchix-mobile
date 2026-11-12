@@ -1,29 +1,30 @@
 import { utils, write } from 'xlsx';
 import { saveExcel } from '../../utils/saveExcel';
-import { amount } from './payroll';
-import type { PayAmounts } from './payroll';
+import { payrollCells, payrollHeaders, payrollMetrics } from './payrollColumns';
+import type { PayrollRow } from './payrollColumns';
 
-export const payrollMetrics: { label: string; get: (pay: PayAmounts) => number }[] = [
-  { label: 'Lương theo công', get: pay => amount(pay.salary) },
-  { label: 'Phụ cấp + thưởng', get: pay => amount(pay.gross) - amount(pay.salary) },
-  { label: 'Tổng thu nhập', get: pay => amount(pay.gross) },
-  { label: 'BHXH, BHYT, BHTN', get: pay => amount(pay.insEmp) },
-  { label: 'Thuế TNCN', get: pay => amount(pay.pit) },
-  { label: 'Tạm ứng + khấu trừ', get: pay => amount(pay.advance) + amount(pay.deduction) },
-  { label: 'Thực lĩnh', get: pay => amount(pay.net) },
-  { label: 'BH + KPCĐ công ty', get: pay => amount(pay.insCo) + amount(pay.kpcd) },
-  { label: 'Tổng chi phí', get: pay => amount(pay.companyCost) },
-];
+export function exportPayroll(month: string, rows: PayrollRow[]) {
+  const totals = ['Tổng', '', ...payrollMetrics.map(metric => {
+    let sum = 0;
+    for (const row of rows) {
+      const value = metric.get(row.pay);
+      if (value === undefined) return '';
+      sum += value;
+    }
+    return sum;
+  })];
+  return downloadPayroll('Bảng lương', 'Bang-luong', month, [...rows.map(row => payrollCells(row)), totals]);
+}
 
-export async function exportPayroll(month: string, rows: { name: string; status: string; pay: PayAmounts }[]) {
-  const sheet = utils.aoa_to_sheet([
-    ['Họ tên', 'Công thực tế', 'Công chuẩn', ...payrollMetrics.map(metric => metric.label), 'Trạng thái'],
-    ...rows.map(({ name, pay, status }) => [name, pay.workDays, pay.standardDays, ...payrollMetrics.map(metric => metric.get(pay)), status]),
-    ['Tổng', '', '', ...payrollMetrics.map(metric => rows.reduce((sum, row) => sum + metric.get(row.pay), 0))],
-  ]);
-  sheet['!cols'] = [{ wch: 26 }, ...Array.from({ length: 12 }, () => ({ wch: 23 }))];
+export function exportPayslip(month: string, row: PayrollRow) {
+  return downloadPayroll('Phiếu lương', 'Phieu-luong', month, [payrollCells(row)]);
+}
+
+function downloadPayroll(title: string, filePrefix: string, month: string, rows: (string | number)[][]) {
+  const sheet = utils.aoa_to_sheet([payrollHeaders, ...rows]);
+  sheet['!cols'] = payrollHeaders.map((header, index) => ({ wch: index === 0 ? 30 : Math.max(14, header.length + 3) }));
   const book = utils.book_new();
-  utils.book_append_sheet(book, sheet, 'Bảng lương ' + month);
+  utils.book_append_sheet(book, sheet, title + ' ' + month);
   const bytes: ArrayBuffer = write(book, { type: 'array', bookType: 'xlsx' });
-  await saveExcel(bytes, 'Bang-luong-' + month + '.xlsx', 'Lưu bảng lương');
+  return saveExcel(bytes, filePrefix + '-' + month + '.xlsx', 'Lưu ' + title.toLowerCase());
 }

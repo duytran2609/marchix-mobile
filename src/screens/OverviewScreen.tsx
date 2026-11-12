@@ -80,7 +80,7 @@ export function OverviewScreen({
   const [overviewTasks, setOverviewTasks] = useState<Load<Task>>(null);
   const [retry, setRetry] = useState(0);
   const [group, setGroup] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<'alerts' | 'decisions' | null>(null);
+  const [showDecisions, setShowDecisions] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
   const [showDebt, setShowDebt] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -89,12 +89,16 @@ export function OverviewScreen({
 
   useEffect(() => {
     const stopProjects = watchProjects(setProjects, () => setProjects('error'));
-    const stopCash = watchCash({ email, isAdmin, canReadCash, canReviewCash }, setCash, () => setCash('error'));
-    const stopRequests = watchRequests({ email, isAdmin, canReviewRequests }, setRequests, () => setRequests('error'));
+    const stopCash = isAdmin || canReadCash
+      ? watchCash({ email, isAdmin, canReadCash, canReviewCash }, setCash, () => setCash('error'))
+      : undefined;
+    const stopRequests = isAdmin
+      ? watchRequests({ email, isAdmin, canReviewRequests }, setRequests, () => setRequests('error'))
+      : undefined;
     const stopTasks = useOverviewTasks
       ? watchPilotProjectTasks(email, isAdmin, setOverviewTasks, () => setOverviewTasks('error'))
       : undefined;
-    return () => { stopProjects(); stopCash(); stopRequests(); stopTasks?.(); };
+    return () => { stopProjects(); stopCash?.(); stopRequests?.(); stopTasks?.(); };
   }, [email, isAdmin, canReadCash, canReviewCash, canReviewRequests, useOverviewTasks, retry]);
 
   function reload() {
@@ -134,21 +138,8 @@ export function OverviewScreen({
   const maxCash = Math.max(1, ...series.flatMap(item => [item.income, item.expense]));
   const hasCashActivity = series.some(item => item.income > 0 || item.expense > 0);
   const cashMonth = series.find(item => item.key === selectedMonth) ?? series[series.length - 1];
-  const pendingCash = ledger.filter(row => cashStatus(row) === 'Chờ duyệt');
   const pendingRequests = (Array.isArray(requests) ? requests : []).filter(row => row.status === pendingRequest);
-  const alerts: Entry[] = [];
-  const alertTasks = isAdmin ? open : open.filter(task => task.assigneeEmail === email);
-  const late = alertTasks.filter(task => task.due && task.due < today);
-  const soon = alertTasks.filter(task => task.due && task.due >= today && task.due <= shiftDay(today, 2));
-  if (late.length) alerts.push({ label: `${late.length} việc quá hạn`, detail: late.slice(0, 3).map(task => task.title).join(' · '), route: { screen: 'cong-viec' } });
-  if (soon.length) alerts.push({ label: `${soon.length} việc đến hạn trong 2 ngày tới`, route: { screen: 'cong-viec' } });
-  if (isAdmin && grouped[1].length) alerts.push({ label: `${grouped[1].length} việc đang vướng`, route: { screen: 'cong-viec' } });
   const lateCash = scheduled.filter(row => row.dueDate && row.dueDate < today);
-  if (isAdmin && lateCash.length) alerts.push({ label: `${lateCash.length} khoản thu chi quá hạn`, detail: vnd.format(amount(lateCash)), route: { screen: 'thu-chi' } });
-  const visiblePendingCash = pendingCash.filter(row => isAdmin || row.createdBy === email);
-  const visiblePendingRequests = pendingRequests.filter(row => isAdmin || row.createdBy === email);
-  if (visiblePendingCash.length) alerts.push({ label: `${visiblePendingCash.length} đề nghị thu chi chờ duyệt`, route: { screen: 'thu-chi' } });
-  if (visiblePendingRequests.length) alerts.push({ label: `${visiblePendingRequests.length} đơn từ chờ duyệt`, route: { screen: 'don-tu' } });
 
   const decisions: Entry[] = [];
   const activeProjects = (Array.isArray(projects) ? projects : [])
@@ -214,27 +205,22 @@ export function OverviewScreen({
     </View>;
   }
 
-  const sources = [tasks, projectTasks, projects, cash, requests, ...(isAdmin ? [decisionTasks] : [])];
+  const sources = [tasks, projectTasks, projects, ...(isAdmin ? [cash, requests, decisionTasks] : canReadCash ? [cash] : [])];
   const unavailable = sources.includes('error');
-  const entries = expanded === 'decisions'
-    ? decisions.filter(entry => decisionFilter === 'all' || entry.route.screen === decisionFilter) : alerts;
+  const entries = decisions.filter(entry => decisionFilter === 'all' || entry.route.screen === decisionFilter);
   const incomplete = sources.some(source => !Array.isArray(source));
 
   return <>
     <PageHeader title="Tổng quan" />
-    <View style={screen.choices}>
-      <Button secondary label={incomplete ? 'Cảnh báo' : `Cảnh báo (${alerts.length})`}
-        onPress={() => { setExpanded(expanded === 'alerts' ? null : 'alerts'); setVisibleEntries(8); }} />
-      {isAdmin
-        ? <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
-          onPress={() => { setExpanded(expanded === 'decisions' ? null : 'decisions'); setVisibleEntries(8); }} />
-        : <Button secondary label="Phê duyệt" onPress={() => onNavigate({ screen: 'cho-duyet' })} />}
-    </View>
+    {isAdmin && <View style={screen.choices}>
+      <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
+        onPress={() => { setShowDecisions(value => !value); setVisibleEntries(8); }} />
+    </View>}
     {unavailable && <Button secondary label="Tải lại dữ liệu" onPress={reload} />}
-    {expanded && <View style={screen.panel}>
-      <Text accessibilityRole="header" style={screen.cardTitle}>{expanded === 'alerts' ? 'Cảnh báo' : 'Việc cần quyết định'}</Text>
-      {expanded === 'decisions' && <Dropdown label="Loại việc" value={decisionFilter} choices={decisionFilters}
-        onChange={value => { setDecisionFilter(value); setVisibleEntries(8); }} />}
+    {isAdmin && showDecisions && <View style={screen.panel}>
+      <Text accessibilityRole="header" style={screen.cardTitle}>Việc cần quyết định</Text>
+      <Dropdown label="Loại việc" value={decisionFilter} choices={decisionFilters}
+        onChange={value => { setDecisionFilter(value); setVisibleEntries(8); }} />
       {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
       {entries.slice(0, visibleEntries).map(row)}
       {!entries.length && !incomplete && <Text style={screen.muted}>Không có mục cần xử lý.</Text>}

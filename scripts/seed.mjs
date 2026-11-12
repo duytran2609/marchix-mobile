@@ -3,26 +3,33 @@ const documents = `projects/${project}/databases/(default)/documents`;
 const staff = 'nhanvien@example.test';
 const colleague = 'dongnghiep@example.test';
 const reviewer = 'nguoigiao@example.test';
+const recordsCreatedAt = new Date('2025-11-10T02:00:00Z');
+const recordDefaults = {
+  year: '2025', registeredOn: '2025-11-10', documentOn: '', externalNumber: '', dueOn: '',
+  priority: 'normal', fileId: '', fileName: '', lastEventId: 'recordDemoInitial000',
+  createdBy: 'quantri@example.test', updatedBy: 'quantri@example.test',
+  createdAt: recordsCreatedAt, updatedAt: recordsCreatedAt,
+};
 
 const fixtures = {
   [`members/${staff}`]: { name: 'Nhân viên demo', email: staff, role: 'staff' },
   [`members/${colleague}`]: { name: 'Đồng nghiệp demo', email: colleague, role: 'staff' },
   [`members/${reviewer}`]: { name: 'Người giao việc demo', email: reviewer, role: 'staff', grants: ['requestReview'] },
   'members/quantri@example.test': { name: 'Quản trị demo', email: 'quantri@example.test', role: 'admin' },
-  'correspondence/cong-van-den-demo': {
-    direction: 'in', status: 'assigned', kind: 'letter', year: 2026, serial: 1,
+  'correspondence/in-2025-1': {
+    ...recordDefaults, direction: 'in', status: 'assigned', kind: 'letter', serial: '1',
     subject: 'Công văn xác nhận lịch bàn giao', partner: 'Đối tác demo', assigneeEmail: staff,
-    watchers: [], registeredOn: '2026-11-10', dueOn: '2026-11-20',
+    watchers: [], dueOn: '2026-11-20',
   },
-  'correspondence/quyet-dinh-di-demo': {
-    direction: 'out', status: 'draft', kind: 'decision', year: 2026,
+  'correspondence/recordDemoDecision01': {
+    ...recordDefaults, direction: 'out', status: 'draft', kind: 'decision', serial: '',
     subject: 'Quyết định phân công phụ trách dự án', partner: 'Nhóm dự án demo',
     assigneeEmail: reviewer, watchers: [staff],
   },
-  'correspondence/cong-van-noi-bo-demo': {
-    direction: 'in', status: 'registered', kind: 'letter', year: 2026, serial: 2,
+  'correspondence/in-2025-2': {
+    ...recordDefaults, direction: 'in', status: 'assigned', kind: 'letter', serial: '2',
     subject: 'Công văn dành riêng cho bộ phận vận hành', partner: 'Bộ phận vận hành',
-    assigneeEmail: colleague, watchers: [], registeredOn: '2026-11-10',
+    assigneeEmail: colleague, watchers: [],
   },
   'employees/nhanvien-luong-demo': {
     name: 'Nhân viên lương demo', email: staff, position: 'Kiểm thử', contract: 'Thử việc',
@@ -87,6 +94,7 @@ const fixtures = {
 };
 
 function encode(value) {
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
   if (typeof value === 'string') return { stringValue: value };
   if (typeof value === 'number') return { integerValue: String(value) };
   if (typeof value === 'boolean') return { booleanValue: value };

@@ -35,7 +35,7 @@ export function personalAttendanceCells(day: AttendanceDay, personalNote?: strin
     date: showAttendanceDate(date),
     entered: clock(result?.entered ?? null),
     exited: clock(result?.exited ?? null),
-    worked: clock(result?.worked || null),
+    worked: clock(day.workedMinutes || null),
     work: attendanceMarker(day),
     notes: [!weight && 'Ngày nghỉ', !record && leave?.type, showFlag && flag, record?.note, personalNote].filter(Boolean).join('\n'),
   };

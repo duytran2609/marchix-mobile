@@ -10,12 +10,13 @@ export type Attendance = {
   note?: string;
 };
 
-export type Leave = {
+export type AttendanceRequest = {
   createdBy: string;
   from: string;
   to?: string;
   status: string;
   type: string;
+  overtime?: { hours?: number };
 };
 
 export const defaultSchedule = {
@@ -104,15 +105,29 @@ export function calculateAttendance(row: Attendance, schedule: Schedule, today: 
   return { entered, exited, worked, work, late, early, flag };
 }
 
+export function approvedOvertimeByDay(email: string, requests: readonly AttendanceRequest[]) {
+  const hoursByDay = new Map<string, number>();
+  for (const request of requests) {
+    if (request.createdBy !== email || request.status !== 'Đã duyệt' || request.type !== 'Làm thêm giờ') continue;
+    const hours = request.overtime?.hours;
+    if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0 || hours > 24) continue;
+    hoursByDay.set(request.from, (hoursByDay.get(request.from) ?? 0) + hours);
+  }
+  for (const [date, hours] of hoursByDay) hoursByDay.set(date, Math.round(hours * 60));
+  return hoursByDay;
+}
+
 export function attendanceMonth(email: string, month: string, today: string, schedule: Schedule,
-  records: ReadonlyMap<string, Attendance>, requests: Leave[], trackingStart: string) {
+  records: ReadonlyMap<string, Attendance>, requests: readonly AttendanceRequest[], trackingStart: string) {
   const summary = { work: 0, standard: 0, leave: 0, late: 0, lateMinutes: 0, forgottenIn: 0, forgottenOut: 0, absent: 0 };
   const approved = requests.filter(request => request.createdBy === email && request.status === 'Đã duyệt' &&
     (request.type === 'Nghỉ phép' || request.type === 'Công tác'));
+  const overtimeByDay = approvedOvertimeByDay(email, requests);
   const days = monthDays(month).map(date => {
     const weight = dayWeight(date, schedule);
     const record = records.get(attendanceId(email, date));
     const result = record ? calculateAttendance(record, schedule, today) : null;
+    const workedMinutes = (result?.worked ?? 0) + (overtimeByDay.get(date) ?? 0);
     const leave = approved.find(request => request.from <= date && (request.to || request.from) >= date);
     const absent = !record && !leave && weight > 0 && date < today && date >= trackingStart;
     summary.standard += Number(weight > 0);
@@ -129,7 +144,7 @@ export function attendanceMonth(email: string, month: string, today: string, sch
     } else if (absent) {
       summary.absent += weight;
     }
-    return { date, weight, record, result, leave, absent };
+    return { date, weight, record, result, workedMinutes, leave, absent };
   });
   return { summary, days };
 }

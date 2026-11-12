@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
 import { ToastLayer, useToast } from '../components/Toast';
-import { attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
+import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
 import { showAttendanceDate } from '../features/attendance/attendanceTableData';
 import type { AttendanceEditTarget } from '../features/attendance/attendanceTableData';
@@ -60,6 +60,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   const { schedule, people, requests } = data;
   const todayRecord = records.get(attendanceId(email, today));
   const todayResult = todayRecord ? calculateAttendance(todayRecord, schedule, today) : null;
+  const todayWorked = (todayResult?.worked ?? 0) + (approvedOvertimeByDay(email, requests).get(today) ?? 0);
   const completedToday = todayResult && todayResult.entered !== null && todayResult.exited !== null;
   const weight = dayWeight(today, schedule);
   const trackingStart = schedule.attStart || data.records.reduce((first, row) =>
@@ -118,14 +119,16 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
         </Text>
       </View>
       {schedule.gpsOn && <Text style={styles.scheduleText}>Chấm công theo vị trí văn phòng</Text>}
-      {todayResult && <>
+      {(todayResult || todayWorked > 0) && <>
         <View style={styles.metrics}>
-          <Metric label="Vào" value={clock(todayResult.entered)} alertDetail detail={todayResult.late ? 'Muộn ' + todayResult.late + ' phút' : undefined} />
-          <Metric label="Ra" value={clock(todayResult.exited)} alertDetail detail={todayResult.early ? 'Sớm ' + todayResult.early + ' phút' : undefined} />
-          <Metric label="Giờ làm" value={todayResult.worked ? clock(todayResult.worked) : '–'} />
-          <Metric label="Công" value={todayResult.flag === 'Đang làm' ? '…' : String(todayResult.work)} />
+          {todayResult && <>
+            <Metric label="Vào" value={clock(todayResult.entered)} alertDetail detail={todayResult.late ? 'Muộn ' + todayResult.late + ' phút' : undefined} />
+            <Metric label="Ra" value={clock(todayResult.exited)} alertDetail detail={todayResult.early ? 'Sớm ' + todayResult.early + ' phút' : undefined} />
+          </>}
+          <Metric label="Giờ làm" value={clock(todayWorked || null)} />
+          {todayResult && <Metric label="Công" value={todayResult.flag === 'Đang làm' ? '…' : String(todayResult.work)} />}
         </View>
-        {!completedToday && !!todayResult.flag && <Text style={ui.muted}>{todayResult.flag}</Text>}
+        {!completedToday && !!todayResult?.flag && <Text style={ui.muted}>{todayResult.flag}</Text>}
       </>}
       {completedToday && !punching && <View style={styles.completedNotice}>
         <Text accessibilityLiveRegion="polite" style={styles.completedText}>Đã chấm công cho ngày hôm nay.</Text>
@@ -143,16 +146,10 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
     <View style={[ui.panel, isAdmin && styles.companyPanel]}>
       <View style={styles.tableHeader}>
         <Text accessibilityRole="header" style={ui.cardTitle}>{isAdmin ? 'Bảng chấm công toàn công ty' : 'Bảng công của bạn'}</Text>
-        <View style={styles.tableActions}>
-          <View style={styles.monthActions}>
-            <AttendanceMonthPicker first={firstMonth} current={currentMonth} selected={selectedMonth} onSelect={setMonth} />
-            <TableAction label={exporting ? 'Đang xuất…' : 'Xuất Excel'} disabled={exporting || (isAdmin ? !companyRows.length : !personalDays.length)}
-              onPress={() => void downloadAttendance()} />
-          </View>
-          {isAdmin && <TableAction label="Đưa ngày công vào bảng lương" onPress={() => {
-            void Linking.openURL('https://quanly.marchix.vn/#cham-cong')
-              .catch(() => toast('Không mở được Quản lý Marchix trên web.', 'error'));
-          }} />}
+        <View style={styles.monthActions}>
+          <AttendanceMonthPicker first={firstMonth} current={currentMonth} selected={selectedMonth} onSelect={setMonth} />
+          <TableAction label={exporting ? 'Đang xuất…' : 'Xuất Excel'} disabled={exporting || (isAdmin ? !companyRows.length : !personalDays.length)}
+            onPress={() => void downloadAttendance()} />
         </View>
       </View>
       {isAdmin && <CompanyAttendanceTable rows={companyRows} onEdit={setEdit} />}
@@ -348,7 +345,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   completedText: { color: colors.success, fontSize: 14, fontWeight: '700' },
   companyPanel: { padding: 23, gap: 24 },
   tableHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  tableActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
   monthActions: { flexDirection: 'row', maxWidth: '100%', gap: 10 },
   tableAction: { minHeight: 44, paddingHorizontal: 14,
     justifyContent: 'center', borderWidth: 1, borderRadius: 8, borderColor: colors.line, backgroundColor: colors.paper },

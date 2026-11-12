@@ -1,4 +1,4 @@
-import { devices, expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Locator, type Page } from '@playwright/test';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
@@ -45,20 +45,27 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
   }
   try {
     await openCash(page, 'Đăng nhập Google (mô phỏng)');
-    async function expectSameRow(left: RegExp, right: RegExp) {
-      const first = await page.getByRole('button', { name: left }).boundingBox();
-      const second = await page.getByRole('button', { name: right }).boundingBox();
+    async function expectSameRow(left: RegExp, right: RegExp, scope: Page | Locator = page) {
+      const first = await scope.getByRole('button', { name: left }).boundingBox();
+      const second = await scope.getByRole('button', { name: right }).boundingBox();
       expect(first && second && Math.abs(first.y - second.y) < 2 && first.x + first.width <= second.x).toBe(true);
     }
     await expectSameRow(/^Tháng:/, /^Dự án:/);
     await expectSameRow(/^Loại:/, /^Trạng thái:/);
-    await button(page, 'Báo khoản thu').click();
-    await expect(button(page, 'Báo khoản thu')).toHaveAttribute('aria-pressed', 'true');
-    await expect(button(page, 'Đề nghị chi')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tổng quan' })).toBeVisible();
+    await button(page, '+ Tạo đề nghị thu').click();
+    const proposal = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Tạo đề nghị thu' }) });
+    await expect(proposal).toBeVisible();
     const amountField = page.getByRole('textbox', { name: 'Số tiền (VNĐ)' });
     await amountField.fill('12a3456');
     await expect(amountField).toHaveValue('123.456');
-    await expectSameRow(/^Nhóm hạng mục:/, /^Hạng mục:/);
+    await expect(page.getByRole('button', { name: /^Nhóm hạng mục:/ })).toHaveCount(0);
+    await expectSameRow(/^Hạng mục:/, /^Dự án:/, proposal);
+    const normalBackground = await button(page, 'Hạng mục: Chọn hạng mục').evaluate(element => getComputedStyle(element).backgroundColor);
+    await button(page, 'Hạng mục: Chọn hạng mục').click();
+    await page.getByRole('radio', { name: 'Thu khác', exact: true }).click();
+    await expect(button(page, 'Hạng mục: Thu khác')).toBeVisible();
+    await expect(button(page, 'Hạng mục: Thu khác')).toHaveCSS('background-color', normalBackground);
     await expectSameRow(/^Hình thức:/, /^Loại đối tượng:/);
     const transaction = page.getByRole('button', { name: /^Ngày giao dịch,/ });
     const currentDate = (await transaction.getAttribute('aria-label'))?.split(', ')[1] ?? '';
@@ -75,15 +82,16 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await payment.click();
     await button(page, 'Bỏ ngày').click();
     await expect(payment).toHaveAccessibleName('Hạn thanh toán, Chọn ngày');
-    await button(page, 'Đề nghị chi').click();
-    await expect(button(page, 'Đề nghị chi')).toHaveAttribute('aria-pressed', 'true');
+    await button(page, 'Hủy').click();
+    await expect(proposal).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Tổng quan' })).toBeVisible();
+    await button(page, '+ Tạo đề nghị chi').click();
+    const expense = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Tạo đề nghị chi' }) });
+    await expect(expense).toBeVisible();
     await expect(amountField).toHaveValue('');
-    await button(page, 'Báo khoản thu').click();
-    await expect(amountField).toHaveValue('123.456');
-    await button(page, 'Đề nghị chi').click();
     await page.getByRole('textbox', { name: 'Nội dung', exact: true }).fill(note);
     await page.getByRole('textbox', { name: 'Số tiền (VNĐ)' }).fill('2500000');
-    await expect(page.getByText(/cần duyệt bằng văn bản trước khi chi/)).toBeVisible();
+    await expect(expense.getByText(/cần duyệt bằng văn bản trước khi chi/)).toBeVisible();
     await page.getByRole('button', { name: /^Nhóm hạng mục:/ }).click();
     await page.getByRole('radio', { name: 'Tài chính & khác', exact: true }).click();
     await page.getByRole('button', { name: /^Hạng mục:/ }).click();
@@ -113,6 +121,8 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(admin.getByText('nguoigiao@example.test', { exact: true })).toBeVisible();
 
     await openCash(reviewer, 'Đăng nhập người giao việc (mô phỏng)');
+    await button(reviewer, 'Mở menu').click();
+    await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
     await entry(reviewer).click();
     await expect(button(reviewer, 'Sửa khoản này')).toHaveCount(0);
     await button(reviewer, 'Xem bien-nhan.png').click();
@@ -121,6 +131,9 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(reviewer, 'Duyệt').click();
     await expect(status(reviewer, 'Chờ chi')).toBeVisible();
     await expect(button(reviewer, 'Xác nhận đã chi')).toHaveCount(0);
+    await button(reviewer, 'Về Phê duyệt').click();
+    await expect(reviewer.getByText('Không có hồ sơ.', { exact: true }).first()).toBeVisible();
+    await expect(entry(reviewer)).toHaveCount(0);
     await expect(status(admin, 'Chờ chi')).toBeVisible();
     await admin.getByRole('textbox', { name: 'Mã chứng từ hoặc tham chiếu giao dịch' }).fill('BANK-CASH-TEST');
     await button(admin, 'Xác nhận đã chi').click();

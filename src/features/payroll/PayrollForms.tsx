@@ -7,14 +7,13 @@ import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
 import { amount, calculatePay, contracts, employeeStatuses, emptyEmployee, locked, money } from './payroll';
 import type { Employee, EmployeeFields, PayAmounts, PayInputs, Payslip, Rates } from './payroll';
-import { payrollMetrics } from './exportPayroll';
+import { payrollMetrics, payrollMoney, payrollWork } from './payrollColumns';
 
-export function PayBreakdown({ pay, admin }: { pay: PayAmounts; admin?: boolean }) {
+export function PayBreakdown({ pay }: { pay: PayAmounts }) {
   const styles = useScreenStyles();
-  const metrics = admin ? payrollMetrics : payrollMetrics.slice(2, 7);
   return <View style={styles.stack}>
-    <PayMetric label="Ngày công" value={String(pay.workDays ?? '–') + ' / ' + String(pay.standardDays ?? '–')} />
-    {metrics.map(({ label, get }) => <PayMetric key={label} label={label} value={money(get(pay))} />)}
+    <PayMetric label="Công" value={payrollWork(pay)} />
+    {payrollMetrics.map(({ label, get }) => <PayMetric key={label} label={label} value={payrollMoney(get(pay))} />)}
   </View>;
 }
 
@@ -142,7 +141,7 @@ export function PayEditor({ employee, month, rates, advance, slip, pay, busy, on
     {!isLocked && payFields.map(([key, label]) => <TextField key={key} label={label} value={input[key]} busy={busy}
       keyboardType={key === 'workDays' || key === 'standardDays' ? 'decimal-pad' : 'number-pad'}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
-    <PayBreakdown pay={preview} admin />
+    <PayBreakdown pay={preview} />
     <Text style={styles.muted}>Thu nhập tính thuế · {money(preview.taxable)} · Tạm ứng đã duyệt · {money(preview.advance)}</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />

@@ -41,6 +41,20 @@ try {
   const outsiderDb = await connect('outsider@example.test', 'marchix-mobile-outsider');
   const anonymousDb = await connect(null, 'marchix-mobile-anonymous');
   const adminDb = await connect('quantri@example.test', 'marchix-mobile-demo-admin');
+  const correspondence = collection(db, 'correspondence');
+  const visibleRecords = await getDocsFromServer(query(correspondence,
+    or(where('assigneeEmail', '==', staff), where('watchers', 'array-contains', staff))));
+  assert(visibleRecords.docs.some(item => item.id === 'in-2025-1'));
+  assert(visibleRecords.docs.some(item => item.id === 'recordDemoDecision01'));
+  await denied(getDocFromServer(doc(db, 'correspondence', 'in-2025-2')));
+  await denied(getDocsFromServer(correspondence));
+  await denied(updateDoc(doc(db, 'correspondence', 'in-2025-1'), { status: 'processing' }));
+  await denied(updateDoc(doc(adminDb, 'correspondence', 'recordDemoDecision01'), {
+    status: 'issued', updatedAt: serverTimestamp(),
+  }));
+  await denied(setDoc(doc(adminDb, 'recordCounters', 'letter-2025'), {
+    last: 1, recordId: 'recordDemoDecision01', updatedAt: serverTimestamp(),
+  }));
   const personalPayroll = query(collection(db, 'payroll'), where('email', '==', staff), where('status', 'in', ['Đã chốt', 'Đã trả']));
   const ownPayslips = await getDocsFromServer(personalPayroll);
   assert(ownPayslips.docs.some(item => item.id === '2026-10_nhanvien-luong-demo'));
@@ -50,6 +64,14 @@ try {
   await denied(getDocFromServer(doc(db, 'payroll', '2026-08_dongnghiep-luong-demo')));
   await denied(getDocFromServer(doc(db, 'employees', 'nhanvien-luong-demo')));
   await denied(updateDoc(doc(db, 'payroll', '2026-10_nhanvien-luong-demo'), { net: 1 }));
+  const confirmedAt = new Date().toISOString();
+  const colleagueSlip = client => doc(client, 'payroll', '2026-08_dongnghiep-luong-demo');
+  await denied(updateDoc(colleagueSlip(db), { employeeConfirmedAt: confirmedAt }));
+  await denied(updateDoc(colleagueSlip(adminDb), { employeeConfirmedAt: confirmedAt }));
+  await denied(updateDoc(doc(db, 'payroll', '2026-09_nhanvien-luong-demo'), { employeeConfirmedAt: confirmedAt }));
+  await denied(updateDoc(colleagueSlip(otherDb), { employeeConfirmedAt: confirmedAt, net: 1 }));
+  await updateDoc(colleagueSlip(otherDb), { employeeConfirmedAt: confirmedAt });
+  assert.equal((await getDocFromServer(colleagueSlip(adminDb))).data().employeeConfirmedAt, confirmedAt);
   assert((await getDocFromServer(doc(adminDb, 'payroll', '2026-09_nhanvien-luong-demo'))).exists());
   assert((await getDocsFromServer(collection(adminDb, 'employees'))).docs.some(item => item.id === 'nhanvien-luong-demo'));
   const cashAdmin = 'quantri@example.test';
@@ -151,6 +173,23 @@ try {
   await denied(setDoc(requestRef(db), { ...requestData, createdBy: colleague }));
   await denied(setDoc(requestRef(db), { ...requestData, approverEmail: staff }));
   await denied(setDoc(requestRef(outsiderDb), requestData));
+  const tripRef = doc(db, 'requests', requestId + '-trip');
+  const trip = { ...requestData, type: 'Công tác', amount: 0, days: 1,
+    trip: { destination: 'Hà Nội', host: 'Đối tác', estimatedCost: 1000000 } };
+  await setDoc(tripRef, trip);
+  await denied(updateDoc(tripRef, { 'trip.estimatedCost': -1 }));
+  await deleteDoc(tripRef);
+  const overtimeRef = doc(db, 'requests', requestId + '-overtime');
+  const overtime = { ...requestData, type: 'Làm thêm giờ', amount: 0, days: 0,
+    overtime: { hours: 2.5, taskId: 'kiem-tra-giao-dien', taskTitle: 'Kiểm tra giao diện' } };
+  await setDoc(overtimeRef, overtime);
+  await denied(updateDoc(overtimeRef, { 'overtime.hours': 25 }));
+  const tasks = [{ id: 'kiem-tra-giao-dien', title: 'Kiểm tra giao diện' },
+    { id: 'cap-nhat-huong-dan', title: 'Cập nhật hướng dẫn' }];
+  await updateDoc(overtimeRef, { overtime: { hours: 2.5, tasks } });
+  assert.deepEqual((await getDocFromServer(overtimeRef)).get('overtime.tasks'), tasks);
+  await denied(updateDoc(overtimeRef, { overtime: { hours: 2.5, tasks: [tasks[0], { id: 5, title: 'Sai kiểu' }] } }));
+  await deleteDoc(overtimeRef);
   await setDoc(requestRef(db), requestData);
   await denied(getDocFromServer(requestRef(otherDb)));
   await denied(getDocFromServer(requestRef(anonymousDb)));

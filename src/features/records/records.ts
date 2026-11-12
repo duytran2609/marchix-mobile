@@ -27,8 +27,8 @@ export type Correspondence = {
   assigneeEmail?: string;
   watchers?: string[];
   priority?: string;
-  year?: number;
-  serial?: number;
+  year?: number | string;
+  serial?: number | string;
   numbering?: { seq?: number; at?: RecordTime };
   externalNumber?: string;
   registeredOn?: string;
@@ -40,6 +40,7 @@ export type Correspondence = {
   fileName?: string;
   signedByName?: string;
   signedOn?: string;
+  lastEventId?: string;
 };
 
 export function watchRecords(email: string, isAdmin: boolean, onChange: (rows: Correspondence[]) => void, onError: () => void) {
@@ -79,19 +80,25 @@ export function recordSortTime(row: Correspondence, watching: boolean) {
   return time?.toMillis?.() ?? 0;
 }
 
-export function recordNextAction(row: Correspondence, email: string, isAdmin: boolean) {
-  if (!isAdmin && row.assigneeEmail !== email) return '';
+export function recordActions(row: Correspondence, email: string, isAdmin: boolean): { status: RecordStatus; label: string }[] {
+  if (!isAdmin && row.assigneeEmail !== email) return [];
   switch (row.status) {
-    case 'registered': return isAdmin ? 'Giao xử lý' : '';
-    case 'assigned': return 'Bắt đầu xử lý';
-    case 'processing': return 'Hoàn tất xử lý';
-    case 'completed': return isAdmin ? 'Lưu hồ sơ' : '';
-    case 'draft': return 'Trình duyệt nội dung';
-    case 'review': return isAdmin ? 'Duyệt nội dung' : '';
-    case 'approved': return 'Chuyển chờ ký';
-    case 'signing': return isAdmin ? 'Xác nhận bản đã ký và cấp số' : '';
-    case 'signed': return row.numbering ? (isAdmin ? 'Ghi nhận phát hành' : '') : 'Lấy số chính thức';
-    case 'numbered': return isAdmin ? (row.signedByName ? 'Ghi nhận phát hành' : 'Bổ sung bản đã ký') : '';
-    default: return '';
+    case 'registered': return isAdmin ? [{ status: 'assigned', label: 'Giao xử lý' }] : [];
+    case 'assigned': return [{ status: 'processing', label: 'Bắt đầu xử lý' }];
+    case 'processing': return [{ status: 'completed', label: 'Hoàn tất xử lý' }];
+    case 'completed':
+    case 'issued': return isAdmin ? [{ status: 'archived', label: 'Lưu hồ sơ' }] : [];
+    case 'draft': return [{ status: 'review', label: 'Trình duyệt nội dung' }];
+    case 'review': return isAdmin ? [{ status: 'approved', label: 'Duyệt nội dung' }, { status: 'draft', label: 'Trả về bản nháp' }] : [];
+    case 'approved': return [{ status: 'signing', label: 'Chuyển chờ ký' }];
+    case 'signing': return isAdmin ? [{ status: 'numbered', label: 'Xác nhận bản đã ký và cấp số' }] : [];
+    case 'signed': return row.numbering
+      ? (isAdmin ? [{ status: 'issued', label: 'Ghi nhận phát hành' }] : [])
+      : [{ status: 'numbered', label: 'Lấy số chính thức' }];
+    case 'numbered': return isAdmin ? [
+      row.signedByName ? { status: 'issued', label: 'Ghi nhận phát hành' } : { status: 'signed', label: 'Bổ sung bản đã ký' },
+      { status: 'void', label: 'Hủy số' },
+    ] : [];
+    default: return [];
   }
 }

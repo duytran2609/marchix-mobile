@@ -4,10 +4,26 @@ import type { ComponentRef } from 'react';
 import { Animated, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PopupCloseButton } from '../components/PopupCloseButton';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { createThemedStyles } from '../theme/theme';
 
-import { isNativeTab, workspaceTabs } from './workspaceRoutes';
+import { workspaceTabs } from './workspaceRoutes';
 import type { WorkspaceTab } from './workspaceRoutes';
+
+const sidebarIcons = {
+  'tong-quan': require('../../assets/sidebar/overview.png'),
+  'cong-viec': require('../../assets/sidebar/tasks.png'),
+  'ke-hoach-tuan': require('../../assets/sidebar/weekly-plan.png'),
+  'cho-duyet': require('../../assets/sidebar/approval.png'),
+  'kpi': require('../../assets/sidebar/kpi.png'),
+  'cham-cong': require('../../assets/sidebar/attendance.png'),
+  'thu-chi': require('../../assets/sidebar/cash.png'),
+  'don-tu': require('../../assets/sidebar/requests.png'),
+  'luong': require('../../assets/sidebar/payroll.png'),
+  'du-an': require('../../assets/sidebar/projects.png'),
+  'van-thu': require('../../assets/sidebar/records.png'),
+  'cai-dat': require('../../assets/sidebar/settings.png'),
+} satisfies Record<WorkspaceTab, number>;
 
 export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onClose, onSelect, onLogout }: {
   open: boolean;
@@ -24,7 +40,6 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   const drawerWidth = Math.min(width * 0.75, 280);
   const progress = useRef(new Animated.Value(0)).current;
   const logoutTrigger = useRef<ComponentRef<typeof Pressable>>(null);
-  const cancelButton = useRef<ComponentRef<typeof Pressable>>(null);
   const [visible, setVisible] = useState(false);
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const [logout, setLogout] = useState<'closed' | 'confirm' | 'pending'>('closed');
@@ -45,10 +60,6 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
     });
     return () => animation.stop();
   }, [open, progress]);
-
-  useEffect(() => {
-    if (confirming && Platform.OS === 'web') cancelButton.current?.focus();
-  }, [confirming]);
 
   function dismiss() {
     if (pending) return;
@@ -89,16 +100,16 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
             <ScrollView contentContainerStyle={styles.list}>
               {workspaceTabs.map(item => {
                 const selected = item.id === activeTab;
-                const external = !isNativeTab(item.id);
                 const label = item.id === 'luong' && isAdmin ? 'Nhân sự & lương' : item.label;
                 return (
                   <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={label}
-                    accessibilityHint={external ? 'Mở trên trang quản lý Marchix' : undefined}
                     accessibilityState={{ selected }} disabled={confirming} onPress={() => onSelect(item.id)}
                     style={({ pressed }) => [styles.item, selected && styles.selected, pressed && styles.pressed]}>
-                    <Text style={[styles.icon, selected && styles.selectedIcon]}>{item.icon}</Text>
+                    <View aria-hidden style={[styles.iconTile, selected && styles.selectedIconTile]}>
+                      <Image source={sidebarIcons[item.id]} resizeMode="contain"
+                        style={[styles.icon, selected && styles.selectedIcon]} />
+                    </View>
                     <Text style={[styles.label, selected && styles.selectedLabel]}>{label}</Text>
-                    {external ? <Text style={styles.webTag}>Web ↗</Text> : null}
                   </Pressable>
                 );
               })}
@@ -131,25 +142,9 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
           <Pressable style={styles.fill} onPress={onClose} accessible={false}
             importantForAccessibility="no" tabIndex={-1} />
         </Animated.View>
-        {confirming ? (
-          <View style={styles.confirmBackdrop}>
-            <View role="alertdialog" accessibilityLabel="Xác nhận đăng xuất" accessibilityViewIsModal
-              style={styles.confirmPanel}>
-              <Text accessibilityRole="header" style={styles.confirmTitle}>Đăng xuất?</Text>
-              <Text style={styles.confirmText}>Bạn có muốn đăng xuất khỏi Marchix không?</Text>
-              <View style={styles.confirmActions}>
-                <Pressable ref={cancelButton} accessibilityRole="button" disabled={pending} onPress={dismiss}
-                  style={({ pressed }) => [styles.confirmButton, pressed && styles.pressed, pending && styles.dimmed]}>
-                  <Text style={styles.cancelText}>Hủy</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" disabled={pending} onPress={() => void confirmLogout()}
-                  style={({ pressed }) => [styles.confirmButton, styles.dangerButton, (pressed || pending) && styles.dimmed]}>
-                  <Text style={styles.dangerLabel}>{pending ? 'Đang đăng xuất…' : 'Đăng xuất'}</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        ) : null}
+        {confirming && <ConfirmDialog label="Xác nhận đăng xuất" title="Đăng xuất?"
+          message="Bạn có muốn đăng xuất khỏi Marchix không?" action="Đăng xuất" pendingAction="Đang đăng xuất…"
+          pending={pending} onCancel={dismiss} onConfirm={() => void confirmLogout()} />}
       </View>
       {open || visible ? <ToastLayer /> : null}
     </Modal>
@@ -171,12 +166,13 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     paddingVertical: 6, borderRadius: 10 },
   selected: { backgroundColor: colors.accentSoft },
   pressed: { backgroundColor: colors.surfaceMuted },
-  icon: { width: 30, height: 30, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.background,
-    color: colors.muted, fontSize: 17, lineHeight: 30, textAlign: 'center', textAlignVertical: 'center' },
-  selectedIcon: { backgroundColor: colors.accent, color: colors.onAccent },
+  iconTile: { width: 32, height: 32, borderRadius: 9, backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center' },
+  selectedIconTile: { backgroundColor: colors.accent },
+  icon: { width: 22, height: 22, tintColor: colors.muted },
+  selectedIcon: { tintColor: colors.onAccent },
   label: { flexShrink: 1, color: colors.ink, fontSize: 15, fontWeight: '600' },
   selectedLabel: { color: colors.accent, fontWeight: '800' },
-  webTag: { marginLeft: 'auto', color: colors.muted, fontSize: 11, fontWeight: '700' },
   footer: { padding: 12, backgroundColor: colors.background,
     borderTopWidth: 1, borderTopColor: colors.line },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12,
@@ -194,16 +190,4 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   logoutShaft: { position: 'absolute', left: 6, top: 9, width: 14, height: 2, backgroundColor: colors.danger },
   logoutArrow: { position: 'absolute', right: 2, top: 6, width: 8, height: 8,
     borderTopWidth: 2, borderRightWidth: 2, borderColor: colors.danger, transform: [{ rotate: '45deg' }] },
-  confirmBackdrop: { ...StyleSheet.absoluteFill, zIndex: 2, elevation: 16, justifyContent: 'center', alignItems: 'center',
-    padding: 20, backgroundColor: 'rgba(33, 25, 53, 0.48)' },
-  confirmPanel: { width: '100%', maxWidth: 360, padding: 20, gap: 12, borderRadius: 16, backgroundColor: colors.paper },
-  confirmTitle: { color: colors.ink, fontSize: 20, fontWeight: '800' },
-  confirmText: { color: colors.muted, fontSize: 15 },
-  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8 },
-  confirmButton: { minHeight: 44, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center',
-    justifyContent: 'center', backgroundColor: colors.background },
-  cancelText: { color: colors.ink, fontWeight: '700' },
-  dangerButton: { backgroundColor: colors.danger },
-  dangerLabel: { color: colors.onAccent, fontWeight: '700' },
-  dimmed: { opacity: 0.65 },
 }));

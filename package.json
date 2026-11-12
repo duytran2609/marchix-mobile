@@ -31,7 +31,6 @@
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@types/react": "~19.3.0",
-    "firebase-tools": "15.35.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -40,12 +39,12 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "emulator": "firebase emulators:start --only auth,firestore,functions --project demo-marchix-mobile",
-    "emulator:lan": "firebase emulators:start --config firebase.lan.json --only auth,firestore,functions --project demo-marchix-mobile",
+    "emulator": "node tools/firebase-cli/node_modules/firebase-tools/lib/bin/firebase.js emulators:start --only auth,firestore,functions --project demo-marchix-mobile",
+    "emulator:lan": "node tools/firebase-cli/node_modules/firebase-tools/lib/bin/firebase.js emulators:start --config firebase.lan.json --only auth,firestore,functions --project demo-marchix-mobile",
     "seed": "node scripts/seed.mjs",
     "test:rules": "node tests/rules.mjs",
     "test:workflow": "node tests/workflow.mjs",
     "test:preview": "playwright test",
-    "test:local": "firebase emulators:exec --only auth,firestore,functions --project demo-marchix-mobile \"npm run seed && npm run test:rules && npm run test:workflow && npm run test:preview\""
+    "test:local": "node tools/firebase-cli/node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only auth,firestore,functions --project demo-marchix-mobile \"npm run seed && npm run test:rules && npm run test:workflow && npm run test:preview\""
   }
 }

@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { addDoc, collection, deleteDoc, deleteField, doc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import { attendanceId, dateKey, defaultSchedule } from './attendance';
-import type { Attendance, Leave, Schedule } from './attendance';
+import type { Attendance, AttendanceRequest, Schedule } from './attendance';
 
 export type AttendanceMember = { email: string; name: string };
 
@@ -22,7 +22,7 @@ export function saveAttendanceNote(email: string, date: string, text: string) {
 export type AttendanceData = {
   schedule: Schedule;
   records: Attendance[];
-  requests: Leave[];
+  requests: AttendanceRequest[];
   people: AttendanceMember[];
 };
 
@@ -45,7 +45,7 @@ export function watchAttendance(email: string, admin: boolean, onData: (data: At
       publish('records', snapshot.docs.map(row => ({ ...row.data({ serverTimestamps: 'estimate' }), id: row.id } as Attendance)));
     }, onError),
     onSnapshot(admin ? requests : query(requests, where('createdBy', '==', email)), snapshot => {
-      publish('requests', snapshot.docs.map(row => row.data() as Leave));
+      publish('requests', snapshot.docs.map(row => row.data() as AttendanceRequest));
     }, onError),
   ];
   if (admin) unsubscribe.push(onSnapshot(collection(db, 'members'), snapshot => {

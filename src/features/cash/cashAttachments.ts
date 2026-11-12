@@ -38,11 +38,16 @@ export type PreparedCashFiles = Awaited<ReturnType<typeof prepareCashFiles>>;
 type FileWriter = { set: (ref: DocumentReference, data: DocumentData) => unknown };
 
 export function writeCashFiles(writer: FileWriter, cash: DocumentReference, files: PreparedCashFiles, by: string, at: string) {
+  return writeScopedFiles(writer, cash, 'cash', files, by, at);
+}
+
+export function writeScopedFiles(writer: FileWriter, parent: DocumentReference, scopeType: 'cash' | 'correspondence',
+  files: PreparedCashFiles, by: string, at: string) {
   return files.map(({ file, bytes, sha256 }) => {
     const ref = doc(db, 'files', file.id);
     const chunks = Math.ceil(bytes.length / chunkSize);
-    writer.set(ref, { name: file.name, type: file.type, size: file.size, chunks, parent: cash.path,
-      scopeType: 'cash', scopeId: cash.id, by, at, sha256 });
+    writer.set(ref, { name: file.name, type: file.type, size: file.size, chunks, parent: parent.path,
+      scopeType, scopeId: parent.id, by, at, sha256 });
     for (let i = 0; i < chunks; i++) {
       writer.set(doc(ref, 'chunks', String(i)), { i,
         data: Bytes.fromUint8Array(bytes.subarray(i * chunkSize, (i + 1) * chunkSize)) });
@@ -68,23 +73,35 @@ export async function readCashFile(cashId: string, fileId: string) {
       || meta.chunks !== Math.max(1, Math.ceil(file.size / chunkSize))) {
     throw new Error('Chứng từ không còn thuộc hồ sơ này hoặc dữ liệu tệp không hợp lệ.');
   }
-  const chunks = await getDocsFromServer(collection(fileRef, 'chunks'));
-  const bytes = new Uint8Array(file.size);
-  if (chunks.size !== meta.chunks) throw new Error('Chứng từ chưa đủ dữ liệu.');
-  for (let i = 0; i < meta.chunks; i++) {
-    const chunk = chunks.docs.find(entry => entry.id === String(i))?.data();
-    const offset = i * chunkSize;
-    if (!chunk || chunk.i !== i || !(chunk.data instanceof Bytes)) throw new Error('Chứng từ chưa đủ dữ liệu.');
-    const part = chunk.data.toUint8Array();
-    if (part.length !== Math.min(chunkSize, file.size - offset)) throw new Error('Chứng từ có dữ liệu không hợp lệ.');
-    bytes.set(part, offset);
-  }
-  if (meta.sha256 && meta.sha256 !== bytesToHex(sha256(bytes))) throw new Error('Không xác minh được nội dung chứng từ.');
+  const bytes = await readScopedFileBytes(fileRef, file.size, meta.chunks, meta.sha256);
   const type = typeof meta.type === 'string' && mimePattern.test(meta.type) ? meta.type : binary;
-  const pdf = type === 'application/pdf' && [37, 80, 68, 70, 45].every((byte, index) => bytes[index] === byte);
+  const pdf = type === 'application/pdf' && hasPdfHeader(bytes);
   const image = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(type);
   const safeName = file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+$/, '_') || 'chung-tu';
   return { bytes, type, name: safeName, kind: pdf ? 'pdf' as const : image ? 'image' as const : 'file' as const };
+}
+
+export function hasPdfHeader(bytes: Uint8Array) {
+  return [37, 80, 68, 70, 45].every((byte, index) => bytes[index] === byte);
+}
+
+export async function readScopedFileBytes(fileRef: DocumentReference, size: number, count: number, hash?: string) {
+  if (!Number.isInteger(size) || size < 0 || size > maxSize || count !== Math.max(1, Math.ceil(size / chunkSize))) {
+    throw new Error('Kích thước hoặc số phần của tệp không hợp lệ.');
+  }
+  const chunks = await getDocsFromServer(collection(fileRef, 'chunks'));
+  const bytes = new Uint8Array(size);
+  if (chunks.size !== count) throw new Error('Tệp chưa đủ dữ liệu.');
+  for (let i = 0; i < count; i++) {
+    const chunk = chunks.docs.find(entry => entry.id === String(i))?.data();
+    const offset = i * chunkSize;
+    if (!chunk || chunk.i !== i || !(chunk.data instanceof Bytes)) throw new Error('Tệp chưa đủ dữ liệu.');
+    const part = chunk.data.toUint8Array();
+    if (part.length !== Math.min(chunkSize, size - offset)) throw new Error('Tệp có dữ liệu không hợp lệ.');
+    bytes.set(part, offset);
+  }
+  if (hash && hash !== bytesToHex(sha256(bytes))) throw new Error('Không xác minh được nội dung tệp.');
+  return bytes;
 }
 
 export type OpenCashFile = Awaited<ReturnType<typeof readCashFile>>;

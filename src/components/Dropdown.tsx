@@ -7,7 +7,7 @@ import { createThemedStyles } from '../theme/theme';
 import { ToastLayer } from './Toast';
 
 export function Dropdown<Value extends string | number>({ label, value, choices, onChange, style, disabled,
-  singleLineValue = false, fallbackLabel = String(value), menuLabel = label, hideLabel = false }: {
+  singleLineValue = false, fallbackLabel = String(value), menuLabel = label, hideLabel = false, highlightSelection = true }: {
   label: string; value: Value; choices: readonly { value: Value; label: string }[]; onChange: (value: Value) => void;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
@@ -15,6 +15,7 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
   fallbackLabel?: string;
   menuLabel?: string;
   hideLabel?: boolean;
+  highlightSelection?: boolean;
 }) {
   const styles = useStyles();
   const trigger = useRef<ComponentRef<typeof Pressable>>(null);
@@ -51,7 +52,7 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
       <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${label}: ${selectedLabel}`}
         aria-expanded={!!anchor} disabled={disabled} onPress={open}
         style={[styles.filterButton, { height: 44 * Math.max(1, fontScale) },
-          (anchor || value !== choices[0]?.value) && styles.selected, disabled && styles.disabled]}>
+          highlightSelection && (anchor || value !== choices[0]?.value) && styles.selected, disabled && styles.disabled]}>
         <Text aria-hidden style={[styles.activeLabel, styles.filterArrow, styles.filterArrowSpacer]}>{arrow}</Text>
         <Text numberOfLines={singleLineValue ? 1 : 2} ellipsizeMode="tail"
           style={[styles.activeLabel, styles.filterTriggerValue]}>{selectedLabel}</Text>
@@ -71,8 +72,8 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
                   <Pressable key={choice.value} accessibilityRole="radio" aria-checked={value === choice.value}
                     onPress={() => { close(); onChange(choice.value); }}
                     style={({ pressed }) => [styles.filterOption,
-                      (value === choice.value || pressed) && styles.filterOptionSelected]}>
-                    <Text style={[value === choice.value ? styles.activeLabel : styles.controlLabel, styles.filterValue]}>
+                      ((highlightSelection && value === choice.value) || pressed) && styles.filterOptionSelected]}>
+                    <Text style={[highlightSelection && value === choice.value ? styles.activeLabel : styles.controlLabel, styles.filterValue]}>
                       {choice.label}
                     </Text>
                   </Pressable>

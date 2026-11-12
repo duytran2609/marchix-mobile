@@ -32,7 +32,7 @@ test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặ
   await page.getByLabel('Tìm văn bản', { exact: true }).fill('ban giao');
   await incoming.click();
   await expect(page.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' })).toBeVisible();
-  await expect(page.getByText('01/2026', { exact: true })).toBeVisible();
+  await expect(page.getByText('01/2025', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Về sổ văn thư' }).click();
   await page.getByLabel('Tìm văn bản', { exact: true }).clear();
   await page.getByRole('button', { name: 'Văn bản đi', exact: true }).click();
@@ -50,7 +50,18 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
   const documents = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
   const headers = { Authorization: 'Bearer owner' };
   let id = '';
-  const requestCard = (target: typeof page) => target.getByRole('button').filter({ hasText: reason });
+  let overtimeId = '';
+  const requestCard = (target: typeof page) => target.getByTestId(`request-${id}`);
+
+  async function findRequest(reason: string) {
+    const records = await request.post(documents + ':runQuery', { headers, data: { structuredQuery: {
+      from: [{ collectionId: 'requests' }], where: { fieldFilter: {
+        field: { fieldPath: 'reason' }, op: 'EQUAL', value: { stringValue: reason },
+      } },
+    } } });
+    expect(records.ok()).toBeTruthy();
+    return (await records.json())[0].document;
+  }
 
   async function openRequests(target: typeof page, login: string) {
     await target.goto(previewUrl);
@@ -63,45 +74,142 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
   try {
     await openRequests(page, 'Đăng nhập Google (mô phỏng)');
     await page.getByRole('button', { name: '+ Tạo đơn' }).click();
-    await expect(page.getByRole('button', { name: 'Người giao việc demo', exact: true })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('button', { name: 'Tạm ứng lương', exact: true }).click();
+    const popup = page.getByRole('dialog', { name: 'Tạo đơn' });
+    await expect(popup).toBeVisible();
+    const popupWidth = (await popup.boundingBox())!.width;
+    const typeButton = popup.getByRole('button', { name: /^Loại đơn:/ });
+    const neutralBackground = await typeButton.evaluate(node => getComputedStyle(node).backgroundColor);
+    async function selectType(name: string) {
+      await typeButton.click();
+      await page.getByRole('radiogroup', { name: 'Loại đơn' }).getByRole('radio', { name, exact: true }).click();
+      expect((await popup.boundingBox())!.width).toBeCloseTo(popupWidth);
+      await expect(typeButton).toHaveCSS('background-color', neutralBackground);
+    }
+    const today = todayInVietnam();
+    await popup.getByLabel('Số ngày').fill('2,5');
+    await expect(popup.getByRole('button', { name: 'Đến ngày, ' + formatTaskDate(shiftDay(today, 2)) })).toBeVisible();
+    const dateButton = popup.getByRole('button', { name: /^Đến ngày,/ });
+    await dateButton.scrollIntoViewIfNeeded();
+    const daysY = (await popup.getByLabel('Số ngày').boundingBox())!.y;
+    await dateButton.click();
+    await expect(popup.getByRole('button', { name: 'Tháng sau', exact: true })).toBeVisible();
+    expect((await popup.getByLabel('Số ngày').boundingBox())!.y).toBeCloseTo(daysY);
+    if (today.slice(0, 7) !== shiftDay(today, 2).slice(0, 7)) {
+      await popup.getByRole('button', { name: 'Tháng trước', exact: true }).click();
+    }
+    await popup.getByRole('button', { name: 'Ngày ' + formatTaskDate(today), exact: true }).click();
+    await expect(popup.getByLabel('Số ngày')).toHaveValue('1');
+    await selectType('Công tác');
+    await expect(popup.getByLabel('Địa điểm công tác')).toBeVisible();
+    await selectType('Làm thêm giờ');
+    await expect(popup.getByRole('button', { name: /^Ngày,/ })).toBeVisible();
+    await expect(popup.getByRole('button', { name: /^Đến ngày,/ })).toHaveCount(0);
+    const hours = popup.getByLabel('Số giờ làm thêm');
+    await hours.pressSequentially('2,5');
+    await expect(hours).toHaveValue('2,5');
+    await hours.fill('1.25');
+    await expect(hours).toHaveValue('1.25');
+    const taskTitle = 'Kiểm tra giao diện trên điện thoại';
+    const taskChoice = popup.getByRole('checkbox', { name: taskTitle });
+    await expect(taskChoice).toHaveText(taskTitle);
+    await taskChoice.click();
+    await popup.getByLabel('Tìm công việc phụ trách').fill('cap nhat');
+    await popup.getByRole('checkbox', { name: 'Cập nhật hướng dẫn bàn giao' }).click();
+    await expect(popup.getByText('Công việc phụ trách · Đã chọn 2')).toBeVisible();
+    await expect(popup.getByRole('button', { name: 'Bỏ chọn ' + taskTitle })).toBeVisible();
+    const overtimeReason = 'Làm thêm kiểm thử ' + Date.now();
+    await popup.getByLabel('Lý do làm thêm giờ').fill(overtimeReason);
+    await popup.getByRole('button', { name: 'Gửi đơn' }).click();
+    await expect(popup).toHaveCount(0);
+    const savedOvertime = await findRequest(overtimeReason);
+    overtimeId = savedOvertime.name.split('/').at(-1);
+    expect(savedOvertime.fields.overtime.mapValue.fields.tasks.arrayValue.values
+      .map((item: { mapValue: { fields: { id: { stringValue: string } } } }) => item.mapValue.fields.id.stringValue))
+      .toEqual(['kiem-tra-giao-dien', 'cap-nhat-huong-dan']);
+    await page.getByTestId(`request-${overtimeId}`).click();
+    await expect(page.getByText('Công việc phụ trách · Đã chọn 2')).toBeVisible();
+    await expect(page.getByText(/^Người tạo ·/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Xóa đơn', exact: true }).click();
+    const deletePopup = page.getByRole('alertdialog', { name: 'Xác nhận xóa đơn' });
+    await expect(deletePopup.getByRole('button', { name: 'Hủy' })).toBeFocused();
+    await deletePopup.getByRole('button', { name: 'Hủy' }).click();
+    await expect(deletePopup).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Chi tiết đơn' })).toBeVisible();
+    await page.getByRole('button', { name: 'Đóng đơn' }).click();
+    await page.getByRole('button', { name: '+ Tạo đơn' }).click();
+    await selectType('Đề xuất khác');
+    await selectType('Tạm ứng lương');
     await page.getByLabel('Lý do / nội dung').fill(reason);
     await page.getByRole('button', { name: 'Gửi đơn' }).click();
     await expect(page.getByRole('alert')).toContainText('Nhập số tiền tạm ứng');
     await page.getByLabel('Số tiền tạm ứng (VND)').fill('750000');
+    await expect(page.getByLabel('Số tiền tạm ứng (VND)')).toHaveValue('750.000');
+    const month = today.slice(5, 7);
+    const year = today.slice(0, 4);
+    await popup.getByRole('button', { name: `Đổi tháng năm, ${month}/${year}` }).click();
+    await popup.getByRole('button', { name: 'Năm sau' }).click();
+    await popup.getByRole('button', { name: 'Tháng 01' }).click();
+    await expect(popup.getByRole('button', { name: `Đổi tháng năm, 01/${Number(year) + 1}` })).toBeVisible();
     await page.getByRole('button', { name: 'Gửi đơn' }).click();
     await expect(page.getByRole('heading', { name: 'Tạo đơn', exact: true })).toHaveCount(0);
+    id = (await findRequest(reason)).name.split('/').at(-1);
+    await expect(requestCard(page)).toContainText('Ngày tạo:');
+    await expect(requestCard(page)).not.toContainText(reason);
     await requestCard(page).click();
     await expect(page.getByRole('heading', { name: 'Chi tiết đơn' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Duyệt', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Đóng đơn' }).click();
 
-    const records = await request.post(documents + ':runQuery', { headers, data: { structuredQuery: {
-      from: [{ collectionId: 'requests' }], where: { fieldFilter: {
-        field: { fieldPath: 'reason' }, op: 'EQUAL', value: { stringValue: reason },
-      } },
-    } } });
-    expect(records.ok()).toBeTruthy();
-    id = (await records.json())[0].document.name.split('/').at(-1);
-
     await openRequests(admin, 'Đăng nhập quản trị (mô phỏng)');
     await requestCard(admin).click();
-    await admin.getByRole('button', { name: 'Người giao việc demo', exact: true }).click();
+    await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
     await expect(admin.getByRole('heading', { name: 'Chi tiết đơn' })).toHaveCount(0);
 
     await openRequests(reviewer, 'Đăng nhập người giao việc (mô phỏng)');
-    await requestCard(reviewer).click();
+    await reviewer.getByRole('button', { name: 'Mở menu' }).click();
+    await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
+    const queuedRequest = reviewer.getByRole('button', { name: 'Mở hồ sơ: Tạm ứng lương: ' + reason, exact: true });
+    await queuedRequest.click();
     await reviewer.getByRole('button', { name: 'Từ chối', exact: true }).click();
     await expect(reviewer.getByRole('alert')).toContainText('Nhập lý do từ chối');
     await reviewer.getByLabel('Ý kiến xử lý').fill('Đã kiểm tra');
     await reviewer.getByRole('button', { name: 'Duyệt', exact: true }).click();
+    await expect(reviewer.getByRole('heading', { name: 'PHÊ DUYỆT', exact: true })).toBeVisible();
+    await expect(queuedRequest).toHaveCount(0);
+    await reviewer.getByRole('button', { name: 'Mở menu' }).click();
+    await reviewer.getByRole('dialog').getByRole('button', { name: 'Đơn từ', exact: true }).click();
     await expect(requestCard(page)).toContainText('Đã duyệt');
     const expense = await request.get(documents + '/cash/tu_' + id, { headers });
     expect(expense.ok()).toBeTruthy();
     expect((await expense.json()).fields).toMatchObject({
       amount: { integerValue: '750000' }, status: { stringValue: 'Chờ duyệt' }, requestId: { stringValue: id },
     });
+
+    const adminOvertime = admin.getByTestId(`request-${overtimeId}`);
+    await adminOvertime.click();
+    await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
+    await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+    const attendanceRow = page.getByRole('table').getByRole('row')
+      .filter({ hasText: ' · ' + today.slice(8) + '/' + today.slice(5, 7) });
+    const workedCell = attendanceRow.getByRole('cell').nth(2);
+    await expect(workedCell).toBeVisible();
+    const before = (await workedCell.innerText()).trim();
+    const [hour, minute] = before === '–' ? [0, 0] : before.split(':').map(Number);
+    const total = hour * 60 + minute + 75;
+    const approvedTotal = [Math.floor(total / 60), total % 60].map(part => String(part).padStart(2, '0')).join(':');
+    await reviewer.getByTestId(`request-${overtimeId}`).click();
+    await reviewer.getByRole('button', { name: 'Duyệt', exact: true }).click();
+    await expect(workedCell).toHaveText(approvedTotal);
+    await expect(adminOvertime).toContainText('Đã duyệt');
+    await adminOvertime.click();
+    await admin.getByRole('button', { name: 'Xóa đơn', exact: true }).click();
+    await admin.getByRole('alertdialog', { name: 'Xác nhận xóa đơn' })
+      .getByRole('button', { name: 'Xác nhận xóa', exact: true }).click();
+    await expect(adminOvertime).toHaveCount(0);
+    await expect(workedCell).toHaveText(before);
   } finally {
     await admin.close();
     await reviewer.close();
@@ -109,6 +217,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
       await request.delete(documents + '/cash/tu_' + id, { headers });
       await request.delete(documents + '/requests/' + id, { headers });
     }
+    if (overtimeId) await request.delete(documents + '/requests/' + overtimeId, { headers });
   }
 });
 
@@ -296,13 +405,16 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
 });
 
 test('Dự án lọc công việc theo dự án và mở popup trên trang Công việc', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
   async function openProject() {
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Dự án', exact: true }).click();
     await page.getByRole('region', { name: 'Danh sách dự án' })
-      .getByRole('button', { name: 'Marchix Mobile · Demo', exact: true }).click();
+      .getByRole('button', { name: /^Chọn dự án:/ }).click();
+    await page.getByRole('radiogroup', { name: 'Chọn dự án' })
+      .getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
   }
   await openProject();
   const list = page.getByRole('region', { name: 'Danh sách dự án' });
@@ -313,16 +425,23 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(profile).toContainText('Mã dự án: DA-marchix-mobile-demo');
   await expect(profile).toContainText('Thời gian: 10/11/2026 → 30/11/2026');
   await expect(profile).toContainText('Người phụ trách: Người giao việc demo');
-  await expect(page.getByRole('region', { name: 'Tổng quan', exact: true })
-    .getByText('Mục tiêu / kết quả bàn giao')).toBeVisible();
+  const overview = page.getByRole('region', { name: 'Tổng quan', exact: true });
+  await expect(overview).toContainText('Mục tiêu / kết quả bàn giao: Bàn giao bản thử trên điện thoại.');
+  await expect(overview).toContainText('Giai đoạn hiện tại: Kiểm thử nội bộ');
+  await expect(overview).toContainText('Rủi ro / cần quyết định: Xác nhận luồng đăng nhập trên thiết bị thật.');
+  await expect(overview).toContainText('Mô tả ngắn: Dữ liệu thử nghiệm.');
+  const tabs = profile.getByRole('tablist').getByRole('tab');
+  await expect(tabs).toHaveCount(3);
+  const positions = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
+  expect(new Set(positions).size).toBe(1);
   await expect(page.getByRole('button', { name: '+ Thêm dự án' })).toHaveCount(0);
 
-  await profile.getByRole('button', { name: 'Tài chính', exact: true }).click();
+  await profile.getByRole('tab', { name: 'Tài chính', exact: true }).click();
   const finance = page.getByRole('region', { name: 'Tài chính', exact: true });
   await expect(finance.getByRole('heading', { name: 'Tài chính dự án' })).toBeVisible();
   await expect(finance.getByText(/Trần vốn dự án/)).toBeVisible();
   const work = page.getByRole('region', { name: 'Công việc đính kèm', exact: true });
-  await profile.getByRole('button', { name: 'Công việc đính kèm' }).click();
+  await profile.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await expect(work.getByRole('heading', { name: 'Việc trong dự án' })).toBeVisible();
   await expect(work.getByRole('heading', { name: 'Mốc bàn giao' })).toHaveCount(0);
   await expect(work.getByRole('button', { name: 'Mở công việc: Xác nhận phạm vi bản thử' })).toBeVisible();
@@ -338,7 +457,7 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(page.getByRole('heading', { name: 'CÔNG VIỆC', exact: true })).toBeVisible();
 
   await openProject();
-  await profile.getByRole('button', { name: 'Công việc đính kèm' }).click();
+  await profile.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await work.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại' }).click();
   await expect(popup.getByRole('heading', { name: 'Kiểm tra giao diện trên điện thoại' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -370,8 +489,7 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
     await expect(page.getByRole('heading', { name: 'Đối chiếu checklist phát hành' })).toBeVisible();
     await page.getByRole('button', { name: '‹ Tổng quan', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Phê duyệt', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Việc chờ duyệt' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^(Cảnh báo|Phê duyệt)/ })).toHaveCount(0);
 
     await openOverview(admin, 'Đăng nhập quản trị (mô phỏng)');
     await expect(admin.getByText('6 tháng gần nhất', { exact: true })).toBeVisible();
@@ -402,7 +520,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   const items = drawer.getByRole('button');
   const labels = [
     'Đóng menu', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
-    'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Cài đặt', 'Đăng xuất',
+    'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Văn thư', 'Cài đặt', 'Đăng xuất',
   ];
   await expect(items).toHaveCount(labels.length);
   for (const [index, label] of labels.entries()) await expect(items.nth(index)).toHaveAccessibleName(label);
@@ -434,7 +552,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await openMenu.click();
   await drawer.getByRole('button', { name: 'Phê duyệt' }).click();
   await expect(drawer).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Việc chờ duyệt' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'PHÊ DUYỆT', exact: true })).toBeVisible();
 
   await openMenu.click();
   await drawer.getByRole('button', { name: 'Công việc' }).click();

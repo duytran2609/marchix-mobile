@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
+import { Dropdown } from '../components/Dropdown';
 import { ProjectEditor } from '../features/projects/ProjectEditor';
 import { ProjectFinance } from '../features/projects/ProjectFinance';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
@@ -65,10 +66,13 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
         <Button label="Thử lại" secondary onPress={() => { setProjectError(false); setProjectRetry(value => value + 1); }} />
       </> : projects === null ? <ActivityIndicator accessibilityLabel="Đang tải dự án" color={colors.accent} />
         : !projects.length ? <Text style={styles.muted}>Chưa có dự án.</Text>
-        : <View style={styles.choices}>
-          {projects.map(item => <Choice key={item.id} label={item.name} selected={item.id === project?.id}
-            onPress={() => { setBoard({ ...initialTaskBoardOptions, view: 'kanban' }); navigate({ projectId: item.id }); }} />)}
-        </View>}
+        : <Dropdown label="Chọn dự án" hideLabel value={project?.id ?? ''}
+          choices={projects.map(item => ({ value: item.id, label: item.name }))}
+          onChange={projectId => {
+            if (projectId === project?.id) return;
+            setBoard({ ...initialTaskBoardOptions, view: 'kanban' });
+            navigate({ projectId });
+          }} />}
     </View>
     {project && <>
       <View role="region" accessibilityLabel="Thông tin dự án" style={styles.panel}>
@@ -86,19 +90,26 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
           </Text>
         </View>
         {isAdmin && <Button label="Chỉnh sửa dự án" secondary onPress={() => setEditor(project)} />}
-        <View accessibilityLabel="Mục trong hồ sơ dự án" style={styles.choices}>
-          {sections.map(([id, label]) => <Choice key={id} label={label} selected={section === id}
-            onPress={() => navigate({ projectId: project.id, section: id })} />)}
+        <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
+          style={[local.tabs, { backgroundColor: colors.surfaceMuted }]}>
+          {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
+            accessibilityState={{ selected: section === id }}
+            onPress={() => navigate({ projectId: project.id, section: id })}
+            style={[local.tab, id === 'work' && local.workTab, section === id && { backgroundColor: colors.paper }]}>
+            <Text style={[local.tabLabel, { color: colors.muted }, section === id && { color: colors.accent, fontWeight: '800' }]}>
+              {label}
+            </Text>
+          </Pressable>)}
         </View>
       </View>
       <View role="region" accessibilityLabel={sections.find(([id]) => id === section)?.[1]} style={styles.panel}>
         {section === 'finance' ? <ProjectFinance key={`${project.id}-${canReadCash}`} project={project}
           canReadCash={canReadCash} isAdmin={isAdmin} /> : <>
-          {section === 'overview' && <View style={styles.stack}>
-            <Detail label="Mục tiêu / kết quả bàn giao" value={project.goal || project.note} divider={false} />
+          {section === 'overview' && <View style={local.metadata}>
+            <Detail label="Mục tiêu / kết quả bàn giao" value={project.goal} />
             <Detail label="Giai đoạn hiện tại" value={project.phase} />
             <Detail label="Rủi ro / cần quyết định" value={project.risks} />
-            {project.goal && project.note ? <Detail label="Mô tả ngắn" value={project.note} /> : null}
+            <Detail label="Mô tả ngắn" value={project.note} />
           </View>}
           {taskError ? <View style={styles.stack}>
             <Text accessibilityRole="alert" style={styles.error}>Không tải được đầy đủ công việc dự án.</Text>
@@ -137,20 +148,11 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
   </>;
 }
 
-function Detail({ label, value, divider = true }: { label: string; value?: string; divider?: boolean }) {
+function Detail({ label, value }: { label: string; value?: string }) {
   const styles = useScreenStyles();
-  return <View style={[styles.detailRow, !divider && local.firstDetail]}>
-    <Text style={styles.label}>{label}</Text>
-    <Text selectable style={styles.body}>{value || 'Chưa cập nhật'}</Text>
-  </View>;
-}
-
-function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const styles = useScreenStyles();
-  return <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress}
-    style={[styles.choice, local.choice, selected && styles.selected]}>
-    <Text style={styles.label}>{label}</Text>
-  </Pressable>;
+  return <Text selectable style={styles.muted}>
+    <Text style={local.metaLabel}>{label}: </Text>{value || 'Chưa cập nhật'}
+  </Text>;
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {
@@ -162,10 +164,13 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 }
 
 const local = StyleSheet.create({
-  choice: { maxWidth: '100%' },
+  tabs: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10 },
+  tab: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 8,
+    justifyContent: 'center' },
+  workTab: { flex: 1.65 },
+  tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   metadata: { gap: 4 },
   metaLabel: { fontWeight: '700' },
-  firstDetail: { borderTopWidth: 0, paddingTop: 0 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   metric: { flexBasis: 132, flexGrow: 1, padding: 14, gap: 4 },
 });

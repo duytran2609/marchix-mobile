@@ -15,7 +15,7 @@ Bản Expo + React Native + TypeScript dùng các collection `members` và `task
 | `src/services/firebase/` | Khởi tạo Firebase và thiết lập lưu phiên đăng nhập theo nền tảng. |
 | `functions/`, `scripts/`, `tests/` | Backend, dữ liệu mẫu và kiểm thử. |
 
-Khi thêm màn hình workspace, đặt component trong `src/screens/` và nối màn hình trong `WorkspaceNavigator.tsx`. Nếu màn hình có mục trên menu, khai báo mục đó trong `workspaceRoutes.ts`. Các mục có `native: true` mở trong ứng dụng. Những mục còn lại mở trang tương ứng trên web Quản lý Marchix.
+Khi thêm màn hình workspace, đặt component trong `src/screens/` và nối màn hình trong `WorkspaceNavigator.tsx`. Nếu màn hình có mục trên menu, khai báo mục đó trong `workspaceRoutes.ts`. Để mở Quản lý Marchix bản web, dùng nút cạnh chuông thông báo.
 
 ## Chạy trên Windows
 
@@ -24,8 +24,11 @@ Cần Node.js 24 và JDK 21+ trên PATH. Mở PowerShell tại thư mục dự �
 ```powershell
 npm.cmd ci
 npm.cmd ci --prefix functions
+npm.cmd ci --prefix tools/firebase-cli
 npm.cmd run emulator
 ```
+
+Firebase CLI dùng thư mục `tools/firebase-cli/node_modules` riêng. Có thể chạy lại `npm.cmd ci` ở thư mục gốc khi emulator đang chạy. Nếu cần chạy lại `npm.cmd ci --prefix tools/firebase-cli`, hãy dừng emulator trước bằng Ctrl+C.
 
 Đợi Firebase báo các emulator đã sẵn sàng. Mở PowerShell thứ hai tại cùng thư mục.
 

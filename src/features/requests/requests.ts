@@ -1,12 +1,17 @@
-import { addDoc, collection, doc, getDocsFromServer, onSnapshot, or, query, runTransaction, where } from 'firebase/firestore';
+import { addDoc, collection, deleteField, doc, getDocsFromServer, onSnapshot, or, query, runTransaction, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, pilotMode, taskFunctions } from '../../services/firebase/firebase';
 import { todayInVietnam } from '../tasks/taskDates';
 
 export const requestTypes = ['Nghỉ phép', 'Tạm ứng lương', 'Công tác', 'Làm thêm giờ', 'Đề xuất khác'] as const;
 export const pendingRequest = 'Chờ duyệt';
+export const overtimeTaskLimit = 10;
+export type OvertimeTask = { id: string; title: string };
+type OvertimeDetails = { hours: number } & ({ tasks: OvertimeTask[] } | { taskId: string; taskTitle: string });
 export type RequestFields = {
   type: string; reason: string; from: string; to: string; days: number; amount: number; month: string;
+  trip?: { destination: string; host: string; estimatedCost: number };
+  overtime?: OvertimeDetails;
 };
 export type StaffRequest = RequestFields & {
   id: string; status: string; createdBy: string; createdAt?: string; updatedAt?: string;
@@ -14,6 +19,11 @@ export type StaffRequest = RequestFields & {
 };
 export type RequestAccess = { email: string; isAdmin: boolean; canReviewRequests: boolean };
 export type RequestAction = 'edit' | 'route' | 'approve' | 'reject' | 'delete';
+
+export function overtimeTasks(overtime?: OvertimeDetails): OvertimeTask[] {
+  if (!overtime) return [];
+  return 'tasks' in overtime ? overtime.tasks : [{ id: overtime.taskId, title: overtime.taskTitle }];
+}
 type RequestMember = { email: string; name: string; canReview: boolean };
 const listRequestMembers = httpsCallable<void, RequestMember[]>(taskFunctions, 'listMobileRequestMembers', { timeout: 12000 });
 
@@ -74,7 +84,10 @@ export async function changeRequest(row: StaffRequest, access: RequestAccess, ac
     if (action === 'delete') {
       transaction.delete(ref);
     } else if (action === 'edit') {
-      transaction.update(ref, { ...options.fields, ...patch });
+      transaction.update(ref, { ...options.fields, ...patch,
+        ...(current.trip && !options.fields?.trip ? { trip: deleteField() } : {}),
+        ...(current.overtime && !options.fields?.overtime ? { overtime: deleteField() } : {}),
+      });
     } else if (action === 'route') {
       transaction.update(ref, { ...patch, approverEmail: options.value });
     } else {

@@ -14,8 +14,8 @@ const mediaType = /^[\w.+-]+\/[\w.+-]+$/;
 
 export type PickedAttachment = Pick<TaskAttachment, 'name' | 'type' | 'size'> & { read: () => Promise<string> };
 
-export async function pickTaskAttachments(): Promise<PickedAttachment[]> {
-  const result = await getDocumentAsync({ multiple: true, copyToCacheDirectory: true, base64: false });
+export async function pickTaskAttachments(options: { multiple?: boolean; type?: string } = {}): Promise<PickedAttachment[]> {
+  const result = await getDocumentAsync({ multiple: true, copyToCacheDirectory: true, base64: false, ...options });
   if (result.canceled) return [];
   if (Platform.OS === 'web') result.assets.forEach(asset => URL.revokeObjectURL(asset.uri));
   return result.assets.map(asset => {

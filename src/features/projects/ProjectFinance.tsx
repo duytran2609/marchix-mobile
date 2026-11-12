@@ -1,8 +1,7 @@
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Linking, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button } from '../../components/Button';
-import { useToast } from '../../components/Toast';
 import { db, pilotMode } from '../../services/firebase/firebase';
 import { useScreenStyles } from '../../theme/screenStyles';
 import type { Project } from './projects';
@@ -20,7 +19,6 @@ export function ProjectFinance({ project, canReadCash, isAdmin }: {
   project: Project; canReadCash: boolean; isAdmin: boolean;
 }) {
   const styles = useScreenStyles();
-  const showToast = useToast();
   const [totals, setTotals] = useState<{ paid: number; committed: number; pending: number }>();
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -74,9 +72,5 @@ export function ProjectFinance({ project, canReadCash, isAdmin }: {
       <FinanceField label="Chờ duyệt / kiểm tra" value={currency.format(totals.pending)} />
       <FinanceField label="Còn dưới trần sau cam kết" value={cap ? currency.format(cap - totals.paid - totals.committed) : '–'} />
     </> : <Text style={styles.muted}>Đang tải số liệu thu chi…</Text>)}
-    <Button label="Mở Dự án trên web" secondary onPress={() => {
-      void Linking.openURL('https://quanly.marchix.vn/#du-an').catch(() => showToast('Không mở được trang Quản lý Marchix.', 'error'));
-    }} />
-    <Text style={styles.muted}>Chọn {project.name} trên web để lập đề nghị chi, xem chứng từ hoặc làm dự toán theo quyền của bạn.</Text>
   </View>;
 }

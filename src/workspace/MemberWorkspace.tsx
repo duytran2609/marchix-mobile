@@ -8,7 +8,7 @@ import { notificationTaskTarget } from '../features/notifications/notifications'
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
-import { isNativeTab, workspaceTabForLink } from '../navigation/workspaceRoutes';
+import { workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
 import { auth } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
@@ -29,19 +29,15 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [route]);
 
-  function openWeb(tab: WorkspaceTab) {
-    void Linking.openURL(`https://quanly.marchix.vn/#${tab}`).catch(() =>
+  function openWeb() {
+    void Linking.openURL('https://quanly.marchix.vn/').catch(() =>
       showToast('Không mở được trang quản lý Marchix. Vui lòng thử lại.', 'error'));
   }
 
   function selectTab(tab: WorkspaceTab) {
     setMenuOpen(false);
-    if (isNativeTab(tab)) {
-      setShowAssignment(false);
-      setRoute(current => current.screen === tab ? current : { screen: tab });
-    } else {
-      openWeb(tab);
-    }
+    setShowAssignment(false);
+    setRoute(current => current.screen === tab ? current : { screen: tab });
   }
 
   function openNote(note: WorkspaceNotification) {
@@ -63,7 +59,8 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   return (
     <>
       <View style={styles.workspaceHeader}>
-        <WorkspaceHeader menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)} inbox={{ email, onOpenNote: openNote }} />
+        <WorkspaceHeader menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)}
+          inbox={{ email, onOpenNote: openNote }} onOpenWeb={openWeb} />
       </View>
       <ScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,

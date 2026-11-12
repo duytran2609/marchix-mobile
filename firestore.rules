@@ -201,6 +201,7 @@ service cloud.firestore {
           && data.net == data.gross - data.insEmp - data.pit - data.deduction - data.advance
           && data.companyCost == data.gross + data.insCo + data.kpcd
           && data.updatedBy == email() && isoDate(data.updatedAt)
+          && !('employeeConfirmedAt' in data)
           && (data.status == 'Nháp' || (data.lockedBy == email() && data.lockedAt == data.updatedAt));
       }
       allow read: if activeMember() && (attendanceAdmin()
@@ -209,9 +210,14 @@ service cloud.firestore {
       allow update: if attendanceAdmin() && (
         (resource.data.get('status', 'Nháp') in ['', 'Nháp'] && validSlip(request.resource.data))
         || (resource.data.status == 'Đã chốt' && request.resource.data.status == 'Nháp'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy', 'employeeConfirmedAt'])
+          && !('employeeConfirmedAt' in request.resource.data)
           && request.resource.data.updatedBy == email() && isoDate(request.resource.data.updatedAt))
       );
+      allow update: if activeMember() && resource.data.email == email() && resource.data.status == 'Đã chốt'
+        && !('employeeConfirmedAt' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['employeeConfirmedAt'])
+        && isoDate(request.resource.data.employeeConfirmedAt);
     }
     function hasCashGrant(account, grant) {
       let membership = get(/databases/$(database)/documents/members/$(account)).data;
@@ -265,8 +271,32 @@ service cloud.firestore {
           && cash.get('files', []).hasAny([cashFileEntry(fileId, meta, meta.type)]);
       }
 
+      function isRecordPdf(meta) {
+        return meta.get('scopeType', '') == 'correspondence' && meta.scopeId is string
+          && meta.parent == 'correspondence/' + meta.scopeId;
+      }
+      function recordPath(scopeId) {
+        return /databases/$(database)/documents/correspondence/$(scopeId);
+      }
+      function readableRecordPdf(meta) {
+        return isRecordPdf(meta) && recordReadable(get(recordPath(meta.scopeId)).data);
+      }
+      function validRecordPdf(meta) {
+        let record = getAfter(recordPath(meta.scopeId)).data;
+        return meta.keys().hasOnly(['name','type','size','chunks','parent','scopeType','scopeId','by','at','sha256'])
+          && isRecordPdf(meta) && record.fileId == fileId && record.fileName == meta.name
+          && record.updatedAt == request.time && record.updatedBy == email()
+          && meta.by == email() && isoDate(meta.at)
+          && meta.name is string && meta.name.size() > 0 && meta.name.size() <= 255
+          && meta.type == 'application/pdf' && meta.size is int && meta.size > 0 && meta.size <= 5242880
+          && meta.chunks is int && meta.chunks >= 1 && meta.chunks <= 6
+          && meta.size > (meta.chunks - 1) * 921600 && meta.size <= meta.chunks * 921600
+          && meta.sha256 is string && meta.sha256.matches('^[0-9a-f]{64}$');
+      }
       allow get: if activeMember() && isCashFile(resource.data) && canReadFile(resource.data);
       allow create: if activeMember() && isCashFile(request.resource.data) && validCashFile(request.resource.data);
+      allow get: if activeMember() && readableRecordPdf(resource.data);
+      allow create: if attendanceAdmin() && validRecordPdf(request.resource.data);
 
       match /chunks/{chunkId} {
         function filePath() {
@@ -283,8 +313,17 @@ service cloud.firestore {
             && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
             && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
         }
+        function validRecordChunk(data) {
+          let meta = getAfter(filePath()).data;
+          return !exists(filePath()) && isRecordPdf(meta) && meta.by == email()
+            && data.keys().hasOnly(['i', 'data']) && data.i is int && chunkId.matches('^[0-5]$')
+            && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
+            && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
+        }
         allow read: if activeMember() && readableCashChunk();
         allow create: if activeMember() && validCashChunk(request.resource.data);
+        allow read: if activeMember() && readableRecordPdf(get(filePath()).data);
+        allow create: if attendanceAdmin() && validRecordChunk(request.resource.data);
       }
     }
 
@@ -468,6 +507,44 @@ service cloud.firestore {
         return ['type', 'from', 'to', 'days', 'amount', 'month', 'reason'];
       }
 
+      function requestOptionalFields() {
+        return ['trip', 'overtime'];
+      }
+
+      function validTrip(trip) {
+        return trip is map && trip.keys().hasOnly(['destination', 'host', 'estimatedCost'])
+          && shortText(trip.destination) && trip.destination.matches('(?s).*[^\\s].*')
+          && shortText(trip.host) && trip.estimatedCost is int
+          && trip.estimatedCost >= 0 && trip.estimatedCost <= 999999999999999;
+      }
+
+      function validOvertimeTask(taskId, title) {
+        return taskId is string && taskId.matches('^[^/]{1,250}$')
+          && shortText(title) && title.matches('(?s).*[^\\s].*');
+      }
+
+      function validOvertimeTaskAt(tasks, index) {
+        return tasks.size() <= index || (tasks[index] is map
+          && tasks[index].keys().hasOnly(['id', 'title'])
+          && validOvertimeTask(tasks[index].id, tasks[index].title));
+      }
+
+      function validOvertimeTasks(tasks) {
+        return tasks is list && tasks.size() >= 1 && tasks.size() <= 10
+          && validOvertimeTaskAt(tasks, 0) && validOvertimeTaskAt(tasks, 1)
+          && validOvertimeTaskAt(tasks, 2) && validOvertimeTaskAt(tasks, 3)
+          && validOvertimeTaskAt(tasks, 4) && validOvertimeTaskAt(tasks, 5)
+          && validOvertimeTaskAt(tasks, 6) && validOvertimeTaskAt(tasks, 7)
+          && validOvertimeTaskAt(tasks, 8) && validOvertimeTaskAt(tasks, 9);
+      }
+
+      function validOvertime(overtime) {
+        return overtime is map && overtime.hours is number && overtime.hours > 0 && overtime.hours <= 24
+          && ((overtime.keys().hasOnly(['hours', 'tasks']) && validOvertimeTasks(overtime.tasks))
+            || (overtime.keys().hasOnly(['hours', 'taskId', 'taskTitle'])
+              && validOvertimeTask(overtime.taskId, overtime.taskTitle)));
+      }
+
       function validRequestDay(value) {
         return value is string && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
       }
@@ -481,6 +558,8 @@ service cloud.firestore {
           && data.amount is int && data.amount >= 0 && data.amount <= 999999999999999
           && data.month is string && (data.month == '' || data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
           && (data.type != 'Tạm ứng lương' || (data.amount > 0 && data.month != ''))
+          && (!('trip' in data) || validTrip(data.trip))
+          && (!('overtime' in data) || validOvertime(data.overtime))
           && data.reason is string && data.reason.size() <= 2000 && data.reason.matches('(?s).*[^\\s].*');
       }
 
@@ -489,7 +568,7 @@ service cloud.firestore {
       }
 
       function validRequestCreate(data) {
-        return data.keys().hasOnly(requestContentFields().concat(
+        return data.keys().hasOnly(requestContentFields().concat(requestOptionalFields()).concat(
           ['status', 'createdBy', 'createdAt', 'updatedAt', 'updatedBy', 'approverEmail']))
           && validRequestContent(data) && validRequestAudit(data)
           && data.status == 'Chờ duyệt' && data.createdBy == email() && data.createdAt == data.updatedAt
@@ -511,7 +590,7 @@ service cloud.firestore {
         let changed = data.diff(resource.data).affectedKeys();
         return resource.data.status == 'Chờ duyệt' && validRequestAudit(data) && (
           (resource.data.createdBy == email()
-            && changed.hasOnly(requestContentFields().concat(['updatedAt', 'updatedBy']))
+            && changed.hasOnly(requestContentFields().concat(requestOptionalFields()).concat(['updatedAt', 'updatedBy']))
             && validRequestContent(data))
           || (attendanceAdmin() && changed.hasOnly(['approverEmail', 'updatedAt', 'updatedBy'])
             && validApprover(data.approverEmail, data.createdBy))
@@ -632,10 +711,225 @@ service cloud.firestore {
 
     // Shared web inbox. Trusted senders supply to, from, title, body, link and createdAt.
     // Recipients can only change read to true. The optional emailed flag is server-managed.
-    // Văn thư: assigneeEmail is an email string and watchers is a list of member emails.
+    function recordChanges() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    // Sổ văn thư: khóa số sổ theo chiều/năm, nhật ký bất biến và một bản PDF.
+    function recordActive(mail) {
+      return mail is string && mail != '' && get(/databases/$(database)/documents/members/$(mail)).data.get('enabled', true) == true;
+    }
+    function recordMember() { return activeMember(); }
+    function recordAdmin() { return attendanceAdmin(); }
+    function recordReadable(d) {
+      return recordAdmin() || (recordMember() && (d.assigneeEmail == email() || email() in d.get('watchers',[])));
+    }
+    function recordWatchers(w) {
+      return w is list && w.size() <= 5 && w.toSet().size() == w.size();
+    }
+    function recordWatcherAt(w, old, i) {
+      return w.size() <= i || w[i] in old || recordActive(w[i]);
+    }
+    function recordWatcherChange(w, old) {
+      return recordWatchers(w)
+        && recordWatcherAt(w, old, 0) && recordWatcherAt(w, old, 1) && recordWatcherAt(w, old, 2)
+        && recordWatcherAt(w, old, 3) && recordWatcherAt(w, old, 4);
+    }
+    function recordNotification(n, id) {
+      let d = getAfter(/databases/$(database)/documents/correspondence/$(n.recordId)).data;
+      let event = getAfter(/databases/$(database)/documents/correspondence/$(n.recordId)/events/$(n.eventId)).data;
+      return n.from == email() && n.keys().hasOnly(['to','from','title','body','link','createdAt','read','emailed','kind','recordId','eventId'])
+        && n.recordId is string && n.to is string && n.to != email()
+        && recordIdPart(n.eventId) && id == n.eventId + '_' + n.to
+        && d.lastEventId == n.eventId && d.updatedBy == email() && event.actor == email() && event.at == d.updatedAt
+        && n.to in d.get('watchers',[])
+        && n.title == 'Văn thư có cập nhật' && n.body == 'Mở hồ sơ để xem chi tiết.'
+        && n.link == '#van-thu/' + n.recordId
+        && n.createdAt is string && n.createdAt.size() <= 35 && n.read == false && n.emailed == false;
+    }
+    function recordDate(value) {
+      return value is string && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+    function recordIdPart(value) {
+      return value is string && value.matches('^[A-Za-z0-9]{20}$');
+    }
+    // Mỗi dãy theo năm Việt Nam. Tăng bộ đếm, cấp số và ghi nhật ký trong cùng một lần lưu.
+    function recordClock() { return request.time + duration.value(7, 'h'); }
+    function recordDigits(value) { return (value < 10 ? '0' : '') + string(value); }
+    function recordToday() {
+      let now = recordClock();
+      return string(now.year()) + '-' + recordDigits(now.month()) + '-' + recordDigits(now.day());
+    }
+    function recordSeries(d) { return d.direction == 'in' ? 'in' : d.get('kind','letter'); }
+    function recordSequenceShape(n) {
+      return n is map && n.keys().hasOnly(['year','seq','at'])
+        && n.year is int && n.seq is int && n.seq >= 1 && n.seq <= 999999 && n.at is timestamp;
+    }
+    function recordAllocation(d, id) {
+      let n = d.numbering;
+      let series = recordSeries(d);
+      let counter = getAfter(/databases/$(database)/documents/recordCounters/$(series + '-' + string(n.year))).data;
+      return recordSequenceShape(n) && n.year == recordClock().year() && n.at == request.time
+        && counter.recordId == id && counter.last == n.seq && counter.updatedAt == request.time
+        && (d.direction == 'in' ? d.serial == string(n.seq)
+          : d.documentOn == recordToday()
+            && d.externalNumber == recordDigits(n.seq) + (series == 'decision' ? '/QĐ-MARCHIX' : '/MARCHIX-VP'));
+    }
+    function counterShape(c, id) {
+      let record = getAfter(/databases/$(database)/documents/correspondence/$(c.recordId)).data;
+      return c.keys().hasOnly(['last','recordId','updatedAt'])
+        && c.recordId is string && c.last is int && c.last >= 1 && c.last <= 999999
+        && c.updatedAt == request.time && record.numbering.at == request.time
+        && record.numbering.seq == c.last && record.numbering.year == recordClock().year()
+        && (record.direction == 'in' || record.status == 'numbered')
+        && id == recordSeries(record) + '-' + string(record.numbering.year);
+    }
+    match /recordCounters/{id} {
+      allow get: if recordMember();
+      allow create: if recordMember() && request.resource.data.last == 1 && counterShape(request.resource.data, id);
+      allow update: if recordMember() && request.resource.data.last == resource.data.last + 1
+        && request.resource.data.recordId != resource.data.recordId && counterShape(request.resource.data, id);
+      allow delete: if false;
+    }
+    function recordShape(d, id) {
+      let signedBy = d.get('signedByName','');
+      let signedOn = d.get('signedOn','');
+      let numbering = d.get('numbering',null);
+      return d.keys().hasOnly(['direction','year','serial','registeredOn','documentOn',
+          'externalNumber','subject','partner','assigneeEmail','dueOn','priority','status',
+          'createdBy','createdAt','updatedBy','updatedAt','lastEventId','fileId','fileName','kind','numbering','watchers','signedByName','signedOn'])
+        && d.direction in ['in','out'] && d.year is string && d.year.matches('^20[0-9]{2}$')
+        && d.get('kind','letter') in ['letter','decision']
+        && (d.direction == 'in' || numbering == null || recordSequenceShape(d.numbering))
+        && d.serial is string
+        && (d.serial == '' && d.direction == 'out' && recordIdPart(id)
+          || d.serial.matches('^[1-9][0-9]{0,5}$') && id == d.direction + '-' + d.year + '-' + d.serial)
+        && recordDate(d.registeredOn) && d.registeredOn.matches('^' + d.year + '-.*')
+        && (d.documentOn == '' || recordDate(d.documentOn))
+        && (d.dueOn == '' || recordDate(d.dueOn))
+        && d.externalNumber is string && d.externalNumber.size() <= 100
+        && d.subject is string && d.subject.size() > 0 && d.subject.size() <= 240
+        && d.partner is string && d.partner.size() > 0 && d.partner.size() <= 160
+        && d.assigneeEmail is string && d.assigneeEmail.size() <= 254
+        && d.priority in ['normal','urgent']
+        && (d.direction == 'in' && d.status in ['registered','assigned','processing','completed','archived']
+          || d.direction == 'out' && d.status in ['draft','review','approved','signing','signed','numbered','issued','void','archived'])
+        && (d.status != 'issued' || d.externalNumber.size() > 0 && signedBy != '' && d.fileId != '')
+        && (signedBy is string && signedBy.size() <= 160)
+        && (signedOn == '' || recordDate(d.signedOn) && d.signedOn <= recordToday())
+        && d.createdBy is string && d.createdBy.size() <= 254 && d.createdAt is timestamp
+        && d.updatedBy == email() && d.updatedAt == request.time
+        && recordIdPart(d.lastEventId) && d.fileName is string && d.fileName.size() <= 255
+        && (d.fileId == '' && d.fileName == '' || recordIdPart(d.fileId) && d.fileName.size() > 0);
+    }
+    function recordEvent(id, d, prior) {
+      let event = getAfter(/databases/$(database)/documents/correspondence/$(id)/events/$(d.lastEventId)).data;
+      return event.actor == email() && event.at == request.time
+        && event.from == prior && event.to == d.status
+        && (!(d.status in ['issued','void']) || event.note.size() >= 10);
+    }
+    function recordFile(d, id) {
+      let file = getAfter(/databases/$(database)/documents/files/$(d.fileId)).data;
+      return file.scopeType == 'correspondence' && file.scopeId == id
+        && file.name == d.fileName && file.type == 'application/pdf' && file.by == email();
+    }
+    function recordRoute(d, old) {
+      return d.assigneeEmail == old.assigneeEmail
+        || (d.assigneeEmail == '' && d.status in ['registered','draft'])
+        || recordActive(d.assigneeEmail);
+    }
+    function recordStep(old, d) {
+      let transitions = old.direction == 'in'
+        ? {'registered':['registered','assigned'], 'assigned':['assigned','processing'], 'processing':['processing','completed'], 'completed':['archived']}
+        : {'draft':['draft','review'], 'review':['draft','approved'], 'approved':['signing'], 'signing':['signed','numbered'], 'signed':['numbered','issued'], 'numbered':['signed','issued','void'], 'issued':['archived']};
+      return d.status in transitions.get(old.status, [])
+        && (old.status != 'signed' || d.status != 'issued' || old.get('numbering',null) != null)
+        && (old.status != 'numbered' || (d.status == 'void' || d.status == 'signed' && old.get('signedByName','') == '' || d.status == 'issued' && old.get('signedByName','') != ''));
+    }
+    function recordAdminEdit(old, d, id) {
+      return recordAdmin() && recordRoute(d, old)
+        && (d.direction != 'in' || (d.status == 'registered' ? d.assigneeEmail == ''
+          : !(d.status in ['assigned','processing']) || recordActive(d.assigneeEmail)))
+        && (old.status in ['registered','assigned','processing','draft']
+          ? (d.fileId == old.fileId && d.fileName == old.fileName
+            || old.fileId == '' && recordFile(d, id))
+          : recordChanges().hasOnly(['status','updatedBy','updatedAt','lastEventId']));
+    }
+    function recordAssigneeEdit(old, d) {
+      return recordMember() && old.assigneeEmail == email()
+        && (old.status == 'assigned' && d.status == 'processing'
+          || old.status == 'processing' && d.status == 'completed'
+          || old.status == 'draft' && d.status == 'review'
+          || old.status == 'approved' && d.status == 'signing')
+        && recordChanges().hasOnly(['status','updatedBy','updatedAt','lastEventId']);
+    }
+    function recordCreateNumber(d, id) {
+      return d.kind in ['letter','decision'] && d.registeredOn == recordToday()
+        && (d.direction == 'in' ? recordAllocation(d, id)
+          : d.serial == '' && d.get('numbering', null) == null && d.externalNumber == '' && d.documentOn == '' && d.get('signedByName','') == '' && d.get('signedOn','') == '');
+    }
+    function recordSignature(old, d, id) {
+      return recordAdmin() && d.signedByName is string && d.signedByName.size() > 0 && d.signedByName.size() <= 160
+        && recordDate(d.signedOn) && d.signedOn <= recordToday() && d.fileId != ''
+        && (d.fileId == old.fileId && d.fileName == old.fileName || recordFile(d, id));
+    }
+    function recordUpdateNumber(old, d, id) {
+      return old.direction == 'out' && old.status == 'signing' && d.status == 'numbered'
+        ? old.get('numbering',null) == null && recordSignature(old,d,id) && recordAllocation(d,id)
+          && recordChanges().hasOnly(['status','signedByName','signedOn','fileId','fileName','externalNumber','documentOn','numbering','updatedBy','updatedAt','lastEventId'])
+        : old.direction == 'out' && old.status == 'signed' && d.status == 'numbered'
+        ? (recordAdmin() || recordMember() && old.assigneeEmail == email())
+          && old.get('numbering', null) == null && old.get('signedByName','') != '' && old.fileId != '' && recordAllocation(d, id)
+          && recordChanges().hasOnly(['status','externalNumber','documentOn','numbering','updatedBy','updatedAt','lastEventId'])
+        : d.status == 'signed' && old.status in ['signing','numbered']
+          ? recordSignature(old,d,id) && recordChanges().hasOnly(['status','signedByName','signedOn','fileId','fileName','updatedBy','updatedAt','lastEventId'])
+          : d.status == 'issued'
+          ? recordAdmin() && old.get('signedByName','') != '' && old.get('numbering',null) != null
+            && recordChanges().hasOnly(['status','fileId','fileName','updatedBy','updatedAt','lastEventId'])
+            && (d.fileId == old.fileId && d.fileName == old.fileName || recordFile(d, id))
+          : !recordChanges().hasAny(['numbering','kind','signedByName','signedOn'])
+          && (d.direction == 'in' || !recordChanges().hasAny(['externalNumber','documentOn']))
+          && (recordAdminEdit(old, d, id) || recordAssigneeEdit(old, d));
+    }
     match /correspondence/{id} {
-      allow read: if attendanceAdmin() || (activeMember()
-        && (resource.data.assigneeEmail == email() || email() in resource.data.watchers));
+      allow read: if recordReadable(resource.data);
+      allow create: if recordAdmin() && recordShape(request.resource.data, id)
+        && request.resource.data.createdBy == email() && request.resource.data.createdAt == request.time
+        && (request.resource.data.direction == 'in'
+          ? (request.resource.data.assigneeEmail == '' && request.resource.data.status == 'registered'
+            || request.resource.data.status == 'assigned' && recordActive(request.resource.data.assigneeEmail))
+          : (request.resource.data.status == 'draft'
+            && (request.resource.data.assigneeEmail == '' || recordActive(request.resource.data.assigneeEmail))))
+        && recordCreateNumber(request.resource.data, id)
+        && recordWatcherChange(request.resource.data.get('watchers',[]), [])
+        && (request.resource.data.fileId == '' || recordFile(request.resource.data, id))
+        && recordEvent(id, request.resource.data, '');
+      allow update: if request.resource.data.updatedBy == email() && request.resource.data.updatedAt == request.time
+        && recordIdPart(request.resource.data.lastEventId)
+        && (request.resource.data.status == 'numbered' || recordShape(request.resource.data, id))
+        && !recordChanges().hasAny(['direction','year','serial','registeredOn','createdBy','createdAt','watchers'])
+        && request.resource.data.lastEventId != resource.data.lastEventId
+        && recordStep(resource.data, request.resource.data)
+        && recordUpdateNumber(resource.data, request.resource.data, id)
+        && recordEvent(id, request.resource.data, resource.data.status);
+      allow update: if recordChanges().hasOnly(['watchers','updatedBy','updatedAt','lastEventId'])
+        && recordChanges().hasAny(['watchers']) && recordAdmin()
+        && recordWatcherChange(request.resource.data.watchers, resource.data.get('watchers',[]))
+        && request.resource.data.updatedBy == email() && request.resource.data.updatedAt == request.time
+        && recordIdPart(request.resource.data.lastEventId) && request.resource.data.lastEventId != resource.data.lastEventId
+        && recordEvent(id, request.resource.data, resource.data.status);
+      allow delete: if false;
+      match /events/{eventId} {
+        allow read: if recordReadable(get(/databases/$(database)/documents/correspondence/$(id)).data);
+        allow create: if recordIdPart(eventId) && recordMember()
+          && request.resource.data.keys().hasOnly(['actor','at','from','to','note'])
+          && request.resource.data.actor == email() && request.resource.data.at == request.time
+          && request.resource.data.from is string && request.resource.data.to is string
+          && request.resource.data.note is string && request.resource.data.note.size() > 0
+          && request.resource.data.note.size() <= 500
+          && getAfter(/databases/$(database)/documents/correspondence/$(id)).data.lastEventId == eventId
+          && getAfter(/databases/$(database)/documents/correspondence/$(id)).data.updatedAt == request.time
+          && (!exists(/databases/$(database)/documents/correspondence/$(id))
+            || get(/databases/$(database)/documents/correspondence/$(id)).data.lastEventId != eventId);
+        allow update, delete: if false;
+      }
     }
 
     match /notifications/{id} {
@@ -645,6 +939,8 @@ service cloud.firestore {
       }
 
       allow get, list: if isRecipient();
+      allow create: if activeMember() && request.resource.data.kind == 'record'
+        && recordNotification(request.resource.data, id);
       allow create: if attendanceAdmin()
         && request.resource.data.keys().hasOnly(['to', 'from', 'title', 'body', 'link', 'createdAt', 'read', 'emailed'])
         && request.resource.data.to is string

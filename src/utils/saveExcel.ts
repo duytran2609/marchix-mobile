@@ -14,14 +14,14 @@ export async function saveExcel(bytes: ArrayBuffer, filename: string, dialogTitl
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
+    return true;
   }
   if (Platform.OS === 'android') {
     const directory = await Directory.pickDirectoryAsync().catch((error: unknown) => {
       if (error instanceof Error && 'code' in error && error.code === 'ERR_PICKER_CANCELLED') return;
       throw error;
     });
-    if (!directory) return;
+    if (!directory) return false;
     const saved = directory.createFile(filename, excelType);
     try {
       await saved.write(bytes);
@@ -29,7 +29,7 @@ export async function saveExcel(bytes: ArrayBuffer, filename: string, dialogTitl
       if (saved.exists) saved.delete();
       throw error;
     }
-    return;
+    return true;
   }
   if (!await isAvailableAsync()) throw new Error('Thiết bị chưa hỗ trợ chia sẻ tệp.');
   const saved = new File(Paths.cache, filename);
@@ -40,4 +40,5 @@ export async function saveExcel(bytes: ArrayBuffer, filename: string, dialogTitl
   } finally {
     if (saved.exists) saved.delete();
   }
+  return true;
 }

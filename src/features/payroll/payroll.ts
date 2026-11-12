@@ -22,6 +22,7 @@ export type PayAmounts = PayInputs & {
 };
 export type Payslip = PayAmounts & {
   id: string; month: string; empId: string; name: string; email: string; status: string;
+  employeeConfirmedAt?: string; lockedAt?: string;
 };
 
 export const monthLabel = (month: string) => month.slice(5) + '/' + month.slice(0, 4);

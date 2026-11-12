@@ -1,12 +1,12 @@
-import { collection, doc, getDocFromServer, getDocsFromServer, onSnapshot, query, runTransaction, setDoc, where } from 'firebase/firestore';
+import { collection, deleteField, doc, getDocFromServer, getDocsFromServer, onSnapshot, query, runTransaction, setDoc, where } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import { attendanceId, attendanceMonth, defaultSchedule, monthDays } from '../attendance/attendance';
-import type { Attendance, Leave } from '../attendance/attendance';
+import type { Attendance, AttendanceRequest } from '../attendance/attendance';
 import { todayInVietnam } from '../tasks/taskDates';
 import { amount, calculatePay, defaultRates, emptyEmployee, locked, payrollExpenses, validMonth } from './payroll';
 import type { Employee, EmployeeFields, PayInputs, Payslip, Rates } from './payroll';
 
-type PayrollRequest = Leave & { month?: string; createdAt?: string; amount?: number };
+type PayrollRequest = AttendanceRequest & { month?: string; createdAt?: string; amount?: number };
 export type PayrollData = { slips: Payslip[]; employees: Employee[]; rates: Rates; requests: PayrollRequest[] };
 
 export function watchPayroll(email: string, admin: boolean, receive: (data: PayrollData) => void, fail: () => void) {
@@ -66,6 +66,17 @@ export async function saveEmployee(email: string, fields: EmployeeFields, id?: s
   await setDoc(ref, { ...fields, updatedAt: now, updatedBy: email, ...(!id && { createdAt: now }) }, { merge: true });
 }
 
+export async function confirmOwnPayslip(email: string, reviewedSlip: Payslip) {
+  const ref = doc(db, 'payroll', reviewedSlip.id);
+  await runTransaction(db, async transaction => {
+    const slip = (await transaction.get(ref)).data();
+    if (slip?.email !== email || slip.status !== 'Đã chốt' || slip.lockedAt !== reviewedSlip.lockedAt) {
+      throw new Error('Phiếu lương đã thay đổi. Hãy mở lại phiếu để kiểm tra.');
+    }
+    if (!slip.employeeConfirmedAt) transaction.update(ref, { employeeConfirmedAt: new Date().toISOString() });
+  });
+}
+
 export async function writePayroll(email: string, month: string, employees: Employee[], data: PayrollData,
   action: 'save' | 'lock' | 'reopen' | 'attendance', inputByEmployee = new Map<string, Partial<PayInputs>>()) {
   if (employees.length > 500) throw new Error('Bảng lương vượt giới hạn 500 dòng cho một lần cập nhật.');
@@ -79,7 +90,7 @@ export async function writePayroll(email: string, month: string, employees: Empl
       const previous = snapshot.data() as Payslip | undefined;
       if (action === 'reopen') {
         if (previous?.status !== 'Đã chốt') throw new Error('Trạng thái dòng lương đã thay đổi.');
-        transaction.update(snapshot.ref, { status: 'Nháp', updatedAt: now, updatedBy: email });
+        transaction.update(snapshot.ref, { status: 'Nháp', employeeConfirmedAt: deleteField(), updatedAt: now, updatedBy: email });
       } else {
         if (locked(previous)) {
           if (action === 'save') throw new Error('Dòng lương đã được chốt.');
@@ -90,7 +101,7 @@ export async function writePayroll(email: string, month: string, employees: Empl
         transaction.set(snapshot.ref, {
           ...pay, month, empId: employee.id, name: employee.name, email: employee.email,
           status: action === 'lock' ? 'Đã chốt' : 'Nháp', updatedAt: now, updatedBy: email,
-          ...(action === 'lock' && { lockedAt: now, lockedBy: email }),
+          ...(action === 'lock' && { lockedAt: now, lockedBy: email, employeeConfirmedAt: deleteField() }),
         }, { merge: true });
       }
       count++;
@@ -127,14 +138,18 @@ export async function importAttendance(email: string, month: string, employees: 
   return { count, skipped };
 }
 
-export async function createPayrollExpenses(email: string, month: string, rows: Payslip[]) {
-  const selected = rows.filter(row => row.status === 'Đã chốt');
-  if (!selected.length) throw new Error('Hãy chốt bảng lương trước khi tạo đề nghị chi.');
+export async function createPayrollExpenses(email: string, month: string) {
+  const snapshot = await getDocsFromServer(query(collection(db, 'payroll'), where('month', '==', month)));
+  const selected = snapshot.docs.filter(item => item.get('status') !== 'Đã trả');
+  const needsConfirmation = 'Hãy chốt bảng lương và đợi nhân viên xác nhận phiếu trước khi tạo đề nghị chi.';
+  if (!selected.length) throw new Error(needsConfirmation);
   if (selected.length > 497) throw new Error('Kỳ lương vượt giới hạn số khoản chi trong một lần tạo.');
   return runTransaction(db, async transaction => {
-    const slips = await Promise.all(selected.map(row => transaction.get(doc(db, 'payroll', row.id))));
+    const slips = await Promise.all(selected.map(row => transaction.get(row.ref)));
     const current = slips.map(item => ({ ...item.data(), id: item.id }) as Payslip);
-    if (current.some(row => row.status !== 'Đã chốt' || row.month !== month)) throw new Error('Bảng lương đã thay đổi. Vui lòng thử lại.');
+    if (current.some(row => row.status !== 'Đã chốt' || row.month !== month || !row.employeeConfirmedAt)) {
+      throw new Error(needsConfirmation);
+    }
     if (current.some(row => row.net < 0)) throw new Error('Có dòng thực lĩnh âm. Hãy đối chiếu bảng lương trước khi tạo khoản chi.');
     const expenses = payrollExpenses(month, current);
     const existing = await Promise.all(expenses.map(row => transaction.get(doc(db, 'cash', row.id))));
