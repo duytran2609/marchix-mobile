@@ -21,6 +21,8 @@ const tick = httpsCallable(functions, 'setTaskChecklistItem', { timeout: 35000 }
 const report = httpsCallable(functions, 'reportTaskCompletion', { timeout: 35000 });
 const review = httpsCallable(functions, 'reviewTaskCompletion', { timeout: 35000 });
 const editAssignment = httpsCallable(functions, 'updateMobileTask', { timeout: 35000 });
+const addAttachments = httpsCallable(functions, 'addMobileTaskAttachments', { timeout: 35000 });
+const downloadAttachment = httpsCallable(functions, 'downloadMobileTaskAttachment', { timeout: 35000 });
 const login = (email, sub) => signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({
   sub, email, email_verified: true,
 })));
@@ -29,6 +31,7 @@ const taskId = `workflow-qa-${Date.now()}`;
 const ref = doc(db, 'tasks', taskId);
 const nextId = `repeat_${taskId}_2026-11-23`;
 const designatedId = `${taskId}-designated`;
+const manualProgressId = `${taskId}-manual`;
 const designatedEmail = `${taskId}@example.test`;
 const documents = `http://127.0.0.1:8080/v1/projects/${projectId}/databases/(default)/documents`;
 const docs = `${documents}/tasks`;
@@ -61,11 +64,14 @@ assert(response.ok, await response.text());
 try {
   const item = { taskId, index: 1, label: 'Mục bản demo cũ', done: true };
   const result = { taskId, note: 'Đã chạy kiểm thử trên điện thoại.' };
+  const attachment = { name: 'trao-doi.txt', type: 'text/plain', base64: Buffer.from('Tệp trao đổi').toString('base64') };
+  const upload = { taskId, attachments: [attachment] };
   const readTask = async () => (await getDocFromServer(ref)).data();
   await assert.rejects(tick(item), { code: 'functions/unauthenticated' });
   await login('dongnghiep@example.test', 'marchix-mobile-demo-colleague');
   await assert.rejects(tick(item), { code: 'functions/permission-denied' });
   await assert.rejects(report(result), { code: 'functions/permission-denied' });
+  await assert.rejects(addAttachments(upload), { code: 'functions/permission-denied' });
   await login(staff, 'marchix-mobile-demo-staff');
   await assert.rejects(updateDoc(ref, { checklist: [], progress: 100 }), { code: 'permission-denied' });
   await assert.rejects(updateDoc(ref, { status: 'Chờ duyệt', progress: 100 }), { code: 'permission-denied' });
@@ -114,6 +120,21 @@ try {
   assert.equal(task.status, 'Đang làm');
   assert.equal(task.doneAt, '');
   assert.equal(task.reviewNote, rework.note);
+  const priorComments = task.comments;
+  await addAttachments(upload);
+  await addAttachments(upload);
+  const withFiles = (await readTask()).comments;
+  assert.deepEqual(withFiles.slice(0, -2), priorComments);
+  const [firstFilePost, secondFilePost] = withFiles.slice(-2);
+  for (const post of [firstFilePost, secondFilePost]) {
+    assert.equal(post.by, staff);
+    assert.equal(post.text, '');
+    assert.equal(post.files.length, 1);
+    assert.equal(post.files[0].name, attachment.name);
+  }
+  assert.notEqual(firstFilePost.files[0].id, secondFilePost.files[0].id);
+  const downloaded = await downloadAttachment({ taskId, fileId: firstFilePost.files[0].id });
+  assert.equal(downloaded.data.base64, attachment.base64);
   await report({ ...result, note: 'Đã cập nhật kết quả.' });
   task = await readTask();
   assert.notEqual(task.doneAt, firstSubmission);
@@ -133,6 +154,7 @@ try {
   assert.equal(approved.reviewedAt, approved.updatedAt);
   assert.equal(approved.rating, approve.rating);
   assert.equal(approved.reviewNote, approve.note);
+  await assert.rejects(addAttachments(upload), { code: 'functions/failed-precondition' });
   await assert.rejects(updateDoc(ref, { comments: [...(approved.comments ?? []), {
     by: staff, at: new Date().toISOString(), text: 'Trao đổi sau khi xong', files: [],
   }] }), { code: 'permission-denied' });
@@ -186,11 +208,26 @@ try {
   await assert.rejects(getDocFromServer(designatedRef), { code: 'permission-denied' });
   await login(staff, 'marchix-mobile-demo-staff');
   assert.equal((await getDocFromServer(designatedRef)).data().reviewedBy, designatedEmail);
-  console.log('PASS: gửi duyệt, trả lại, duyệt đúng lượt, kỳ lặp và phân quyền người duyệt chỉ định.');
+
+  await setFixture(`tasks/${manualProgressId}`, {
+    title: { stringValue: 'Công việc không có việc con' },
+    assigneeEmail: { stringValue: staff },
+    assignedBy: { stringValue: reviewer },
+    status: { stringValue: 'Đang làm' },
+    progress: { integerValue: '99' },
+  });
+  const manualRef = doc(db, 'tasks', manualProgressId);
+  const manualReport = { ...result, taskId: manualProgressId };
+  await assert.rejects(report(manualReport), { code: 'functions/failed-precondition', message: /100%/ });
+  assert.equal((await getDocFromServer(manualRef)).data().status, 'Đang làm');
+  await updateDoc(manualRef, { progress: 100, updatedBy: staff, updatedAt: new Date().toISOString() });
+  await report(manualReport);
+  assert.equal((await getDocFromServer(manualRef)).data().status, 'Chờ duyệt');
+  console.log('PASS: gửi duyệt, trao đổi có tệp, kỳ lặp, phân quyền và yêu cầu lưu tiến độ 100%.');
 } finally {
   await terminate(db);
   await deleteApp(app);
-  for (const path of [`tasks/${taskId}`, `tasks/${nextId}`, `tasks/${designatedId}`, `members/${designatedEmail}`]) {
+  for (const path of [`tasks/${taskId}`, `tasks/${nextId}`, `tasks/${designatedId}`, `tasks/${manualProgressId}`, `members/${designatedEmail}`]) {
     const deleted = await fetch(`${documents}/${path}`, { method: 'DELETE', headers });
     assert(deleted.ok, await deleted.text());
   }

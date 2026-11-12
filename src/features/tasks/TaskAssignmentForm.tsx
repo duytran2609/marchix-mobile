@@ -68,7 +68,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   const [title, setTitle] = useState(task?.title ?? '');
   const [assignees, setAssignees] = useState(task?.assigneeEmail ? [task.assigneeEmail] : []);
   const [watchers, setWatchers] = useState(task?.watchers ?? []);
-  const [approver, setApprover] = useState(task?.approverEmail ?? '');
+  const [approver, setApprover] = useState<string | undefined>(task?.approverEmail ?? (emulatorMode && !task ? undefined : ''));
   const [start, setStart] = useState(() => task ? task.startDate ?? '' : todayInVietnam());
   const [due, setDue] = useState(task?.due ?? '');
   const [retained, setRetained] = useState(assignment?.files ?? []);
@@ -176,7 +176,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
           approverEmail: canChangeApprover ? approver : undefined });
         onSaved(assignees);
       } else {
-        const result = await createTask({ ...data, approverEmail: emulatorMode ? undefined : approver });
+        const result = await createTask({ ...data, approverEmail: approver });
         onSaved(result.data.assignments.map(item => item.assignee));
       }
     } catch (err) {
@@ -225,6 +225,18 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                           if (approver === member) setApprover('');
                         }} />}
                 </View>
+                {members ? <View style={styles.field}>
+                  <Text style={styles.label}>Người duyệt</Text>
+                  {!canChangeApprover ? <Text style={styles.muted}>{members.find(member => member.email === approver)?.name
+                    || approver || 'Chưa chỉ định'}</Text> : <MemberPicker
+                    members={members.filter(member => member.canReview && !assignees.includes(member.email))}
+                    email={email} selected={approver ? [approver] : []} disabled={saving}
+                    label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
+                    onToggle={member => {
+                      if (member !== approver) setApprover(member);
+                      else if (!workflowLocked) setApprover('');
+                    }} />}
+                </View> : null}
                 <View style={styles.field}>
                   <Text style={styles.label}>Mức độ ưu tiên</Text>
                   <Choices items={choices(taskPriorities)} value={options.priority} disabled={saving}
@@ -319,14 +331,6 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                     <MemberPicker members={members} email={email} selected={watchers} disabled={saving}
                       label="Tìm người theo dõi" emptyMessage="Không có người theo dõi phù hợp."
                       onToggle={member => toggleMember(member, watchers, setWatchers)} />
-                  </View> : null}
-                  {(!emulatorMode || task) && members ? <View style={styles.field}>
-                    <Text style={styles.label}>Người duyệt</Text>
-                    {!canChangeApprover ? <Text style={styles.muted}>{members.find(member => member.email === approver)?.name
-                      || approver || 'Chưa chỉ định'}</Text> : <Choices items={[{ value: '', label: 'Chưa chỉ định' }, ...members
-                      .filter(member => member.canReview && !assignees.includes(member.email))
-                      .map(member => ({ value: member.email, label: member.name }))]}
-                      value={approver} onChange={setApprover} disabled={saving} />}
                   </View> : null}
                   <Pressable accessibilityRole="checkbox" aria-checked={options.milestone} disabled={saving}
                     onPress={() => updateOption('milestone', !options.milestone)}

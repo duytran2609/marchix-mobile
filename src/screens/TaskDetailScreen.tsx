@@ -42,20 +42,20 @@ function TaskMetadata({ task, email, name, members, project }: {
   }
 
   const fields = [
-    ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
-    ['Mức độ ưu tiên', <Text style={styles.metadataValue}><TaskPriority priority={task.priority} /></Text>],
-    ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
     ['Người thực hiện', task.assigneeEmail || assignee ? <View style={styles.metadataPeople}>
       {renderPerson(task.assigneeEmail, assignee)}
     </View> : 'Chưa rõ'],
-    ['Dự án', project || task.projectId || 'Chung toàn công ty'],
-    ['Lặp lại', task.repeat || 'Không lặp'],
-    ['Người theo dõi', watchers.length ? <View style={styles.metadataPeople}>
-      {watchers.map(personEmail => renderPerson(personEmail))}
-    </View> : 'Chưa chọn'],
     ['Người duyệt', task.approverEmail ? <View style={styles.metadataPeople}>
       {renderPerson(task.approverEmail)}
     </View> : 'Chưa chỉ định'],
+    ['Người theo dõi', watchers.length ? <View style={styles.metadataPeople}>
+      {watchers.map(personEmail => renderPerson(personEmail))}
+    </View> : 'Chưa chọn'],
+    ['Dự án', project || task.projectId || 'Chung toàn công ty'],
+    ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
+    ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
+    ['Mức độ ưu tiên', <Text style={styles.metadataValue}><TaskPriority priority={task.priority} /></Text>],
+    ['Lặp lại', task.repeat || 'Không lặp'],
     ['Mốc bàn giao dự án', task.milestone ? 'Có' : 'Không'],
   ] as const;
 
@@ -81,6 +81,9 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const isAssignee = liveTask.assigneeEmail === email;
   const canEdit = isAssignee && (!pilotMode || taskAssignmentEnabled) && editableStatus(liveTask.status);
   const canReport = canEdit && (emulatorMode || pilotMode);
+  const reportBlockReason = lockedProgress
+    ? checkedCount < checklist.length && 'Đánh dấu xong tất cả việc con để báo hoàn thành.'
+    : liveTask.progress !== 100 && 'Đặt và lưu tiến độ 100% để báo hoàn thành.';
   const canEditAssignment = taskAssignmentEnabled && liveTask.status !== 'Xong' && liveTask.assignedBy === email;
   const [assignmentDraft, setAssignmentDraft] = useState<Task>();
   const [savedAssignment, setSavedAssignment] = useState<Task>();
@@ -170,7 +173,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
         <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
         <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
         <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} />
-        {liveTask.note ? <View style={screenStyles.detailRow}>
+        {liveTask.note ? <View style={styles.taskNote}>
           <Text style={screenStyles.label}>Mô tả / chỗ vướng</Text>
           <Text style={screenStyles.body}>{liveTask.note}</Text>
         </View> : null}
@@ -187,21 +190,24 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
               </Pressable>
             ))}
           </View>
-          <Text style={screenStyles.label}>Tiến độ (%)</Text>
-          {lockedProgress ? <Text style={screenStyles.muted}>{liveTask.progress ?? 0}% · Tự tính theo checklist.</Text>
-            : <TextInput accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input}
+          {!lockedProgress && <>
+            <Text style={screenStyles.label}>Tiến độ (%)</Text>
+            <TextInput accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input}
                 value={progress} editable={!busy} onChangeText={value => {
                   if (value === '' || parseTaskProgress(value) !== undefined) {
                     setProgressDraft(draft => ({ ...draft, progress: value }));
                   }
-                }} />}
+                }} />
+          </>}
           <Button label={busy === 'progress' ? 'Đang lưu…' : 'Lưu tiến độ'} onPress={save} disabled={!!busy} />
         </> : null}
       </View>
       {lockedProgress ? (
         <View style={screenStyles.panel}>
-          <Text accessibilityRole="header" style={screenStyles.cardTitle}>Việc con</Text>
-          <Text accessibilityLiveRegion="polite" style={screenStyles.muted}>{checkedCount}/{checklist.length} đã xong</Text>
+          <View style={styles.taskDetailHeader}>
+            <Text accessibilityRole="header" style={screenStyles.cardTitle}>Việc con</Text>
+            <Text accessibilityLiveRegion="polite" style={screenStyles.muted}>{checkedCount}/{checklist.length} đã xong</Text>
+          </View>
           {checklist.map((item, index) => {
             const label = item.t || item.text || '';
             const checked = item.done === true;
@@ -225,13 +231,13 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
       {canReport ? (
         <View style={screenStyles.panel}>
           <Text accessibilityRole="header" style={screenStyles.cardTitle}>Báo hoàn thành</Text>
-          {checkedCount < checklist.length
-            ? <Text style={screenStyles.muted}>Đánh dấu xong tất cả việc con để báo hoàn thành.</Text>
+          {reportBlockReason
+            ? <Text style={screenStyles.muted}>{reportBlockReason}</Text>
             : <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
                 style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
                 value={reportNote} onChangeText={setReportNote} editable={!busy} />}
           <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
-            disabled={!!busy || checkedCount < checklist.length}
+            disabled={!!busy || !!reportBlockReason}
             onPress={() => void changeWorkflow('report', () =>
               reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />
         </View>
@@ -317,6 +323,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupScrollContent: { padding: 16 },
   popupContent: { borderWidth: 0, padding: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  taskNote: { gap: 3, paddingTop: 10 },
   taskMetadata: { paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surfaceMuted },
   metadataField: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 9 },

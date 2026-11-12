@@ -1,7 +1,7 @@
 import { collection, doc, onSnapshot, query, runTransaction, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, pilotMode, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
-import { pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
+import { pilotAddAttachments, pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
 
 export const editableStatuses = ['Chưa làm', 'Đang làm', 'Vướng'] as const;
 export type EditableStatus = typeof editableStatuses[number];
@@ -271,4 +271,8 @@ export const updateTask = pilotMode ? pilotUpdate : httpsCallable<AssignmentInpu
 
 export const downloadTaskAttachment = pilotMode ? pilotDownload : httpsCallable<{ taskId: string; fileId: string }, { base64: string }>(
   taskFunctions, 'downloadMobileTaskAttachment', { timeout: 45000 },
+);
+
+export const addTaskAttachments = pilotMode ? pilotAddAttachments : httpsCallable<{ taskId: string; attachments: AttachmentUpload[] }>(
+  taskFunctions, 'addMobileTaskAttachments', { timeout: 90000 },
 );

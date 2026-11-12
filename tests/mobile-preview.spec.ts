@@ -719,7 +719,6 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
   const priorFarFields = priorFar.ok() ? (await priorFar.json()).fields : null;
   const taskId = `test-week-plan-${Date.now()}`;
   const taskPath = `${documents}/tasks/${taskId}`;
-  const doneTaskPath = taskPath + '-done';
   const farTaskPath = taskPath + '-far';
   const farTaskTitle = 'Công việc gợi ý trong tuần xa';
   const title = 'Kiểm tra công việc đến hạn trong tuần';
@@ -752,10 +751,6 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     expect((await request.patch(taskPath, { headers, data: { fields: fields({
       title, assigneeEmail: employee, status: 'Đang làm', due: shiftDay(week, 6),
     }) } })).ok()).toBeTruthy();
-    expect((await request.patch(doneTaskPath, { headers, data: { fields: fields({
-      title: 'Công việc được duyệt xong', assigneeEmail: employee, status: 'Xong',
-      doneAt: shiftDay(week, -2) + 'T08:00:00Z', reviewedAt: shiftDay(week, -1) + 'T18:00:00Z',
-    }) } })).ok()).toBeTruthy();
     expect((await request.patch(farTaskPath, { headers, data: { fields: fields({
       title: farTaskTitle, assigneeEmail: employee, status: 'Đang làm', due: farWeek,
     }) } })).ok()).toBeTruthy();
@@ -770,8 +765,7 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     await selectWeekOnCalendar(page, week, calendarDay);
     await expect(page.getByText(weekRange(nextWeek))).toBeVisible();
     await expect(suggestion).toHaveCount(0);
-    const completed = week === '2026-11-09' ? 2 : 1;
-    await expect(page.getByText(`Việc hoàn thành tuần trước: ${completed}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(/Việc hoàn thành tuần trước/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Tuần này' }).click();
     await suggestion.click();
     const task = page.getByRole('dialog', { name: 'Chi tiết công việc' });
@@ -855,7 +849,6 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
   } finally {
     await admin.close();
     await request.delete(taskPath, { headers });
-    await request.delete(doneTaskPath, { headers });
     await request.delete(farTaskPath, { headers });
     if (priorFields) await request.patch(plan, { headers, data: { fields: priorFields } });
     else await request.delete(plan, { headers });

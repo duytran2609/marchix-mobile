@@ -173,14 +173,19 @@ export function OverviewScreen({
     }
   }
 
-  function row(entry: Entry, key: string | number) {
+  function row(entry: Entry & { metadata?: ReactNode }, key: string | number) {
     return <Pressable key={key} accessibilityRole="button" onPress={() => onNavigate(entry.route)} style={styles.row}>
       <View style={styles.grow}>
         <Text style={screen.label}>{entry.label}</Text>
         {!!entry.detail && <Text style={screen.muted}>{entry.detail}</Text>}
+        {entry.metadata}
       </View>
       <Text style={styles.link} accessibilityElementsHidden importantForAccessibility="no">›</Text>
     </Pressable>;
+  }
+
+  function projectField(label: string, value: string) {
+    return <Text style={screen.muted}><Text style={styles.metaLabel}>{label}: </Text>{value}</Text>;
   }
 
   function card(title: string, children: ReactNode, options?: { primary?: boolean; action?: ReactNode }) {
@@ -289,11 +294,15 @@ export function OverviewScreen({
         {!activeProjects.length && <Text style={[screen.muted, styles.empty]}>Chưa có dự án đang theo dõi.</Text>}
         {activeProjects.slice(0, 4).map(({ project, metrics, count, risk }) => {
           const { progress, done } = metrics;
-          const detail = projectTasks === 'error' ? 'Không tải được tiến độ' : !projectTasks ? 'Đang tải tiến độ…' : progress === null
-            ? 'Chưa có việc trong phạm vi xem' : `${done}/${count} việc đã duyệt · ${progress}%`;
+          const progressText = projectTasks === 'error' ? 'Không tải được' : !projectTasks ? 'Đang tải…' : progress === null
+            ? 'Chưa có việc trong phạm vi xem' : `${progress}%`;
           return <View key={project.id}>
-            {row({ label: project.name, detail: risk ? `Cần chú ý · ${detail}` : detail,
-              route: { screen: 'du-an', projectId: project.id } }, project.id)}
+            {row({ label: project.name, route: { screen: 'du-an', projectId: project.id },
+              metadata: <View style={styles.projectMetadata}>
+                {risk && projectField('Theo dõi', 'Cần chú ý')}
+                {progress !== null && projectField('Việc đã duyệt', `${done}/${count}`)}
+                {projectField('Tiến độ', progressText)}
+              </View> }, project.id)}
             {progress !== null && bar(progress, colors.accent)}
           </View>;
         })}
@@ -327,6 +336,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   cardHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   inlineAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   grow: { flex: 1, minWidth: 0 },
+  projectMetadata: { gap: 2, marginTop: 4 },
+  metaLabel: { fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: colors.line },
   chart: { height: 140, flexDirection: 'row', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.line },

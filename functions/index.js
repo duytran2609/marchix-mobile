@@ -3,7 +3,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { HttpsError, onCall } = require('firebase-functions/v2/https');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 
 const projectId = 'demo-marchix-mobile';
 const openStatuses = ['Chưa làm', 'Đang làm', 'Vướng'];
@@ -442,6 +442,32 @@ exports.updateMobileTask = onCall(async request => {
   });
 });
 
+exports.addMobileTaskAttachments = onCall(async request => {
+  const { email, db } = assignmentContext(request, 'đính kèm tệp trao đổi');
+  const { taskId, attachments } = request.data ?? {};
+  if (typeof taskId !== 'string' || !/^[\w-]{1,150}$/.test(taskId)) {
+    throw new HttpsError('invalid-argument', 'Mã công việc không hợp lệ.');
+  }
+  const items = parseAttachments(attachments, 1);
+  if (!items.length) throw new HttpsError('invalid-argument', 'Chọn ít nhất một tệp.');
+  const ref = db.collection('tasks').doc(taskId);
+  const scope = `${taskId}:discussion:${randomUUID()}`;
+  await db.runTransaction(async transaction => {
+    const [member, snapshot] = await transaction.getAll(db.collection('members').doc(email), ref);
+    const task = snapshot.data();
+    if (!activeMember(member) || task?.assigneeEmail !== email) {
+      throw new HttpsError('permission-denied', 'Bạn không còn quyền gửi trao đổi cho công việc này.');
+    }
+    if (task.status === 'Xong') {
+      throw new HttpsError('failed-precondition', 'Công việc đã xong và chỉ có thể xem chi tiết.');
+    }
+    const at = new Date().toISOString();
+    const files = writeAttachments(transaction, ref, items, email, at, scope);
+    transaction.update(ref, { comments: [...(task.comments ?? []), { by: email, at, text: '', files }] });
+  });
+  return { ok: true };
+});
+
 exports.downloadMobileTaskAttachment = onCall(async request => {
   const { email, db } = assignmentContext(request, 'tải tệp đính kèm');
   const { taskId, fileId } = request.data ?? {};
@@ -549,8 +575,12 @@ exports.reportTaskCompletion = onCall(request => {
     if (!openStatuses.includes(task.status)) {
       throw new HttpsError('failed-precondition', 'Công việc này hiện không thể báo hoàn thành.');
     }
-    if (Array.isArray(task.checklist) && task.checklist.some(item => item?.done !== true)) {
+    const checklist = Array.isArray(task.checklist) ? task.checklist : [];
+    if (checklist.some(item => item?.done !== true)) {
       throw new HttpsError('failed-precondition', 'Hãy đánh dấu xong tất cả việc con trước khi báo hoàn thành.');
+    }
+    if (!checklist.length && task.progress !== 100) {
+      throw new HttpsError('failed-precondition', 'Đặt và lưu tiến độ 100% để báo hoàn thành.');
     }
     const settings = await transaction.get(db.collection('settings').doc('work'));
     if (settings.get('requireReportNote') === true && !text) {

@@ -10,10 +10,10 @@ import { useTheme } from '../theme/theme';
 import type { ThemeMode } from '../theme/theme';
 
 const appearanceOptions = [
-  { value: 'system', label: 'Hệ thống' },
-  { value: 'light', label: 'Sáng' },
-  { value: 'dark', label: 'Tối' },
-] as const satisfies readonly { value: ThemeMode; label: string }[];
+  { value: 'system', label: 'Hệ thống', icon: 'monitor' },
+  { value: 'light', label: 'Sáng', icon: '☀︎' },
+  { value: 'dark', label: 'Tối', icon: '☾' },
+] as const satisfies readonly { value: ThemeMode; label: string; icon: string }[];
 
 const generalTab = { id: 'general', tabLabel: 'Chung' } as const;
 const adminTabs = [
@@ -27,23 +27,35 @@ const allTabs = [generalTab, ...adminTabs] as const;
 
 function Options<T extends string>({ label, options, value, disabled, onSelect }: {
   label: string;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; label: string; icon?: string }[];
   value: T;
   disabled: boolean;
   onSelect: (value: T) => Promise<void>;
 }) {
   const styles = useScreenStyles();
+  const { colors } = useTheme();
   const showToast = useToast();
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.choices}>
       {options.map(option => {
         const checked = option.value === value;
         return (
-          <Pressable key={option.value} accessibilityRole="radio" aria-checked={checked} aria-disabled={disabled}
+          <Pressable key={option.value} accessibilityRole="radio" accessibilityLabel={option.label}
+            aria-checked={checked} aria-disabled={disabled}
             disabled={disabled}
-            style={({ pressed }) => [styles.choice, checked && styles.selected, (pressed || disabled) && styles.dimmed]}
+            style={({ pressed }) => [styles.choice, option.icon && optionStyles.withIcon,
+              checked && styles.selected, (pressed || disabled) && styles.dimmed]}
             onPress={() => void onSelect(option.value).catch(() =>
               showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))}>
+            {option.icon === 'monitor' ? (
+              <View aria-hidden style={optionStyles.monitor}>
+                <View style={[optionStyles.monitorScreen, { borderColor: colors.ink }]} />
+                <View style={[optionStyles.monitorStem, { backgroundColor: colors.ink }]} />
+                <View style={[optionStyles.monitorBase, { backgroundColor: colors.ink }]} />
+              </View>
+            ) : option.icon && (
+              <Text aria-hidden style={[styles.label, optionStyles.icon]}>{option.icon}</Text>
+            )}
             <Text style={styles.label}>{option.label}</Text>
           </Pressable>
         );
@@ -109,6 +121,15 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
     </View>
   );
 }
+
+const optionStyles = StyleSheet.create({
+  withIcon: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  icon: { fontSize: 16, fontWeight: '400', lineHeight: 18 },
+  monitor: { width: 16, height: 18, alignItems: 'center', justifyContent: 'center' },
+  monitorScreen: { width: 15, height: 10, borderWidth: 1, borderRadius: 2 },
+  monitorStem: { width: 1, height: 2 },
+  monitorBase: { width: 7, height: 1 },
+});
 
 const tabStyles = StyleSheet.create({
   scroller: { borderRadius: 10, flexGrow: 0 },

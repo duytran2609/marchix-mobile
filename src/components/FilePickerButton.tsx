@@ -1,11 +1,13 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 
-export function FilePickerButton({ accessibilityLabel, hint, picking, disabled, onPress }: {
+export function FilePickerButton({ accessibilityLabel, hint, picking, disabled, onPress,
+  label = '+ Chọn tệp', pickingLabel = 'Đang chọn tệp…' }: {
   accessibilityLabel?: string; hint: string; picking: boolean; disabled: boolean; onPress: () => void;
+  label?: string; pickingLabel?: string;
 }) {
   const styles = useStyles();
-  const action = picking ? 'Đang chọn tệp…' : '+ Chọn tệp';
+  const action = picking ? pickingLabel : label;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? action} accessibilityHint={hint}
       disabled={disabled || picking} onPress={onPress}

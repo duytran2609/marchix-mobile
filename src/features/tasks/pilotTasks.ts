@@ -83,6 +83,21 @@ function notify(writer: DocumentWriter, from: string, recipients: (string | unde
   }
 }
 
+export async function pilotAddAttachments({ taskId, attachments }: { taskId: string; attachments: AttachmentUpload[] }) {
+  const by = email();
+  const uploads = uploadBytes(attachments);
+  if (!uploads.length) throw new Error('Chọn ít nhất một tệp.');
+  const ref = doc(db, 'tasks', taskId);
+  await runTransaction(db, async tx => {
+    const task = (await tx.get(ref)).data() as Task | undefined;
+    if (!task || task.assigneeEmail !== by) throw new Error('Bạn không còn quyền gửi trao đổi cho công việc này.');
+    if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
+    const at = new Date().toISOString();
+    const files = attach(tx, ref, uploads, by, at);
+    tx.update(ref, { comments: [...(task.comments ?? []), { by, at, text: '', files }] });
+  });
+}
+
 function details(input: AssignmentInput) {
   return { title: input.title.trim(), startDate: input.startDate, due: input.due,
     note: input.note.trim(), priority: input.priority, repeat: input.repeat,
@@ -248,6 +263,9 @@ export async function pilotReport(input: { taskId: string; note: string }) {
     if (task.status === 'Chờ duyệt' || (task.status === 'Xong' && task.progress === 100 && task.doneAt)) return;
     if (!open(task)) throw new Error('Công việc này hiện không thể báo hoàn thành.');
     if (task.checklist?.some(item => !item.done)) throw new Error('Hãy đánh dấu xong tất cả việc con.');
+    if (!task.checklist?.length && task.progress !== 100) {
+      throw new Error('Đặt và lưu tiến độ 100% để báo hoàn thành.');
+    }
     const text = input.note.trim();
     if (text.length > 1000 || (settings.get('requireReportNote') === true && !text)) {
       throw new Error('Hãy ghi kết quả thực hiện trong tối đa 1.000 ký tự.');

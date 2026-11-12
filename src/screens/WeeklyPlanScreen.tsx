@@ -6,7 +6,7 @@ import { AssignmentCalendar } from '../features/tasks/AssignmentCalendar';
 import { CalendarDialog } from '../features/tasks/CalendarDialog';
 import { formatDue, formatTaskDate, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
-import { mondayOf, planContent, summarizeWeek, weeklyPlanTextLimit } from '../features/weekly-plan/weeklyPlan';
+import { mondayOf, planContent, suggestWeekTasks, weeklyPlanTextLimit } from '../features/weekly-plan/weeklyPlan';
 import { saveWeekPlan, watchPlanningTeam, watchWeekPlans } from '../features/weekly-plan/weeklyPlanStore';
 import type { WeekPlans } from '../features/weekly-plan/weeklyPlanStore';
 import type { usePlanningDrafts } from '../features/weekly-plan/usePlanningDrafts';
@@ -92,7 +92,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
 
   useEffect(() => watchWeekPlans(week, email, isAdmin, setPlans, () => setPlanError(true)), [week, email, isAdmin, retry]);
 
-  const { suggested, completed } = summarizeWeek(tasks ?? [], email, week, shiftDay(week, 6));
+  const suggested = suggestWeekTasks(tasks ?? [], email, week, shiftDay(week, 6));
   const existing = plans?.get(email);
   const { drafts, storageError, updateDraft } = draftStorage;
   const draft = drafts?.get(week);
@@ -124,10 +124,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
         <Text accessibilityRole="alert" style={ui.error}>Không tải được công việc.</Text>
         <Button secondary label="Tải lại công việc" onPress={onRetryTasks} />
       </> : !tasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} /> : <>
-        <View style={styles.summary}>
-          <Text style={ui.body}><Text style={ui.label}>Việc gợi ý:</Text> {suggested.length}</Text>
-          <Text style={ui.body}><Text style={ui.label}>Việc hoàn thành tuần trước:</Text> {completed}</Text>
-        </View>
+        <Text style={ui.body}><Text style={ui.label}>Việc gợi ý:</Text> {suggested.length}</Text>
         {suggested.length === 0 && <Text style={ui.muted}>Chưa có công việc đến hạn trong tuần này.</Text>}
         {suggested.map(task => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityHint="Mở chi tiết công việc"
@@ -211,7 +208,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   weekStep: { paddingHorizontal: 6, flexShrink: 1 },
   calendarButton: { width: 44, height: 44, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   calendarIcon: { color: colors.accent, fontSize: 22, fontWeight: '700' },
-  summary: { gap: 4 },
   field: { gap: 6 },
   task: { minHeight: 44, paddingBottom: 4 },
 }));
