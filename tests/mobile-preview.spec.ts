@@ -32,7 +32,8 @@ test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặ
   await page.getByLabel('Tìm văn bản', { exact: true }).fill('ban giao');
   await incoming.click();
   await expect(page.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' })).toBeVisible();
-  await expect(page.getByText('01/2025', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Chi tiết công văn' })
+    .getByText('01/2025', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Về sổ văn thư' }).click();
   await page.getByLabel('Tìm văn bản', { exact: true }).clear();
   await page.getByRole('button', { name: 'Văn bản đi', exact: true }).click();
@@ -608,7 +609,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await openMenu.click();
   const items = drawer.getByRole('button');
   const labels = [
-    'Đóng menu', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
+    'Đóng menu', 'Mở Quản lý Marchix bản web', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
     'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Văn thư', 'Cài đặt', 'Đăng xuất',
   ];
   await expect(items).toHaveCount(labels.length);
