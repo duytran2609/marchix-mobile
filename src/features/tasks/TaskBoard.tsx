@@ -258,7 +258,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   metadataRow: { minHeight: 22, justifyContent: 'center' },
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
   personName: { color: colors.muted, fontSize: 13, fontWeight: '400' },
-  metaLabel: { fontWeight: '700' },
+  metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },
   overdueTag: { alignSelf: 'flex-start', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,

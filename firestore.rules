@@ -271,32 +271,33 @@ service cloud.firestore {
           && cash.get('files', []).hasAny([cashFileEntry(fileId, meta, meta.type)]);
       }
 
-      function isRecordPdf(meta) {
+      function isRecordAttachment(meta) {
         return meta.get('scopeType', '') == 'correspondence' && meta.scopeId is string
           && meta.parent == 'correspondence/' + meta.scopeId;
       }
       function recordPath(scopeId) {
         return /databases/$(database)/documents/correspondence/$(scopeId);
       }
-      function readableRecordPdf(meta) {
-        return isRecordPdf(meta) && recordReadable(get(recordPath(meta.scopeId)).data);
+      function readableRecordAttachment(meta) {
+        return isRecordAttachment(meta) && recordReadable(get(recordPath(meta.scopeId)).data);
       }
-      function validRecordPdf(meta) {
+      function validRecordAttachment(meta) {
         let record = getAfter(recordPath(meta.scopeId)).data;
         return meta.keys().hasOnly(['name','type','size','chunks','parent','scopeType','scopeId','by','at','sha256'])
-          && isRecordPdf(meta) && record.fileId == fileId && record.fileName == meta.name
+          && isRecordAttachment(meta) && record.fileId == fileId && record.fileName == meta.name
           && record.updatedAt == request.time && record.updatedBy == email()
           && meta.by == email() && isoDate(meta.at)
           && meta.name is string && meta.name.size() > 0 && meta.name.size() <= 255
-          && meta.type == 'application/pdf' && meta.size is int && meta.size > 0 && meta.size <= 5242880
+          && meta.type is string && meta.type.size() <= 120 && meta.type.matches('^[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+$')
+          && meta.size is int && meta.size > 0 && meta.size <= 5242880
           && meta.chunks is int && meta.chunks >= 1 && meta.chunks <= 6
           && meta.size > (meta.chunks - 1) * 921600 && meta.size <= meta.chunks * 921600
           && meta.sha256 is string && meta.sha256.matches('^[0-9a-f]{64}$');
       }
       allow get: if activeMember() && isCashFile(resource.data) && canReadFile(resource.data);
       allow create: if activeMember() && isCashFile(request.resource.data) && validCashFile(request.resource.data);
-      allow get: if activeMember() && readableRecordPdf(resource.data);
-      allow create: if attendanceAdmin() && validRecordPdf(request.resource.data);
+      allow get: if activeMember() && readableRecordAttachment(resource.data);
+      allow create: if attendanceAdmin() && validRecordAttachment(request.resource.data);
 
       match /chunks/{chunkId} {
         function filePath() {
@@ -315,14 +316,14 @@ service cloud.firestore {
         }
         function validRecordChunk(data) {
           let meta = getAfter(filePath()).data;
-          return !exists(filePath()) && isRecordPdf(meta) && meta.by == email()
+          return !exists(filePath()) && isRecordAttachment(meta) && meta.by == email()
             && data.keys().hasOnly(['i', 'data']) && data.i is int && chunkId.matches('^[0-5]$')
             && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
             && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
         }
         allow read: if activeMember() && readableCashChunk();
         allow create: if activeMember() && validCashChunk(request.resource.data);
-        allow read: if activeMember() && readableRecordPdf(get(filePath()).data);
+        allow read: if activeMember() && readableRecordAttachment(get(filePath()).data);
         allow create: if attendanceAdmin() && validRecordChunk(request.resource.data);
       }
     }
@@ -712,7 +713,7 @@ service cloud.firestore {
     // Shared web inbox. Trusted senders supply to, from, title, body, link and createdAt.
     // Recipients can only change read to true. The optional emailed flag is server-managed.
     function recordChanges() { return request.resource.data.diff(resource.data).affectedKeys(); }
-    // Sổ văn thư: khóa số sổ theo chiều/năm, nhật ký bất biến và một bản PDF.
+    // Sổ văn thư: khóa số sổ theo chiều/năm, nhật ký bất biến và một tệp đính kèm.
     function recordActive(mail) {
       return mail is string && mail != '' && get(/databases/$(database)/documents/members/$(mail)).data.get('enabled', true) == true;
     }
@@ -825,10 +826,13 @@ service cloud.firestore {
         && event.from == prior && event.to == d.status
         && (!(d.status in ['issued','void']) || event.note.size() >= 10);
     }
-    function recordFile(d, id) {
+    function recordFile(d, id, pdfOnly) {
       let file = getAfter(/databases/$(database)/documents/files/$(d.fileId)).data;
       return file.scopeType == 'correspondence' && file.scopeId == id
-        && file.name == d.fileName && file.type == 'application/pdf' && file.by == email();
+        && file.name == d.fileName && (!pdfOnly || file.type == 'application/pdf') && file.by == email();
+    }
+    function recordHasPdf(d) {
+      return d.fileId != '' && getAfter(/databases/$(database)/documents/files/$(d.fileId)).data.type == 'application/pdf';
     }
     function recordRoute(d, old) {
       return d.assigneeEmail == old.assigneeEmail
@@ -849,7 +853,7 @@ service cloud.firestore {
           : !(d.status in ['assigned','processing']) || recordActive(d.assigneeEmail)))
         && (old.status in ['registered','assigned','processing','draft']
           ? (d.fileId == old.fileId && d.fileName == old.fileName
-            || old.fileId == '' && recordFile(d, id))
+            || old.fileId == '' && recordFile(d, id, true))
           : recordChanges().hasOnly(['status','updatedBy','updatedAt','lastEventId']));
     }
     function recordAssigneeEdit(old, d) {
@@ -868,7 +872,7 @@ service cloud.firestore {
     function recordSignature(old, d, id) {
       return recordAdmin() && d.signedByName is string && d.signedByName.size() > 0 && d.signedByName.size() <= 160
         && recordDate(d.signedOn) && d.signedOn <= recordToday() && d.fileId != ''
-        && (d.fileId == old.fileId && d.fileName == old.fileName || recordFile(d, id));
+        && (d.fileId == old.fileId && d.fileName == old.fileName ? recordHasPdf(d) : recordFile(d, id, true));
     }
     function recordUpdateNumber(old, d, id) {
       return old.direction == 'out' && old.status == 'signing' && d.status == 'numbered'
@@ -876,14 +880,14 @@ service cloud.firestore {
           && recordChanges().hasOnly(['status','signedByName','signedOn','fileId','fileName','externalNumber','documentOn','numbering','updatedBy','updatedAt','lastEventId'])
         : old.direction == 'out' && old.status == 'signed' && d.status == 'numbered'
         ? (recordAdmin() || recordMember() && old.assigneeEmail == email())
-          && old.get('numbering', null) == null && old.get('signedByName','') != '' && old.fileId != '' && recordAllocation(d, id)
+          && old.get('numbering', null) == null && old.get('signedByName','') != '' && recordHasPdf(d) && recordAllocation(d, id)
           && recordChanges().hasOnly(['status','externalNumber','documentOn','numbering','updatedBy','updatedAt','lastEventId'])
         : d.status == 'signed' && old.status in ['signing','numbered']
           ? recordSignature(old,d,id) && recordChanges().hasOnly(['status','signedByName','signedOn','fileId','fileName','updatedBy','updatedAt','lastEventId'])
           : d.status == 'issued'
           ? recordAdmin() && old.get('signedByName','') != '' && old.get('numbering',null) != null
             && recordChanges().hasOnly(['status','fileId','fileName','updatedBy','updatedAt','lastEventId'])
-            && (d.fileId == old.fileId && d.fileName == old.fileName || recordFile(d, id))
+            && (d.fileId == old.fileId && d.fileName == old.fileName ? recordHasPdf(d) : recordFile(d, id, true))
           : !recordChanges().hasAny(['numbering','kind','signedByName','signedOn'])
           && (d.direction == 'in' || !recordChanges().hasAny(['externalNumber','documentOn']))
           && (recordAdminEdit(old, d, id) || recordAssigneeEdit(old, d));
@@ -899,7 +903,7 @@ service cloud.firestore {
             && (request.resource.data.assigneeEmail == '' || recordActive(request.resource.data.assigneeEmail))))
         && recordCreateNumber(request.resource.data, id)
         && recordWatcherChange(request.resource.data.get('watchers',[]), [])
-        && (request.resource.data.fileId == '' || recordFile(request.resource.data, id))
+        && (request.resource.data.fileId == '' || recordFile(request.resource.data, id, false))
         && recordEvent(id, request.resource.data, '');
       allow update: if request.resource.data.updatedBy == email() && request.resource.data.updatedAt == request.time
         && recordIdPart(request.resource.data.lastEventId)

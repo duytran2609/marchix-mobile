@@ -229,7 +229,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
                 </View>
                 <Text style={[screenStyles.body, styles.grow]}>{label || `Việc con ${index + 1}`}</Text>
                 <Text style={screenStyles.muted}>
-                  <Text style={{ fontWeight: '700' }}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
+                  <Text style={[screenStyles.metadataLabel, { fontWeight: '700' }]}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
                 </Text>
               </Pressable>
             );
@@ -340,7 +340,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     backgroundColor: colors.surfaceMuted },
   metadataField: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 9 },
   metadataDivider: { borderTopWidth: 1, borderTopColor: colors.line },
-  metadataLabel: { width: '44%', color: colors.ink, fontSize: 15, lineHeight: 24, fontWeight: '700' },
+  metadataLabel: { width: '44%', color: colors.metadataLabel, fontSize: 15, lineHeight: 24, fontWeight: '700' },
   metadataValue: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 17, lineHeight: 24 },
   metadataName: { fontSize: 17, lineHeight: 24, fontWeight: '400' },
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },

@@ -402,10 +402,22 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     expect(await employeeName.evaluate(x)).toBeCloseTo(nameLeft);
     await tableScroller.evaluate(element => { element.scrollLeft = 0; });
     await companyTable.getByRole('button', { name: 'Sửa công Nhân viên demo, ' + dateLabel }).click();
-    await admin.getByLabel('Giờ vào điều chỉnh').fill('08:30');
-    await admin.getByLabel('Giờ ra điều chỉnh').fill('17:00');
+    const editor = admin.getByRole('dialog', { name: 'Sửa công', exact: true });
+    await expect(editor).toContainText('Nhân viên: Nhân viên demo');
+    for (const [label, value] of [
+      ['Giờ vào điều chỉnh · Giờ', '08'],
+      ['Giờ vào điều chỉnh · Phút', '30'],
+      ['Giờ ra điều chỉnh · Giờ', '08'],
+    ]) {
+      await editor.getByRole('button', { name: new RegExp('^' + label + ':') }).click();
+      await admin.getByRole('radiogroup', { name: label }).getByRole('radio', { name: value, exact: true }).click();
+    }
     await admin.getByRole('radio', { name: '1', exact: true }).click();
     await admin.getByLabel('Lý do điều chỉnh').fill(adjustmentReason);
+    await admin.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
+    await expect(editor.getByRole('alert')).toHaveText('Giờ ra không được trước giờ vào.');
+    await editor.getByRole('button', { name: 'Giờ ra điều chỉnh · Giờ: 08', exact: true }).click();
+    await admin.getByRole('radiogroup', { name: 'Giờ ra điều chỉnh · Giờ' }).getByRole('radio', { name: '17', exact: true }).click();
     await admin.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
     await expect(page.getByText(new RegExp(adjustmentReason)).first()).toBeVisible();
     const personalRow = page.getByRole('table').getByRole('row').filter({ hasText: adjustmentReason });
@@ -428,8 +440,9 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
       const summarySheet = workbook.Sheets['Bảng chấm công'];
       expect(summarySheet.A4.v).toBe('BẢNG CHẤM CÔNG');
       expect(summarySheet.B7.v).toBe('Họ và tên');
-      expect(summarySheet.AI7.v).toBe('SP');
-      expect(summarySheet.AM7.v).toBe('CĐ');
+      expect(['AI7', 'AJ7', 'AK7', 'AL7', 'AM7'].map(address => summarySheet[address].v))
+        .toEqual(['x / ½', 'P', 'CT', '!', '–']);
+      expect(summarySheet.B9.t).toBe('s');
       const summaryRows = utils.sheet_to_json<(string | number)[]>(summarySheet, { header: 1 });
       const employeeRow = summaryRows.find(row => row[1] === 'Nhân viên demo');
       expect(employeeRow?.[Number(local.slice(8)) + 2]).toBe('x');
@@ -453,7 +466,8 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     const attendanceConfirmation = admin.getByRole('alertdialog', { name: 'Xác nhận xóa bản ghi chấm công' });
     await expect(attendanceConfirmation).toContainText('Nhân viên demo');
     await attendanceConfirmation.getByRole('button', { name: 'Hủy' }).click();
-    await expect(admin.getByLabel('Giờ vào điều chỉnh')).toHaveValue('08:30');
+    await expect(editor.getByRole('button', { name: 'Giờ vào điều chỉnh · Giờ: 08', exact: true })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Giờ vào điều chỉnh · Phút: 30', exact: true })).toBeVisible();
     await deleteAttendance.click();
     await attendanceConfirmation.getByRole('button', { name: 'Xác nhận xóa', exact: true }).click();
     await expect(attendanceConfirmation).toBeHidden();
@@ -771,6 +785,8 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     await openPlanning(page, 'Đăng nhập Google (mô phỏng)');
     const suggestion = page.getByRole('button', { name: new RegExp(title) });
     await expect(suggestion).toBeVisible();
+    await expect(suggestion.getByText('Trạng thái: Đang làm', { exact: true })).toBeVisible();
+    await expect(suggestion.getByText('Hạn chót: ' + formatTaskDate(shiftDay(week, 6)), { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Đối chiếu checklist phát hành/ })).toHaveCount(0);
     await selectWeekOnCalendar(page, week, calendarDay);
     await expect(page.getByText(weekRange(nextWeek))).toBeVisible();
@@ -782,8 +798,9 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     await expect(task).toBeVisible();
     await expect(task.getByText(title, { exact: true })).toBeVisible();
     await task.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
-    await expect(page.getByRole('heading', { name: /^công việc$/i })).toBeVisible();
-    await openFromMenu(page);
+    await expect(task).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Kế hoạch tuần', exact: true })).toBeVisible();
+    await expect(suggestion).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Kế hoạch đội nhóm' })).toHaveCount(0);
 
     const content = page.getByRole('textbox', { name: 'Nội dung kế hoạch' });
@@ -814,7 +831,7 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     expect(savedFields.priorities.stringValue).toBe(farContent);
 
     await page.getByRole('button', { name: 'Tuần trước' }).click();
-    await expect(page.getByText(weekRange(previousWeek))).toBeVisible();
+    await expect(page.getByText(weekRange(shiftDay(farWeek, -7)))).toBeVisible();
     await page.getByRole('button', { name: 'Tuần này' }).click();
     await expect(content).toHaveValue(updated);
     await selectWeekOnCalendar(page, week, farWeek);
@@ -831,6 +848,12 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     await expect(page.getByText('Có thay đổi chưa lưu', { exact: true })).toBeVisible();
     expect((await (await request.get(farPlan, { headers })).json()).fields.priorities.stringValue).toBe(farContent);
     await expect(farSuggestion).toBeVisible();
+    await page.getByRole('button', { name: 'Tuần sau' }).click();
+    await expect(page.getByText(weekRange(shiftDay(farWeek, 7)))).toBeVisible();
+    await page.getByRole('button', { name: 'Tuần này' }).click();
+    await page.getByRole('button', { name: 'Tuần trước' }).click();
+    await expect(page.getByText(weekRange(previousWeek))).toBeVisible();
+    await page.getByRole('button', { name: 'Tuần sau' }).click();
     await page.getByRole('button', { name: 'Tuần sau' }).click();
     await expect(page.getByText(weekRange(nextWeek))).toBeVisible();
     await expect(content).not.toHaveValue(farContent);
@@ -855,6 +878,8 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
 
     await openPlanning(admin, 'Đăng nhập quản trị (mô phỏng)');
     await expect(admin.getByRole('heading', { name: 'Kế hoạch đội nhóm' })).toBeVisible();
+    await expect(admin.getByText('Đã lưu', { exact: true }).first()).toBeVisible();
+    await expect(admin.getByText('Chưa lưu', { exact: true }).first()).toBeVisible();
     await expect(admin.getByText(updated, { exact: true })).toBeVisible();
   } finally {
     await admin.close();

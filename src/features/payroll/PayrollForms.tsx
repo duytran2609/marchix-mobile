@@ -165,8 +165,8 @@ export function PayEditor({ employee, month, rates, advance, slip, pay, busy, on
       required={key === 'workDays' || key === 'standardDays'}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
     <PayBreakdown pay={preview} />
-    <Text style={styles.muted}>Thu nhập tính thuế: {money(preview.taxable)}</Text>
-    <Text style={styles.muted}>Tạm ứng đã duyệt: {money(preview.advance)}</Text>
+    <Text style={styles.muted}><Text style={styles.metadataLabel}>Thu nhập tính thuế: </Text>{money(preview.taxable)}</Text>
+    <Text style={styles.muted}><Text style={styles.metadataLabel}>Tạm ứng đã duyệt: </Text>{money(preview.advance)}</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
       : <Button label="Lưu dòng lương" disabled={busy} onPress={() => {

@@ -18,6 +18,7 @@ export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: '700', color: colors.ink },
   body: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  metadataLabel: { color: colors.metadataLabel },
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

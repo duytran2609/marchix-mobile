@@ -83,14 +83,14 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
         </View>
         <Text style={styles.badge}>{project.status || 'Chưa cập nhật trạng thái'}</Text>
         <View style={local.metadata}>
-          <Text selectable style={styles.muted}><Text style={local.metaLabel}>Mã dự án: </Text>DA-{project.id}</Text>
+          <Text selectable style={styles.muted}><Text style={[local.metaLabel, styles.metadataLabel]}>Mã dự án: </Text>DA-{project.id}</Text>
           <Text selectable style={styles.muted}>
-            <Text style={local.metaLabel}>Thời gian: </Text>
+            <Text style={[local.metaLabel, styles.metadataLabel]}>Thời gian: </Text>
             {project.startDate ? formatTaskDate(project.startDate) : 'Chưa có ngày bắt đầu'} → {
               project.deadline ? formatTaskDate(project.deadline) : 'Chưa có ngày kết thúc'}
           </Text>
           <Text selectable style={styles.muted}>
-            <Text style={local.metaLabel}>Người phụ trách: </Text>{project.owner || project.ownerEmail || 'Chưa có'}
+            <Text style={[local.metaLabel, styles.metadataLabel]}>Người phụ trách: </Text>{project.owner || project.ownerEmail || 'Chưa có'}
           </Text>
         </View>
         <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
@@ -154,7 +154,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
 function Detail({ label, value }: { label: string; value?: string }) {
   const styles = useScreenStyles();
   return <Text selectable style={styles.muted}>
-    <Text style={local.metaLabel}>{label}: </Text>{value || 'Chưa cập nhật'}
+    <Text style={[local.metaLabel, styles.metadataLabel]}>{label}: </Text>{value || 'Chưa cập nhật'}
   </Text>;
 }
 

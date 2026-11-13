@@ -12,8 +12,9 @@ type AttendanceExport = { company: CompanyAttendanceRow[] }
 const firstDayColumn = 3;
 const dayColumnCount = 31;
 const firstTotalColumn = firstDayColumn + dayColumnCount;
-const lastColumn = firstTotalColumn + 4;
-const firstEmployeeRow = 9;
+const totalColumns = ['x / ½', 'P', 'CT', '!', '–'];
+const lastColumn = firstTotalColumn + totalColumns.length - 1;
+const firstEmployeeRow = 8;
 const font = { name: 'Times New Roman', sz: 11 };
 const centered = { horizontal: 'center', vertical: 'center', wrapText: true } as const;
 const line = { style: 'thin', color: { rgb: '808080' } } as const;
@@ -24,8 +25,7 @@ const bold = { ...font, bold: true };
 function monthlySheet(month: string, rows: ExportRow[]) {
   const [year, monthNumber] = month.split('-');
   const dates = monthDays(month);
-  let totalWork = 0;
-  let totalLeave = 0;
+  const totals = totalColumns.map(() => 0);
   const values: (string | number | undefined)[][] = [
     ['MARCHIX'],
     ['BỘ PHẬN:'],
@@ -35,24 +35,22 @@ function monthlySheet(month: string, rows: ExportRow[]) {
     [],
     ['TT', 'Họ và tên', 'Cấp bậc, Chức vụ',
       ...Array.from({ length: dayColumnCount }, (_, index) => dates[index] ? index + 1 : ''),
-      'SP', 'P', 'L', 'Ô', 'CĐ'],
+      ...totalColumns],
     ['', '', '', ...dates.map(date => weekdays[weekday(date)])],
-    Array.from({ length: lastColumn + 1 }, (_, index) => index + 1),
   ];
 
   rows.forEach(({ name, days }, index) => {
     const work = days.reduce((total, day) => total + (day.result?.work ?? 0), 0);
-    const leave = days.reduce((total, day) => total + (attendanceMarker(day) === 'P' ? day.weight : 0), 0);
-    totalWork += work;
-    totalLeave += leave;
-    const markers = Array.from({ length: dayColumnCount }, (_, day) => days[day] ? attendanceMarker(days[day]) : '');
-    values.push([index + 1, name, '', ...markers, work, leave]);
+    const markers = days.map(attendanceMarker);
+    const rowTotals = [work, ...totalColumns.slice(1).map(symbol => markers.filter(marker => marker === symbol).length)];
+    rowTotals.forEach((value, column) => { totals[column] += value; });
+    const dayCells = Array.from({ length: dayColumnCount }, (_, day) => markers[day] ?? '');
+    values.push([index + 1, name, '', ...dayCells, ...rowTotals]);
   });
 
   const totalRow = values.length;
   const total: (string | number | undefined)[] = ['', 'Tổng cộng'];
-  total[firstTotalColumn] = totalWork;
-  total[firstTotalColumn + 1] = totalLeave;
+  totals.forEach((value, column) => { total[firstTotalColumn + column] = value; });
   values.push(total);
   const noteRow = values.length;
   values.push(['', 'Ghi chú:']);
@@ -62,22 +60,11 @@ function monthlySheet(month: string, rows: ExportRow[]) {
   values.push([]);
   const legendRow = signatureRow + 4;
   values[legendRow] = ['', 'Ký hiệu chấm công:'];
-  const legends = [
-    ['SP: Tổng công làm việc', 'TS: Thai sản'],
-    ['P: Nghỉ phép', 'TN: Tai nạn'],
-    ['L: Nghỉ lễ', 'H: Hội nghị, học tập'],
-    ['NB: Nghỉ bù', 'KL: Nghỉ không lương'],
-    ['Ô: Ốm', 'N: Ngừng việc'],
-    ['CĐ: Chế độ', 'LĐ: Lao động nghĩa vụ'],
-  ];
-  legends.forEach(([left, right], index) => {
-    const row = values[legendRow + 1 + index] = ['', left];
-    row[8] = right;
-  });
-  const instructionsRow = legendRow + legends.length + 2;
+  values[legendRow + 1] = ['', attendanceLegend];
+  const instructionsRow = legendRow + 3;
   values[instructionsRow] = ['', 'Hướng dẫn điền Bảng chấm công:'];
-  values[instructionsRow + 1] = ['', 'Đối chiếu ký hiệu theo từng ngày. Cột SP và P lấy từ dữ liệu chấm công và phép đã duyệt.'];
-  values[instructionsRow + 2] = ['', 'Điền thông tin bộ phận, chức vụ và các loại công chưa có dữ liệu trước khi ký xác nhận.'];
+  values[instructionsRow + 1] = ['', 'Cột x / ½ là tổng công thực tế. Các cột P, CT, ! và – đếm số ngày có ký hiệu tương ứng.'];
+  values[instructionsRow + 2] = ['', 'Điền thông tin bộ phận và chức vụ trước khi ký xác nhận.'];
   const sheet = utils.aoa_to_sheet(values);
   sheet['!ref'] = utils.encode_range({ r: 0, c: 0 }, { r: instructionsRow + 2, c: lastColumn });
   sheet['!cols'] = [5, 26, 21, ...Array.from({ length: dayColumnCount }, () => 3.6), 7, 7, 5, 5, 6].map(wch => ({ wch }));
@@ -121,7 +108,6 @@ function monthlySheet(month: string, rows: ExportRow[]) {
   merge(`B${totalRow + 1}:C${totalRow + 1}`);
   merge(`C${noteRow + 1}:AM${noteRow + 1}`);
   cell(noteRow, 1, { font: bold });
-  cell(noteRow, 2, { font, alignment: { vertical: 'center', wrapText: true } }, attendanceLegend);
   merge(`Z${dateRow + 1}:AM${dateRow + 1}`);
   cell(dateRow, 25, { font: { ...font, italic: true }, alignment: centered }, '………, ngày……tháng……năm……');
   for (const [start, end, label] of [
@@ -132,10 +118,10 @@ function monthlySheet(month: string, rows: ExportRow[]) {
     merge(`${start}${signatureRow + 1}:${end}${signatureRow + 1}`);
     cell(signatureRow, utils.decode_col(start), { font: bold, alignment: centered }, label);
   }
-  for (let row = legendRow; row < instructionsRow; row++) {
-    cell(row, 1, { font: row === legendRow ? bold : font });
-    if (row > legendRow && row <= legendRow + legends.length) cell(row, 8, { font });
-  }
+  cell(legendRow, 1, { font: bold });
+  merge(`B${legendRow + 2}:AM${legendRow + 2}`);
+  cell(legendRow + 1, 1, { font, alignment: { wrapText: true } });
+  sheet['!rows'][legendRow + 1] = { hpt: 30 };
   for (let row = instructionsRow; row <= instructionsRow + 2; row++) {
     merge(`B${row + 1}:AM${row + 1}`);
     cell(row, 1, { font: row === instructionsRow ? bold : font });

@@ -187,7 +187,7 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
             ['Phụ cấp miễn thuế', money(item.allowFree)],
             ['Người phụ thuộc', amount(item.dependents)],
           ].map(([field, value]) => <Text key={field} style={[styles.muted, { lineHeight: 23 }]}>
-            <Text style={{ fontSize: 16, fontWeight: '700' }}>{field}: </Text>{value === '' || value == null ? '—' : value}
+            <Text style={[styles.metadataLabel, { fontSize: 16, fontWeight: '700' }]}>{field}: </Text>{value === '' || value == null ? '—' : value}
           </Text>)}
         </View>
         <Button label={'Sửa hồ sơ ' + item.name} secondary onPress={() => { setError(''); setEditor({ kind: 'employee', id: item.id }); }} />
@@ -201,9 +201,9 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
             disabled={busy} style={{ flex: 1 }} onChange={value => setMonth(value + '-' + monthNumber)} />
         </View>
         {!!displayRows.length && <>
-          <Text style={styles.body}>Tổng thu nhập: {total('gross')}</Text>
-          <Text style={styles.cardTitle}>Tổng thực lĩnh: {total('net')}</Text>
-          <Text style={styles.body}>Tổng chi phí: {total('companyCost')}</Text>
+          <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng thu nhập: </Text>{total('gross')}</Text>
+          <Text style={styles.cardTitle}><Text style={styles.metadataLabel}>Tổng thực lĩnh: </Text>{total('net')}</Text>
+          <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng chi phí: </Text>{total('companyCost')}</Text>
         </>}
         {hasDraft && <>
           <Button label="Lấy ngày công từ Chấm công" secondary disabled={busy} onPress={() => {

@@ -11,7 +11,7 @@ const currency = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: '
 function FinanceField({ label, value }: { label: string; value: string }) {
   const styles = useScreenStyles();
   return <Text selectable style={styles.muted}>
-    <Text style={{ fontWeight: '700' }}>{label}: </Text>{value}
+    <Text style={[styles.metadataLabel, { fontWeight: '700' }]}>{label}: </Text>{value}
   </Text>;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
+import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
@@ -260,6 +261,32 @@ function Metric({ label, value, detail, inlineDetail, alertDetail }: {
   </View>;
 }
 
+const timeOptions = (count: number) => Array.from({ length: count }, (_, index) => {
+  const value = String(index).padStart(2, '0');
+  return { value, label: value };
+});
+const hourOptions = [{ value: '', label: 'Chọn giờ' }, ...timeOptions(24)];
+const minuteOptions = timeOptions(60);
+
+function AdjustmentTimeField({ label, value, disabled, onChange }: {
+  label: string; value: string; disabled: boolean; onChange: (value: string) => void;
+}) {
+  const ui = useScreenStyles();
+  const styles = useStyles();
+  const [hour = '', minute = ''] = value.split(':');
+  return <View style={styles.scheduleDetails}>
+    <Text style={ui.label}>{label}</Text>
+    <View style={styles.timeFields}>
+      <Dropdown label={label + ' · Giờ'} hideLabel value={hour} choices={hourOptions}
+        style={styles.timeField} disabled={disabled}
+        onChange={nextHour => onChange(nextHour ? nextHour + ':' + (minute || '00') : '')} />
+      <Dropdown label={label + ' · Phút'} hideLabel value={minute} choices={minuteOptions}
+        fallbackLabel="Chọn phút" style={styles.timeField} disabled={disabled || !hour}
+        onChange={nextMinute => onChange(hour + ':' + nextMinute)} />
+    </View>
+  </View>;
+}
+
 function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTarget; email: string; onClose: () => void }) {
   const ui = useScreenStyles();
   const styles = useStyles();
@@ -279,6 +306,16 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
     if (!deleting && (!isTime(manualIn.trim()) || !isTime(manualOut.trim()) || !note.trim())) {
       setError('Nhập lý do và dùng định dạng HH:mm cho giờ điều chỉnh.');
       return;
+    }
+    if (!deleting) {
+      const recordedIn = machineTime(record?.inTs);
+      const recordedOut = machineTime(record?.outTs);
+      const effectiveIn = manualIn.trim() || (recordedIn === null ? '' : clock(recordedIn));
+      const effectiveOut = manualOut.trim() || (recordedOut === null ? '' : clock(recordedOut));
+      if (effectiveIn && effectiveOut && effectiveOut < effectiveIn) {
+        setError('Giờ ra không được trước giờ vào.');
+        return;
+      }
     }
     lock.current = true;
     setPending(true);
@@ -308,28 +345,36 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
     setConfirmDelete(false);
   };
 
-  return <Modal visible animationType="slide" onRequestClose={() => {
+  const details = [
+    ['Nhân viên', member.name],
+    ['Ngày', showAttendanceDate(date) + '/' + date.slice(0, 4)],
+    ['Giờ vào ghi nhận', clock(machineTime(record?.inTs))],
+    ['Giờ ra ghi nhận', clock(machineTime(record?.outTs))],
+    ['Công hiện tại', calculatedWork],
+  ] as const;
+
+  return <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={() => {
     if (confirmDelete) cancelDelete();
     else if (!lock.current) onClose();
   }}>
-    <SafeAreaView style={styles.editor}>
-      <ScrollView contentContainerStyle={ui.scroll} keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.editorOverlay}>
+      <KeyboardAvoidingView style={styles.editorCenter} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}>
-        <View style={ui.page}>
-          <View style={ui.panel}>
-            <View style={ui.listHeader}>
-              <Text accessibilityRole="header" style={[ui.heading, ui.listHeading]}>Sửa công</Text>
-              {record && <DeleteIconButton label="Xóa bản ghi chấm công" disabled={pending || confirmDelete}
-                onPress={() => { setError(''); setConfirmDelete(true); }} />}
+        <View role="dialog" accessibilityLabel="Sửa công" accessibilityViewIsModal style={[ui.panel, styles.editorPanel]}>
+          <View style={ui.listHeader}>
+            <Text accessibilityRole="header" style={[ui.cardTitle, ui.listHeading]}>Sửa công</Text>
+            {record && <DeleteIconButton label="Xóa bản ghi chấm công" disabled={pending || confirmDelete}
+              onPress={() => { setError(''); setConfirmDelete(true); }} />}
+            <PopupCloseButton label="Đóng sửa công" onPress={onClose} disabled={pending || confirmDelete} />
+          </View>
+          <ScrollView style={styles.editorScroll} contentContainerStyle={ui.stack} keyboardShouldPersistTaps="handled">
+            <View style={styles.scheduleDetails}>
+              {details.map(([label, value]) => <Text key={label} style={styles.scheduleText}>
+                <Text style={styles.scheduleLabel}>{label}: </Text>{value}
+              </Text>)}
             </View>
-            <Text style={ui.label}>{member.name} · {showAttendanceDate(date)}/{date.slice(0, 4)}</Text>
-            <Text style={ui.muted}>Giờ ghi nhận {clock(machineTime(record?.inTs))}–{clock(machineTime(record?.outTs))} · Công hiện tại {calculatedWork}</Text>
-            <FieldLabel style={ui.label} required>Giờ vào điều chỉnh</FieldLabel>
-            <TextInput accessibilityLabel="Giờ vào điều chỉnh" value={manualIn} onChangeText={setIn} maxLength={5}
-              placeholder="HH:mm" editable={!pending && !confirmDelete} style={ui.input} />
-            <FieldLabel style={ui.label} required>Giờ ra điều chỉnh</FieldLabel>
-            <TextInput accessibilityLabel="Giờ ra điều chỉnh" value={manualOut} onChangeText={setOut} maxLength={5}
-              placeholder="HH:mm" editable={!pending && !confirmDelete} style={ui.input} />
+            <AdjustmentTimeField label="Giờ vào điều chỉnh" value={manualIn} onChange={setIn} disabled={pending || confirmDelete} />
+            <AdjustmentTimeField label="Giờ ra điều chỉnh" value={manualOut} onChange={setOut} disabled={pending || confirmDelete} />
             <Text style={ui.label}>Số công</Text>
             <View style={ui.choices}>
               {['', '1', '0.5', '0'].map(value => <Pressable key={value} accessibilityRole="radio"
@@ -344,10 +389,9 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
             {!!error && !confirmDelete && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
             <Button label={pending && !confirmDelete ? 'Đang lưu…' : 'Lưu điều chỉnh'}
               disabled={pending || confirmDelete} onPress={() => void submit(false)} />
-            <Button label="Đóng" secondary disabled={pending || confirmDelete} onPress={onClose} />
-          </View>
+          </ScrollView>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
       {confirmDelete && <ConfirmDialog label="Xác nhận xóa bản ghi chấm công" title="Xóa bản ghi chấm công?"
         message={`Bản ghi của ${member.name} ngày ${showAttendanceDate(date)}/${date.slice(0, 4)} sẽ bị xóa vĩnh viễn.`}
         action="Xác nhận xóa" pendingAction="Đang xóa…" pending={pending} error={error}
@@ -369,7 +413,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   noteInput: { minHeight: 76, paddingVertical: 10, textAlignVertical: 'top' },
   scheduleDetails: { gap: 5 },
   scheduleText: { color: colors.muted, fontSize: 15, lineHeight: 21 },
-  scheduleLabel: { fontWeight: '700' },
+  scheduleLabel: { color: colors.metadataLabel, fontWeight: '700' },
   monthPicker: { width: 148, flexShrink: 1 },
   alertDetail: { color: colors.danger, fontSize: 14, fontWeight: '700' },
   clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
@@ -377,5 +421,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   metric: { flexGrow: 1, flexBasis: '45%', backgroundColor: colors.accentSoft, borderRadius: 10, padding: 10 },
   metricInlineDetail: { fontWeight: '400' },
   missedPunches: { gap: 4 },
-  editor: { flex: 1, backgroundColor: colors.paper },
+  editorOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
+  editorCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  editorPanel: { width: '100%', maxWidth: 520, flexShrink: 1 },
+  editorScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
+  timeFields: { flexDirection: 'row', gap: 8 },
+  timeField: { flex: 1, minWidth: 0 },
 }));

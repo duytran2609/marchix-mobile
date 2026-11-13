@@ -30,9 +30,9 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   const title = `Văn bản kiểm thử ${Date.now()}`;
   const pdf = pdfWithText();
 
-  async function choosePdf() {
+  async function choosePdf(label = 'Chọn PDF') {
     const picker = page.waitForEvent('filechooser');
-    await button('Chọn PDF').click();
+    await button(label).click();
     await (await picker).setFiles({ name: 'marchix.pdf', mimeType: 'application/pdf', buffer: pdf });
   }
 
@@ -123,8 +123,8 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await watcherPicker.getByRole('textbox', { name: 'Tìm người theo dõi' }).fill('dong nghiep');
   await watcherPicker.getByRole('checkbox', { name: 'Đồng nghiệp demo', exact: true }).click();
   await watcherPicker.getByRole('button', { name: 'Xong', exact: true }).click();
-  await choosePdf();
-  await preview('Xem PDF vừa chọn');
+  await choosePdf('Chọn tệp');
+  await preview('Xem trước');
   await button('Vào sổ và cấp số đến').click();
   await expect(page.getByRole('heading', { name: title + ' đến' })).toBeVisible();
   await expect(detail.getByText(documentDate, { exact: true }).first()).toBeVisible();
@@ -138,9 +138,20 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await button('+ Lập bản nháp').click();
   await page.getByLabel('Trích yếu', { exact: true }).fill(title + ' đi');
   await page.getByLabel('Nơi nhận', { exact: true }).fill('Đối tác kiểm thử');
+  const textPicker = page.waitForEvent('filechooser');
+  await button('Chọn tệp').click();
+  await (await textPicker).setFiles({
+    name: 'ghi-chu.txt', mimeType: 'text/plain', buffer: Buffer.from('Noi dung tep dinh kem'),
+  });
+  await button('Xem trước').click();
+  await expect(page.getByText('Noi dung tep dinh kem', { exact: true })).toBeVisible();
+  await button('Đóng xem trước').click();
   const outgoingDueDate = await chooseDate('Hạn xử lý');
   await button('Lập bản nháp').click();
   await expect(page.getByRole('heading', { name: title + ' đi' })).toBeVisible();
+  await button('ghi-chu.txt').click();
+  await expect(page.getByText('Noi dung tep dinh kem', { exact: true })).toBeVisible();
+  await button('Đóng xem trước').click();
   await expect(detail.getByText(outgoingDueDate, { exact: true })).toBeVisible();
   await action('Trình duyệt nội dung', 'Chờ duyệt nội dung');
   await button('Về sổ văn thư').click();

@@ -24,7 +24,7 @@ export type CompanyAttendanceRow = { member: AttendanceMember; month: Attendance
 
 export const companyTotals = ['CÔNG', 'PHÉP', 'MUỘN', 'QUÊN'];
 export const personalColumns = ['NGÀY', 'VÀO', 'RA', 'GIỜ LÀM', 'CÔNG', 'GHI CHÚ'];
-export const attendanceLegend = 'x đủ công · ½ nửa công · P nghỉ phép · CT công tác · ! quên chấm ra · – vắng · ? cần xác minh · • đang làm.';
+export const attendanceLegend = 'x đủ công · ½ nửa công · 0 không có công · P nghỉ phép đã duyệt · CT công tác · ! quên chấm ra · – vắng không đơn · ? cần xác minh · • đang làm.';
 
 export function personalAttendanceCells(day: AttendanceDay, personalNote?: string) {
   const { date, weight, record, result, leave } = day;

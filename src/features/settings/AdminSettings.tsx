@@ -308,13 +308,13 @@ export function AdminSettings({ tab, email, onScrollTop }: {
               <View style={fieldStyles.memberDetails}>
                 <ClickableCardHeader><Text style={ui.label}>{name}</Text></ClickableCardHeader>
                 {isMember ? <View style={fieldStyles.metadata}>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Email: </Text>{String(row.data.email || row.id)}</Text>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Email: </Text>{String(row.data.email || row.id)}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
                 </View> : <View style={[fieldStyles.metadata, fieldStyles.recurringDetails]}>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Số tiền / tháng: </Text>{formatMoney.format(Number(row.data.amount) || 0)}</Text>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Ngày chi: </Text>{String(row.data.day || 1)}</Text>
-                  <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Trạng thái: </Text>{row.data.active === false ? 'Tạm dừng' : 'Đang áp dụng'}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Số tiền / tháng: </Text>{formatMoney.format(Number(row.data.amount) || 0)}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Ngày chi: </Text>{String(row.data.day || 1)}</Text>
+                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.active === false ? 'Tạm dừng' : 'Đang áp dụng'}</Text>
                 </View>}
               </View>
             </Pressable>

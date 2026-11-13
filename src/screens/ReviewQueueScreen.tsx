@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
-import { PeopleSummary } from '../components/PeopleSummary';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { canAct, cashStatus, displayDate, missingCashApproval, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
 import { recordActions, recordSortTime, recordStates, watchRecords } from '../features/records/records';
@@ -203,7 +203,8 @@ function ApprovalMetadata({ fields }: { fields: ApprovalField[] }) {
     {fields.map(({ label, value, person }) => person ? (
       <View key={label} style={styles.personRow}>
         <Text style={[screenStyles.muted, styles.fieldLabel]}>{label}: </Text>
-        <PeopleSummary people={[{ id: person, name: person }]} textStyle={[screenStyles.muted, styles.personName]} wrap />
+        <MemberAvatar name={person} compact />
+        <Text style={[screenStyles.muted, styles.personName]}>{person}</Text>
       </View>
     ) : (
       <Text key={label} style={screenStyles.muted}>
@@ -245,7 +246,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   card: { gap: 7, padding: 16, backgroundColor: colors.paper, borderRadius: 14,
     borderColor: colors.line, borderWidth: 1 },
   metadata: { gap: 4 },
-  personRow: { flexDirection: 'row', alignItems: 'center' },
-  fieldLabel: { fontWeight: '700' },
-  personName: { fontWeight: '400' },
+  personRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  fieldLabel: { color: colors.metadataLabel, fontWeight: '700' },
+  personName: { flex: 1, minWidth: 0, fontWeight: '400' },
 }));

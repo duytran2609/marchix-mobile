@@ -144,7 +144,7 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
             <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
               <Text style={shared.cardTitle}>{row.type}</Text>
             </ClickableCardHeader>
-            <Text style={[shared.muted, canDelete && styles.dateWithDelete]}>Ngày tạo: {displayDate(row.createdAt)}</Text>
+            <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
           </Pressable>
           {canDelete && <View style={styles.deleteRequest}>
             <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}

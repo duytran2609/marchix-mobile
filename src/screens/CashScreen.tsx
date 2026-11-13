@@ -267,7 +267,7 @@ function CashDetail({ row, access, approvers, project, backLabel, operationLock,
       {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
     </Text>
     {fields.filter(([, value]) => !!value).map(([label, value]) => <View key={label} style={styles.detailRow}>
-      <Text style={styles.label}>{label}</Text><Text selectable style={styles.body}>{value}</Text>
+      <Text style={[styles.label, styles.metadataLabel]}>{label}</Text><Text selectable style={styles.body}>{value}</Text>
     </View>)}
     {files.length > 0 && <CashProofs cashId={row.id} files={files} />}
     {can('route') && <View style={local.field}>
@@ -450,7 +450,7 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
             ] as const).filter(([, value]) => !!value).map(([label, value]) => (
               <Text key={label} style={styles.muted}><Text style={local.metaLabel}>{label}: </Text>{value}</Text>
             ))}
-            {row.projectId ? <Text style={local.entryTag}>Dự án: {projectName(row.projectId)}</Text> : null}
+            {row.projectId ? <Text style={local.entryTag}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
           </Pressable>)}
           {visible.length > limit && <Button label="Xem thêm" secondary onPress={() => setLimit(n => n + pageSize)} />}
         </View>
@@ -497,7 +497,7 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   detailBody: { flexGrow: 0 },
   detailActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   popupContent: { borderWidth: 0, borderRadius: 0 },
-  metaLabel: { fontWeight: '700' },
+  metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   entryTag: { alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
     backgroundColor: colors.accentSoft, color: colors.accent, fontSize: 12, fontWeight: '700' },
   ledgerTitle: { gap: 2 },

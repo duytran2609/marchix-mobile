@@ -15,8 +15,8 @@ import { formatFileSize, pickTaskAttachments } from '../tasks/taskAttachments';
 import type { PickedAttachment } from '../tasks/taskAttachments';
 import { todayInVietnam } from '../tasks/taskDates';
 import { recordingSignature, saveRecord } from './recordStore';
-import { RecordPdfButton, RecordPdfPreview } from './RecordPdf';
-import type { RecordPdfDocument } from './RecordPdf';
+import { RecordAttachmentButton, RecordAttachmentPreview } from './RecordAttachment';
+import type { RecordAttachment } from './RecordAttachment';
 import type { RecordDraft } from './recordStore';
 import { recordKinds, recordNumber } from './records';
 import type { Correspondence, RecordBook, RecordStatus } from './records';
@@ -30,7 +30,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   isAdmin: boolean;
   onCancel: () => void;
   onSaved: (result: Awaited<ReturnType<typeof saveRecord>>) => void;
-  onPreview?: (file: RecordPdfDocument, downloadable: boolean) => void;
+  onPreview?: (file: RecordAttachment, downloadable: boolean) => void;
 }) {
   const styles = useScreenStyles();
   const { colors } = useTheme();
@@ -48,8 +48,8 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   const [signedOn, setSignedOn] = useState(todayInVietnam);
   const [note, setNote] = useState('');
   const [watchers, setWatchers] = useState<string[]>([]);
-  const [pdf, setPdf] = useState<PickedAttachment>();
-  const [preview, setPreview] = useState<RecordPdfDocument>();
+  const [attachment, setAttachment] = useState<PickedAttachment>();
+  const [preview, setPreview] = useState<RecordAttachment>();
   const [draft, setDraft] = useState<RecordDraft>({
     kind: 'letter', subject: '', partner: '', assigneeEmail: existing?.assigneeEmail ?? '',
     documentOn: '', externalNumber: '', dueOn: '', priority: 'normal',
@@ -81,13 +81,13 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     setBusy('Đang chọn tệp…');
     setError('');
     try {
-      const [file] = await pickTaskAttachments({ multiple: false, type: 'application/pdf' });
+      const [file] = await pickTaskAttachments({ multiple: false, type: existing ? 'application/pdf' : '*/*' });
       if (!file) return;
-      if (file.size > 5 * 1024 * 1024 || file.size < 5) throw new Error('Chọn PDF hợp lệ, tối đa 5 MB.');
-      setPdf(file);
+      if (file.size > 5 * 1024 * 1024 || file.size < 1) throw new Error('Chọn tệp hợp lệ, tối đa 5 MB.');
+      setAttachment(file);
       setConfirmed(false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Không đọc được tệp PDF.');
+      setError(cause instanceof Error ? cause.message : 'Không đọc được tệp.');
     } finally {
       lock.current = false;
       setBusy('');
@@ -102,7 +102,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     try {
       const saved = await saveRecord({ email, isAdmin, direction, existing, target: action?.status,
         draft: existing ? undefined : draft, signedByName, signedOn, confirmed, note,
-        assigneeEmail: draft.assigneeEmail, watchers, pdf });
+        assigneeEmail: draft.assigneeEmail, watchers, attachment });
       if (mounted.current) onSaved(saved);
     } catch (cause) {
       setError(cause && typeof cause === 'object' && 'code' in cause
@@ -116,17 +116,20 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   }
 
   async function previewPicked() {
-    if (!pdf || lock.current) return;
+    if (!attachment || lock.current) return;
     lock.current = true;
-    setBusy('Đang mở PDF…');
+    setBusy('Đang mở tệp…');
     setError('');
     try {
-      const bytes = Bytes.fromBase64String(await pdf.read()).toUint8Array();
-      if (bytes.length !== pdf.size || !hasPdfHeader(bytes)) throw new Error('Chọn lại bản PDF hợp lệ.');
-      const file = { name: pdf.name, bytes };
+      const bytes = Bytes.fromBase64String(await attachment.read()).toUint8Array();
+      const type = existing ? 'application/pdf' : attachment.type;
+      if (bytes.length !== attachment.size || (type === 'application/pdf' && !hasPdfHeader(bytes))) {
+        throw new Error('Chọn lại tệp hợp lệ.');
+      }
+      const file = { name: attachment.name, type, bytes };
       if (onPreview) onPreview(file, false);
       else setPreview(file);
-    } catch { setError('Không mở được bản PDF vừa chọn. Vui lòng chọn lại.'); }
+    } catch { setError('Không mở được tệp vừa chọn. Vui lòng chọn lại.'); }
     finally { lock.current = false; setBusy(''); }
   }
 
@@ -184,25 +187,33 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     {(!existing || signing || issuing || (isAdmin && existing.status === 'draft' && !existing.fileId)) && <>
       {!existing ? <View style={popup.field}>
         <Text style={styles.label}>Tài liệu đính kèm</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={pdf ? 'Chọn PDF khác' : 'Chọn PDF'}
+        <Pressable accessibilityRole="button" accessibilityLabel={attachment ? 'Chọn tệp khác' : 'Chọn tệp'}
           disabled={!!busy} onPress={() => void pick()}
           style={({ pressed }) => [popup.filePicker, { borderColor: colors.accent, backgroundColor: colors.accentSoft },
             (pressed || !!busy) && styles.dimmed]}>
           <Text style={[popup.fileAction, { color: colors.accent }]}>
-            {busy === 'Đang chọn tệp…' ? busy : pdf ? '+ Chọn tệp khác' : '+ Chọn tệp'}
+            {busy === 'Đang chọn tệp…' ? busy : attachment ? '+ Chọn tệp khác' : '+ Chọn tệp'}
           </Text>
-          <Text style={[popup.fileHint, { color: colors.muted }]}>1 tệp PDF, tối đa 5 MB.</Text>
+          <Text style={[popup.fileHint, { color: colors.muted }]}>1 tệp, tối đa 5 MB.</Text>
         </Pressable>
       </View> : <>
         <FieldLabel style={styles.label} required={(signing || issuing) && !existing.fileId}>Bản PDF (tối đa 5 MB)</FieldLabel>
-        <Button label={pdf ? 'Chọn PDF khác' : 'Chọn PDF'} secondary disabled={!!busy} onPress={() => void pick()} />
+        <Button label={attachment ? 'Chọn PDF khác' : 'Chọn PDF'} secondary disabled={!!busy} onPress={() => void pick()} />
       </>}
-      {pdf && <Text style={styles.muted}>{existing ? pdf.name : `${pdf.name} · ${formatFileSize(pdf.size)}`}</Text>}
-      {pdf && <Button label="Xem PDF vừa chọn" secondary disabled={!!busy} onPress={() => void previewPicked()} />}
-      {!!pdf && <Button label="Bỏ tệp vừa chọn" secondary disabled={!!busy}
-        onPress={() => { setPdf(undefined); setConfirmed(false); }} />}
+      {attachment && <>
+        <View style={existing ? undefined : [popup.fileCard, { borderColor: colors.line }]}>
+          <Text style={styles.body}>{attachment.name}</Text>
+          {!existing && <Text style={styles.muted}>{formatFileSize(attachment.size)}</Text>}
+        </View>
+        <View style={[styles.choices, !existing && popup.rightActions]}>
+          <Button label={existing ? 'Xem PDF vừa chọn' : 'Xem trước'} secondary disabled={!!busy}
+            onPress={() => void previewPicked()} />
+          <Button label={existing ? 'Bỏ tệp vừa chọn' : 'Bỏ tệp'} secondary={!!existing} danger={!existing} disabled={!!busy}
+            onPress={() => { setAttachment(undefined); setConfirmed(false); }} />
+        </View>
+      </>}
     </>}
-    {existing?.fileId && !starting && <RecordPdfButton key={existing.fileId} recordId={existing.id} fileId={existing.fileId}
+    {existing?.fileId && !starting && <RecordAttachmentButton key={existing.fileId} recordId={existing.id} fileId={existing.fileId}
       fileName={existing.fileName} disabled={!!busy} onPreview={onPreview && (file => onPreview(file, true))} />}
     {(signing || issuing) && <Button required secondary selected={confirmed} disabled={!!busy}
       label={signing ? 'Tôi đã kiểm tra chữ ký trên PDF' : 'Tôi đã kiểm tra chữ ký, số và ngày trên PDF'}
@@ -217,7 +228,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       <Button label="Hủy" secondary disabled={!!busy} onPress={onCancel} />
       <Button label={busy || (existing ? 'Xác nhận' : title)} disabled={!!busy} onPress={() => void submit()} />
     </View>
-    {existing && preview && <RecordPdfPreview file={preview} onClose={() => setPreview(undefined)} />}
+    {existing && preview && <RecordAttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
   if (existing) return content;
   const close = () => {
@@ -228,7 +239,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     <SafeAreaView style={popup.backdrop}>
       <View role="dialog" accessibilityViewIsModal accessibilityLabel={incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
         style={[popup.card, { backgroundColor: colors.paper }]}>
-        {preview ? <RecordPdfPreview embedded file={preview} onClose={() => setPreview(undefined)} /> : <>
+        {preview ? <RecordAttachmentPreview embedded file={preview} onClose={() => setPreview(undefined)} /> : <>
           <View style={popup.header}>
             <Text accessibilityRole="header" style={[styles.cardTitle, { flex: 1 }]}>
               {incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
@@ -251,5 +262,6 @@ const popup = StyleSheet.create({
   filePicker: { padding: 16, alignItems: 'center', gap: 6, borderRadius: 9, borderWidth: 1, borderStyle: 'dashed' },
   fileAction: { fontSize: 14, fontWeight: '700' },
   fileHint: { fontSize: 12, textAlign: 'center' },
+  fileCard: { padding: 12, gap: 4, borderWidth: 1, borderRadius: 9 },
   rightActions: { justifyContent: 'flex-end' },
 });

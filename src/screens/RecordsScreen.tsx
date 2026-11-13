@@ -13,8 +13,8 @@ import { bookStatuses, recordActions, recordBooks, recordIsLate, recordIsOpen, r
   recordNumber, recordSortTime, recordStates, recordSystemCode, watchRecords } from '../features/records/records';
 import type { Correspondence, RecordBook, RecordStatus } from '../features/records/records';
 import { RecordForm } from '../features/records/RecordForm';
-import { RecordPdfButton, RecordPdfPreview } from '../features/records/RecordPdf';
-import type { RecordPdfDocument } from '../features/records/RecordPdf';
+import { RecordAttachmentButton, RecordAttachmentPreview } from '../features/records/RecordAttachment';
+import type { RecordAttachment } from '../features/records/RecordAttachment';
 import { watchRecordEvents } from '../features/records/recordStore';
 import type { RecordEvent } from '../features/records/recordStore';
 import { todayInVietnam } from '../features/tasks/taskDates';
@@ -55,7 +55,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   const book = tab === 'out' ? 'out' : 'in';
   const [localRecordId, setLocalRecordId] = useState<string>();
   const recordId = routeRecordId ?? localRecordId;
-  const [preview, setPreview] = useState<{ recordId: string; file: RecordPdfDocument; downloadable: boolean }>();
+  const [preview, setPreview] = useState<{ recordId: string; file: RecordAttachment; downloadable: boolean }>();
   const [term, setTerm] = useState('');
   const [status, setStatus] = useState('');
   const [kind, setKind] = useState('');
@@ -67,7 +67,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   const today = todayInVietnam();
   const selected = rows?.find(row => row.id === recordId);
   const activePreview = selected && preview?.recordId === selected.id ? preview : undefined;
-  const openPreview = selected && ((file: RecordPdfDocument, downloadable: boolean) =>
+  const openPreview = selected && ((file: RecordAttachment, downloadable: boolean) =>
     setPreview({ recordId: selected.id, file, downloadable }));
 
   useEffect(() => watchRecords(email, isAdmin, setRows, () => {
@@ -110,7 +110,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
         toast(result + warning, warning ? 'error' : 'success');
       }} />;
   const editing = !!(form?.existing && editor);
-  const popupTitle = activePreview ? 'Xem PDF' : editing ? form?.action?.label : 'Chi tiết công văn';
+  const popupTitle = activePreview ? 'Xem trước tệp' : editing ? form?.action?.label : 'Chi tiết công văn';
   const closeLabel = onBackToReview ? 'Về Phê duyệt' : 'Về sổ văn thư';
 
   return (
@@ -166,11 +166,11 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
               <Text style={styles.muted}>{recordNumber(row)}</Text>
               <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
               <Text style={styles.muted}>
-                <Text style={styles.label}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
+                <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
                 {row.partner || '—'}
               </Text>
               <Text style={styles.muted}>
-                <Text style={styles.label}>Người phụ trách: </Text>
+                <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
                 {assignee(row)}
               </Text>
               <Text style={styles.badge}>{recordStates[row.status]}</Text>
@@ -187,7 +187,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
           <View role="dialog" accessibilityViewIsModal accessibilityLabel={popupTitle}
             style={[local.dialog, { backgroundColor: colors.paper },
               (!editing || activePreview) && local.tallDialog]}>
-            {activePreview && <RecordPdfPreview embedded file={activePreview.file}
+            {activePreview && <RecordAttachmentPreview embedded file={activePreview.file}
               downloadable={activePreview.downloadable} onClose={() => setPreview(undefined)} />}
             <View style={activePreview ? local.hidden : editing ? local.formContainer : local.flex}>
               {!editing && <View style={local.header}>
@@ -215,13 +215,13 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                     ['Ngày ký', selected.signedOn ? displayDate(selected.signedOn) : undefined],
                   ].filter(([, value]) => value).map(([label, value]) => (
                     <View key={label} style={[styles.detailRow, local.detailInset]}>
-                      <Text style={styles.label}>{label}</Text>
+                      <Text style={[styles.label, styles.metadataLabel]}>{label}</Text>
                       <Text selectable style={styles.body}>{value}</Text>
                     </View>
                   ))}
                   <View style={[styles.detailRow, local.detailInset]}>
                     <Text style={styles.label}>Tài liệu đính kèm</Text>
-                    {selected.fileId ? <RecordPdfButton key={selected.fileId} recordId={selected.id} fileId={selected.fileId}
+                    {selected.fileId ? <RecordAttachmentButton key={selected.fileId} recordId={selected.id} fileId={selected.fileId}
                       fileName={selected.fileName} onPreview={file => openPreview?.(file, true)} /> : <Text style={styles.muted}>Chưa lưu tệp</Text>}
                   </View>
                   {actions(selected).map(action => <Button key={action.status} label={action.label}

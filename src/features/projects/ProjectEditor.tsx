@@ -132,6 +132,6 @@ const usePopupStyles = createThemedStyles(colors => StyleSheet.create({
     paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   scroll: { flexShrink: 1, minHeight: 0 },
   body: { padding: 16, gap: 12 },
-  codeLabel: { fontWeight: '700' },
+  codeLabel: { color: colors.metadataLabel, fontWeight: '700' },
   field: { gap: 6 },
 }));

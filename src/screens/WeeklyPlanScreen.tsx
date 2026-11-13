@@ -5,7 +5,9 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { AssignmentCalendar } from '../features/tasks/AssignmentCalendar';
 import { CalendarDialog } from '../features/tasks/CalendarDialog';
-import { formatDue, formatTaskDate, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
+import { formatTaskDate, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
+import { TaskPriority } from '../features/tasks/TaskPriority';
+import { taskStatus } from '../features/tasks/TaskProgress';
 import type { Task } from '../features/tasks/tasks';
 import { mondayOf, planContent, suggestWeekTasks, weeklyPlanTextLimit } from '../features/weekly-plan/weeklyPlan';
 import { saveWeekPlan, watchPlanningTeam, watchWeekPlans } from '../features/weekly-plan/weeklyPlanStore';
@@ -13,6 +15,7 @@ import type { WeekPlans } from '../features/weekly-plan/weeklyPlanStore';
 import type { usePlanningDrafts } from '../features/weekly-plan/usePlanningDrafts';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
+import { TaskDetailPopup } from './TaskDetailScreen';
 
 type WeeklyPlanProps = {
   email: string;
@@ -20,12 +23,12 @@ type WeeklyPlanProps = {
   tasks: Task[] | null;
   tasksError: boolean;
   onRetryTasks: () => void;
-  onOpenTask: (id: string) => void;
 };
 
 type DraftStorage = ReturnType<typeof usePlanningDrafts>;
 
-export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...props }: WeeklyPlanProps & {
+export function WeeklyPlanScreen({ name, selectedWeek, onSelectWeek, draftStorage, ...props }: WeeklyPlanProps & {
+  name: string;
   selectedWeek?: string;
   onSelectWeek: (week: string) => void;
   draftStorage: DraftStorage;
@@ -34,11 +37,11 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
   const styles = useStyles();
   const [saving, setSaving] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [taskId, setTaskId] = useState<string>();
+  const closeTask = () => setTaskId(undefined);
   const currentWeek = mondayOf(todayInVietnam());
   const week = selectedWeek ?? currentWeek;
-  const previousWeek = shiftDay(currentWeek, -7);
-  const nextWeek = shiftDay(currentWeek, 7);
-  const calendarSelected = week < previousWeek || week > nextWeek;
+  const calendarSelected = week < shiftDay(currentWeek, -7) || week > shiftDay(currentWeek, 7);
   const sunday = shiftDay(week, 6);
   return <>
     <View style={ui.stack}>
@@ -46,12 +49,10 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
       <Text style={[ui.body, styles.weekRange]}>{formatTaskDate(week)} – {formatTaskDate(sunday)}</Text>
       <View style={styles.weekControls}>
         <View style={styles.weekSteps}>
-          <Button secondary style={styles.weekStep} label="Tuần trước" selected={week === previousWeek}
-            disabled={saving} onPress={() => onSelectWeek(previousWeek)} />
+          <WeekArrow label="Tuần trước" arrow="←" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, -7))} />
           <Button secondary style={styles.weekStep} label="Tuần này" selected={week === currentWeek}
             disabled={saving} onPress={() => onSelectWeek(currentWeek)} />
-          <Button secondary style={styles.weekStep} label="Tuần sau" selected={week === nextWeek}
-            disabled={saving} onPress={() => onSelectWeek(nextWeek)} />
+          <WeekArrow label="Tuần sau" arrow="→" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, 7))} />
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Chọn tuần trên lịch" disabled={saving}
           accessibilityState={{ disabled: saving, expanded: calendarOpen }} aria-pressed={calendarSelected}
@@ -66,7 +67,9 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
       </View>
     </View>
     <WeekContent key={week} {...props} week={week} saving={saving} onSavingChange={setSaving}
-      draftStorage={draftStorage} />
+      draftStorage={draftStorage} onOpenTask={setTaskId} />
+    {taskId && <TaskDetailPopup id={taskId} email={props.email} name={name}
+      onClose={closeTask} onBackToWeeklyPlan={closeTask} />}
     {calendarOpen && <CalendarDialog title="Chọn tuần" onClose={() => setCalendarOpen(false)}>
       <Text style={ui.muted}>Chọn một ngày để xem cả tuần.</Text>
       <AssignmentCalendar initialDay={week} value={week} rangeEnd={sunday} disabled={saving} onSelect={day => {
@@ -77,10 +80,22 @@ export function WeeklyPlanScreen({ selectedWeek, onSelectWeek, draftStorage, ...
   </>;
 }
 
+function WeekArrow({ label, arrow, disabled, onPress }: {
+  label: string; arrow: string; disabled: boolean; onPress: () => void;
+}) {
+  const ui = useScreenStyles();
+  const styles = useStyles();
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
+    disabled={disabled} onPress={onPress}
+    style={({ pressed }) => [ui.secondary, styles.calendarButton, (pressed || disabled) && ui.dimmed]}>
+    <Text aria-hidden style={styles.calendarIcon}>{arrow}</Text>
+  </Pressable>;
+}
+
 function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTask, week, saving, onSavingChange, draftStorage }:
   WeeklyPlanProps & {
     week: string; saving: boolean; onSavingChange: (saving: boolean) => void;
-    draftStorage: DraftStorage;
+    draftStorage: DraftStorage; onOpenTask: (id: string) => void;
   }) {
   const ui = useScreenStyles();
   const styles = useStyles();
@@ -125,15 +140,22 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
         <Text accessibilityRole="alert" style={ui.error}>Không tải được công việc.</Text>
         <Button secondary label="Tải lại công việc" onPress={onRetryTasks} />
       </> : !tasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} /> : <>
-        <Text style={ui.body}><Text style={ui.label}>Việc gợi ý:</Text> {suggested.length}</Text>
+        <Text style={ui.body}><Text style={[ui.label, ui.metadataLabel]}>Việc gợi ý:</Text> {suggested.length}</Text>
         {suggested.length === 0 && <Text style={ui.muted}>Chưa có công việc đến hạn trong tuần này.</Text>}
         {suggested.map(task => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityHint="Mở chi tiết công việc"
             onPress={() => onOpenTask(task.id)}
             style={({ pressed }) => [ui.detailRow, styles.task, pressed && ui.dimmed]}>
             <ClickableCardHeader><Text style={ui.label}>{task.title}</Text></ClickableCardHeader>
-            <Text style={task.status === 'Vướng' ? ui.error : ui.muted}>
-              {[task.status, formatDue(task.due), task.priority].filter(Boolean).join(' · ')}
+            <Text style={ui.muted}>
+              <Text style={[ui.label, ui.metadataLabel]}>Trạng thái: </Text>
+              <Text style={task.status === 'Vướng' ? ui.error : undefined}>{taskStatus(task)}</Text>
+            </Text>
+            <Text style={ui.muted}>
+              <Text style={[ui.label, ui.metadataLabel]}>Hạn chót: </Text>{task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
+            </Text>
+            <Text style={ui.muted}>
+              <Text style={[ui.label, ui.metadataLabel]}>Mức độ ưu tiên: </Text><TaskPriority priority={task.priority} />
             </Text>
           </Pressable>
         ))}
@@ -175,6 +197,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
 
 function TeamPlans({ plans }: { plans: WeekPlans | null }) {
   const ui = useScreenStyles();
+  const styles = useStyles();
   const { colors } = useTheme();
   const [team, setTeam] = useState<{ email: string; name: string }[] | null>(null);
   const [error, setError] = useState(false);
@@ -194,8 +217,10 @@ function TeamPlans({ plans }: { plans: WeekPlans | null }) {
         team.map(member => {
           const plan = plans.get(member.email);
           return <View key={member.email} style={ui.detailRow}>
-            <Text style={ui.label}>{member.name}</Text>
-            <Text style={ui.muted}>{plan ? 'Đã lưu' : 'Chưa lưu kế hoạch'}</Text>
+            <View style={styles.memberHeader}>
+              <Text style={[ui.label, styles.memberName]}>{member.name}</Text>
+              <Text style={[ui.badge, plan ? styles.savedTag : styles.unsavedTag]}>{plan ? 'Đã lưu' : 'Chưa lưu'}</Text>
+            </View>
             {plan && <Text style={ui.body}>{planContent(plan)}</Text>}
           </View>;
         }))}
@@ -211,4 +236,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   calendarIcon: { color: colors.accent, fontSize: 22, fontWeight: '700' },
   field: { gap: 6 },
   task: { minHeight: 44, paddingBottom: 4 },
+  memberHeader: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  memberName: { flexShrink: 1 },
+  savedTag: { color: colors.success, backgroundColor: colors.successSoft },
+  unsavedTag: { color: colors.warning, backgroundColor: colors.warningSoft },
 }));

@@ -30,7 +30,7 @@ type RecordSave = {
   note: string;
   assigneeEmail: string;
   watchers: string[];
-  pdf?: PickedAttachment;
+  attachment?: PickedAttachment;
 };
 
 export type RecordEvent = { id: string; actor: string; at: Date; from: RecordStatus | ''; to: RecordStatus; note: string };
@@ -46,18 +46,19 @@ export function watchRecordEvents(id: string, onEvents: (events: RecordEvent[]) 
   }, onError);
 }
 
-export async function readRecordPdf(recordId: string, fileId: string) {
+export async function readRecordAttachment(recordId: string, fileId: string) {
   const recordRef = doc(db, 'correspondence', recordId);
   const fileRef = doc(db, 'files', fileId);
   const [record, snapshot] = await Promise.all([getDocFromServer(recordRef), getDocFromServer(fileRef)]);
   const meta = snapshot.data();
   if (record.data()?.fileId !== fileId || !meta || meta.parent !== recordRef.path ||
-    meta.scopeType !== 'correspondence' || meta.scopeId !== recordId || meta.type !== 'application/pdf') {
+    meta.scopeType !== 'correspondence' || meta.scopeId !== recordId) {
     throw new Error('Tệp không còn thuộc hồ sơ này hoặc thông tin tệp không hợp lệ.');
   }
   const bytes = await readScopedFileBytes(fileRef, meta.size, meta.chunks, meta.sha256);
-  if (!hasPdfHeader(bytes)) throw new Error('Tệp PDF không hợp lệ.');
-  return { bytes, name: typeof meta.name === 'string' ? meta.name : 'Văn bản.pdf' };
+  const type = typeof meta.type === 'string' ? meta.type : 'application/octet-stream';
+  if (type === 'application/pdf' && !hasPdfHeader(bytes)) throw new Error('Tệp PDF không hợp lệ.');
+  return { bytes, type, name: typeof meta.name === 'string' ? meta.name : 'Tệp đính kèm' };
 }
 
 export function recordingSignature(existing?: Correspondence, target?: RecordStatus) {
@@ -71,7 +72,7 @@ function validDate(value: string) {
 }
 
 export async function saveRecord(input: RecordSave) {
-  const { email, isAdmin, direction, draft, existing, target, pdf } = input;
+  const { email, isAdmin, direction, draft, existing, target, attachment } = input;
   const watchers = [...new Set(input.watchers)];
   if (watchers.length > 5) throw new Error('Chọn tối đa 5 người theo dõi.');
   const today = todayInVietnam();
@@ -92,7 +93,7 @@ export async function saveRecord(input: RecordSave) {
   if (signing && (!signedByName || !validDate(input.signedOn) || input.signedOn > today)) {
     throw new Error('Nhập tên người ký và ngày ký hợp lệ.');
   }
-  if ((signing || issuing) && (!input.confirmed || (!pdf && !existing?.fileId))) {
+  if ((signing || issuing) && (!input.confirmed || (!attachment && !existing?.fileId))) {
     throw new Error('Cần có bản PDF và xác nhận đã kiểm tra tệp.');
   }
   if (target === 'numbered' && !signing && (!existing?.signedByName || !existing.fileId)) {
@@ -104,8 +105,15 @@ export async function saveRecord(input: RecordSave) {
     throw new Error(issuing ? 'Ghi nơi nhận, thời điểm, kênh gửi và bằng chứng phát hành.' : 'Ghi lý do hủy số, ít nhất 10 ký tự.');
   }
   const note = evidence || actionLabel || (incoming ? 'Tiếp nhận văn bản, tự cấp số đến.' : 'Lập bản nháp văn bản đi.');
-  const files = pdf ? await prepareCashFiles([{ ...pdf, type: 'application/pdf' }]) : [];
-  if (pdf && !hasPdfHeader(files[0].bytes)) throw new Error('Chọn tệp PDF hợp lệ, tối đa 5 MB.');
+  const needsPdf = signing || issuing || target === 'numbered';
+  if (needsPdf && !attachment && existing?.fileId) {
+    const stored = await readRecordAttachment(existing.id, existing.fileId);
+    if (stored.type !== 'application/pdf') throw new Error('Chọn bản PDF để thực hiện bước này.');
+  }
+  const files = attachment ? await prepareCashFiles([existing ? { ...attachment, type: 'application/pdf' } : attachment]) : [];
+  if (files[0]?.file.type === 'application/pdf' && !hasPdfHeader(files[0].bytes)) {
+    throw new Error('Chọn tệp PDF hợp lệ, tối đa 5 MB.');
+  }
   const kind = existing?.kind || draft?.kind || 'letter';
   const series = incoming ? 'in' : kind;
   const allocating = !existing && incoming || target === 'numbered';
@@ -144,7 +152,7 @@ export async function saveRecord(input: RecordSave) {
       Object.assign(data, { numbering: { year: Number(year), seq, at: serverTimestamp() },
         ...(!incoming ? { externalNumber: code, documentOn: today } : {}) });
     }
-    if (pdf) {
+    if (attachment) {
       const [file] = writeScopedFiles(tx, ref, 'correspondence', files, email, new Date().toISOString());
       Object.assign(data, { fileId: file.id, fileName: file.name });
     }
@@ -152,7 +160,7 @@ export async function saveRecord(input: RecordSave) {
     else tx.set(ref, data);
     const audit = [note.slice(0, 350)];
     if ((signing || issuing) && existing?.fileId) audit.push('PDF trước cập nhật: ' + existing.fileId + '.');
-    if (pdf) audit.push('Đã lưu PDF: ' + pdf.name);
+    if (attachment) audit.push('Đã lưu tệp: ' + attachment.name);
     tx.set(event, { actor: email, at: serverTimestamp(), from: existing?.status ?? '', to: status, note: audit.join(' ').slice(0, 500) });
     return { id, code, eventId: event.id, watchers: (latest?.watchers ?? []) as string[] };
   });

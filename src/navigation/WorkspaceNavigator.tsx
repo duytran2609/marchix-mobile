@@ -90,11 +90,10 @@ export function WorkspaceNavigator({
     onScrollTop={onScrollTop} />;
   if (route.screen === 'kpi') return <KpiScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
   if (route.screen === 'ke-hoach-tuan') return <WeeklyPlanScreen key={`${email}-${isAdmin}`}
-    email={email} isAdmin={isAdmin} tasks={tasksComplete ? tasks : null}
+    email={email} name={name} isAdmin={isAdmin} tasks={tasksComplete ? tasks : null}
     selectedWeek={planningWeek} onSelectWeek={setPlanningWeek}
     draftStorage={planningDrafts}
-    tasksError={error} onRetryTasks={retryTasks}
-    onOpenTask={id => setRoute({ screen: 'cong-viec', taskPopupId: id, taskPopupBackTo: 'ke-hoach-tuan' })} />;
+    tasksError={error} onRetryTasks={retryTasks} />;
   if (route.screen === 'cai-dat') return <SettingsScreen key={String(isAdmin)} reminders={reminders}
     isAdmin={isAdmin} email={email} onScrollTop={onScrollTop} />;
   if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, isAdmin])}
@@ -134,7 +133,6 @@ export function WorkspaceNavigator({
       onOpenTask={task => setRoute({ screen: 'task-detail', task: { id: task.id } })}
       showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={onDragChange} />
     {route.screen === 'cong-viec' && route.taskPopupId && <TaskDetailPopup key={route.taskPopupId}
-      id={route.taskPopupId} email={email} name={name} onClose={() => setRoute({ screen: 'cong-viec' })}
-      onBackToWeeklyPlan={route.taskPopupBackTo ? () => setRoute({ screen: 'ke-hoach-tuan' }) : undefined} />}
+      id={route.taskPopupId} email={email} name={name} onClose={() => setRoute({ screen: 'cong-viec' })} />}
   </>;
 }

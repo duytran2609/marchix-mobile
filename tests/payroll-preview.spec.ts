@@ -39,9 +39,12 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await page.getByRole('button', { name: 'Xuất phiếu lương', exact: true }).click();
     const legacyDownload = await legacyDownloadPromise;
     const legacyBook = read(await readFile((await legacyDownload.path())!), { type: 'buffer' });
-    expect(utils.sheet_to_json(legacyBook.Sheets[legacyBook.SheetNames[0]], { header: 1 })).toEqual([
-      columns, ['Nhân viên lương demo', '24 / 26', '', '', 10000000, 600000, 0, 300000, 9100000, '', '', 'Đã trả'],
-    ]);
+    expect(legacyDownload.suggestedFilename()).toBe('Phieu-luong-10-2026.xlsx');
+    const legacySheet = legacyBook.Sheets[legacyBook.SheetNames[0]];
+    expect(legacySheet.A2.v).toBe('Tháng 10/2026');
+    expect(legacySheet.D6?.v ?? '').toBe('');
+    expect(legacySheet.E6?.v ?? '').toBe('');
+    expect(legacySheet.J6.v).toBe(9100000);
 
     await openPayroll(admin, true);
     await admin.getByRole('button', { name: 'Hồ sơ nhân sự', exact: true }).click();
@@ -134,9 +137,15 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     const personalDownloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Xuất phiếu lương', exact: true }).first().click();
     const personalDownload = await personalDownloadPromise;
-    expect(personalDownload.suggestedFilename()).toBe('Phieu-luong-' + month + '.xlsx');
-    const personalBook = read(await readFile((await personalDownload.path())!), { type: 'buffer' });
-    expect(utils.sheet_to_json(personalBook.Sheets[personalBook.SheetNames[0]], { header: 1 })).toEqual([columns, payrollRow]);
+    expect(personalDownload.suggestedFilename()).toBe('Phieu-luong-' + label.replace('/', '-') + '.xlsx');
+    const personalBook = read(await readFile((await personalDownload.path())!), { type: 'buffer', cellStyles: true });
+    const personalSheet = personalBook.Sheets[personalBook.SheetNames[0]];
+    expect(personalSheet.A1.v).toBe('PHIẾU LƯƠNG NHÂN VIÊN');
+    expect(personalSheet.A2.v).toBe('Tháng ' + label);
+    expect(personalSheet['!merges']?.map(merge => utils.encode_range(merge))).toContain('G4:I4');
+    expect(personalSheet.D4.s.fgColor.rgb).toBe('FFE599');
+    expect(personalSheet.A7.s.fgColor.rgb).toBe('FF9900');
+    expect(utils.sheet_to_json(personalSheet, { header: 1, range: 'A6:M6' })).toEqual([[1, ...payrollRow]]);
 
     for (const message of ['Đã tạo 1 khoản trong mục Thu chi.', 'Kỳ lương này không có khoản chi mới.']) {
       await requestPayment.click();

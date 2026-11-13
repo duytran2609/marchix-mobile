@@ -11,7 +11,7 @@ export type ProjectRoute = {
 
 export type WorkspaceRoute =
   | { screen: 'tong-quan' }
-  | { screen: 'cong-viec'; taskPopupId?: string; taskPopupBackTo?: 'ke-hoach-tuan' }
+  | { screen: 'cong-viec'; taskPopupId?: string }
   | { screen: 'cho-duyet' }
   | { screen: 'ke-hoach-tuan' }
   | { screen: 'kpi' }

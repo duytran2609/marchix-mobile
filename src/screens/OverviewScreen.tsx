@@ -13,6 +13,7 @@ import { pendingRequest, watchRequests } from '../features/requests/requests';
 import type { StaffRequest } from '../features/requests/requests';
 import { formatDue, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
+import { mondayOf, suggestWeekTasks } from '../features/weekly-plan/weeklyPlan';
 import type { WorkspaceRoute } from '../navigation/workspaceRoutes';
 import { pilotMode } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
@@ -116,6 +117,8 @@ export function OverviewScreen({
   const decisionTasks = useOverviewTasks ? overviewTasks : tasks;
   const today = todayInVietnam();
   const nextWeek = shiftDay(today, 7);
+  const weekEnd = shiftDay(mondayOf(today), 6);
+  const myWeekTasks = Array.isArray(tasks) ? suggestWeekTasks(tasks, email, today, weekEnd) : [];
   const open = (Array.isArray(tasks) ? tasks : []).filter(task => task.status !== 'Xong');
   const grouped = groups.map(() => [] as Task[]);
   for (const task of open) {
@@ -325,6 +328,24 @@ export function OverviewScreen({
           <Button secondary label="Mở Thu chi" onPress={() => onNavigate({ screen: 'thu-chi' })} />
         </>}
       </>))}
+      {card('Việc của tôi tuần này', state(tasks, <>
+        {myWeekTasks.length === 0
+          ? <Text style={screen.muted}>Bạn không có việc cần làm đến hạn từ hôm nay đến hết tuần.</Text>
+          : myWeekTasks.slice(0, 3).map(task => row({
+            label: task.title,
+            detail: task.status === 'Vướng' ? `Đang vướng · ${formatDue(task.due)}` : formatDue(task.due),
+            route: taskRoute(task),
+          }, task.id))}
+        <Pressable accessibilityRole="button" style={styles.inlineAction}
+          onPress={() => onNavigate({ screen: 'ke-hoach-tuan' })}>
+          <Text style={styles.link}>Mở kế hoạch tuần</Text>
+        </Pressable>
+      </>), { primary: true })}
+      {card('Truy cập nhanh', <>
+        {row({ label: 'Chấm công', detail: 'Ghi giờ vào, giờ ra hoặc xem bảng công', route: { screen: 'cham-cong' } }, 'attendance')}
+        {row({ label: 'Đơn từ', detail: 'Tạo đơn hoặc theo dõi đơn đã gửi', route: { screen: 'don-tu' } }, 'requests')}
+        {row({ label: 'KPI', detail: 'Xem kết quả công việc theo tháng', route: { screen: 'kpi' } }, 'kpi')}
+      </>)}
     </View>
   </>;
 }
@@ -338,7 +359,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   inlineAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   grow: { flex: 1, minWidth: 0 },
   projectMetadata: { gap: 2, marginTop: 4 },
-  metaLabel: { fontWeight: '700' },
+  metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: colors.line },
   chart: { height: 140, flexDirection: 'row', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
