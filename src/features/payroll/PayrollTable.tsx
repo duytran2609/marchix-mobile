@@ -9,19 +9,19 @@ export function PayrollTable({ rows }: { rows: TableRow[] }) {
   const styles = useStyles();
   return <ScrollView horizontal showsHorizontalScrollIndicator persistentScrollbar
     style={styles.scroll} accessibilityLabel="Bảng lương theo tháng">
-    <View accessibilityRole="table">
-      <View accessibilityRole="row" style={[styles.row, styles.header]}>
-        {payrollHeaders.map((label, index) => <Text key={label} accessibilityRole="columnheader"
+    <View role="table">
+      <View role="row" style={[styles.row, styles.header]}>
+        {payrollHeaders.map((label, index) => <Text key={label} role="columnheader"
           style={[styles.cell, index === 0 && styles.name, styles.bold]}>{label}</Text>)}
       </View>
       {rows.map(row => {
         const [name, ...values] = payrollCells(row, true);
-        return <View key={row.id} accessibilityRole="row" style={styles.row}>
+        return <View key={row.id} role="row" style={styles.row}>
           {row.onOpen ? <Pressable accessibilityRole="button" accessibilityLabel={'Xem dòng lương ' + name}
             onPress={row.onOpen} style={styles.name}>
             <Text style={[styles.cell, styles.name, styles.link]}>{name}</Text>
-          </Pressable> : <Text accessibilityRole="rowheader" style={[styles.cell, styles.name]}>{name}</Text>}
-          {values.map((value, index) => <Text key={payrollHeaders[index + 1]} accessibilityRole="cell"
+          </Pressable> : <Text role="rowheader" style={[styles.cell, styles.name]}>{name}</Text>}
+          {values.map((value, index) => <Text key={payrollHeaders[index + 1]} role="cell"
             style={[styles.cell, payrollHeaders[index + 1] === 'Thực lĩnh' && styles.bold]}>{value}</Text>)}
         </View>;
       })}

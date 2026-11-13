@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
+import { PeopleSummary } from '../components/PeopleSummary';
 import { canAct, cashStatus, displayDate, missingCashApproval, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
 import { recordActions, recordSortTime, recordStates, watchRecords } from '../features/records/records';
 import type { Correspondence } from '../features/records/records';
 import { canActOnRequest, watchRequests } from '../features/requests/requests';
 import type { StaffRequest } from '../features/requests/requests';
-import { formatDue } from '../features/tasks/taskDates';
+import { formatTaskDate } from '../features/tasks/taskDates';
+import { TaskPriority } from '../features/tasks/TaskPriority';
 import { submissionVersion, watchReviewQueue } from '../features/tasks/tasks';
 import type { ReviewQueueTasks, Task } from '../features/tasks/tasks';
+import { watchPlanningTeam } from '../features/weekly-plan/weeklyPlanStore';
 import { taskAssignmentEnabled } from '../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { ReviewDetailScreen } from './ReviewDetailScreen';
@@ -41,6 +46,15 @@ export function ReviewQueueScreen({
   const [requestRetry, setRequestRetry] = useState(0);
   const [records, setRecords] = useState<Correspondence[] | 'error' | null>(null);
   const [recordRetry, setRecordRetry] = useState(0);
+  const [memberNames, setMemberNames] = useState<Map<string, string>>(() => new Map());
+
+  useEffect(() => watchPlanningTeam(team => {
+    setMemberNames(new Map(team.map(member => [member.email, member.name])));
+  }, () => setMemberNames(new Map())), [email]);
+
+  function personName(address?: string, fallback?: string) {
+    return (address && memberNames.get(address)) || fallback || address || '';
+  }
 
   useEffect(() => {
     return watchReviewQueue(email, isAdmin, hasReviewGrant, setTasks, () => setError(true));
@@ -122,8 +136,13 @@ export function ReviewQueueScreen({
                 accessibilityLabel={`${key === 'mine' && taskAssignmentEnabled ? 'Duyệt' : 'Xem'} công việc: ${task.title}`}
                 style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]}
                 onPress={() => { setSelected({ task, group: key }); onScrollTop(); }}>
-                <Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text>
-                <Text style={screenStyles.muted}>{task.assignee || task.assigneeEmail} · {formatDue(task.due)}</Text>
+                <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text></ClickableCardHeader>
+                <ApprovalMetadata fields={[
+                  { label: 'Người giao việc', person: personName(task.assignedBy), value: 'Chưa rõ' },
+                  { label: 'Người thực hiện', person: personName(task.assigneeEmail, task.assignee), value: 'Chưa chỉ định' },
+                  { label: 'Hạn chót', value: task.due ? formatTaskDate(task.due) : 'Chưa đặt' },
+                  { label: 'Mức độ ưu tiên', value: <TaskPriority priority={task.priority} /> },
+                ]} />
               </Pressable>
             ))}
           </View>
@@ -133,34 +152,70 @@ export function ReviewQueueScreen({
         onRetry={() => { setRequests(null); setRequestRetry(value => value + 1); }} onOpen={onOpenRequest}
         describe={row => ({
           title: row.reason ? `${row.type}: ${row.reason}` : row.type,
-          detail: [row.createdBy, displayDate(row.createdAt), row.approverEmail
-            ? `Người duyệt: ${row.approverEmail}` : 'Chưa chỉ định người duyệt'].join(' · '),
+          fields: [
+            { label: 'Người gửi', person: personName(row.createdBy), value: 'Chưa rõ' },
+            { label: 'Ngày tạo', value: displayDate(row.createdAt) },
+            { label: 'Người duyệt', person: personName(row.approverEmail), value: 'Chưa chỉ định' },
+          ],
         })} />}
       {(isAdmin || canReviewCash) && <ApprovalSection title="Thu chi chờ duyệt" rows={Array.isArray(cash)
         ? cash.filter(row => !missingCashApproval(row)) : cash}
         onRetry={() => { setCash(null); setCashRetry(value => value + 1); }} onOpen={onOpenCash}
         describe={row => ({
           title: row.note || (row.type === 'chi' ? 'Khoản chi' : 'Khoản thu'),
-          detail: [vnd.format(row.amount), displayDate(row.date), row.approverEmail
-            ? `Người duyệt: ${row.approverEmail}` : 'Chưa chỉ định người duyệt'].join(' · '),
+          fields: [
+            { label: 'Số tiền', value: vnd.format(row.amount) },
+            { label: 'Ngày giao dịch', value: displayDate(row.date) },
+            { label: 'Người duyệt', person: personName(row.approverEmail), value: 'Chưa chỉ định' },
+          ],
         })} />}
       {isAdmin && <ApprovalSection title="Văn thư chờ duyệt hoặc chờ ký" rows={records}
         onRetry={() => { setRecords(null); setRecordRetry(value => value + 1); }} onOpen={onOpenRecord}
-        describe={row => ({ title: row.subject || 'Văn bản đi', detail: recordStates[row.status] })} />}
+        describe={row => ({
+          title: row.subject || 'Văn bản đi',
+          fields: [
+            { label: 'Trạng thái', value: recordStates[row.status] },
+            { label: 'Nơi nhận', value: row.partner || 'Chưa ghi' },
+            { label: 'Hạn xử lý', value: row.dueOn ? formatTaskDate(row.dueOn) : 'Chưa đặt' },
+          ],
+        })} />}
       {isAdmin && <ApprovalSection title="Thu chi cũ thiếu dấu vết duyệt" rows={Array.isArray(cash)
         ? cash.filter(missingCashApproval) : cash}
         onRetry={() => { setCash(null); setCashRetry(value => value + 1); }} onOpen={onOpenCash}
         describe={row => ({
           title: row.note || (row.type === 'chi' ? 'Khoản chi' : 'Khoản thu'),
-          detail: `${cashStatus(row)} · ${vnd.format(row.amount)} · ${displayDate(row.date)}`,
+          fields: [
+            { label: 'Trạng thái', value: cashStatus(row) },
+            { label: 'Số tiền', value: vnd.format(row.amount) },
+            { label: 'Ngày giao dịch', value: displayDate(row.date) },
+          ],
         })} />}
     </View>
   );
 }
 
+type ApprovalField = { label: string; value: ReactNode; person?: string };
+
+function ApprovalMetadata({ fields }: { fields: ApprovalField[] }) {
+  const screenStyles = useScreenStyles();
+  const styles = useStyles();
+  return <View style={styles.metadata}>
+    {fields.map(({ label, value, person }) => person ? (
+      <View key={label} style={styles.personRow}>
+        <Text style={[screenStyles.muted, styles.fieldLabel]}>{label}: </Text>
+        <PeopleSummary people={[{ id: person, name: person }]} textStyle={[screenStyles.muted, styles.personName]} wrap />
+      </View>
+    ) : (
+      <Text key={label} style={screenStyles.muted}>
+        <Text style={styles.fieldLabel}>{label}: </Text>{value}
+      </Text>
+    ))}
+  </View>;
+}
+
 function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpen, describe }: {
   title: string; rows: T[] | 'error' | null; onRetry: () => void; onOpen: (id: string) => void;
-  describe: (row: T) => { title: string; detail: string };
+  describe: (row: T) => { title: string; fields: ApprovalField[] };
 }) {
   const { colors } = useTheme();
   const screenStyles = useScreenStyles();
@@ -179,8 +234,8 @@ function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpe
         const item = describe(row);
         return <Pressable key={row.id} accessibilityRole="button" accessibilityLabel={`Mở hồ sơ: ${item.title}`}
           style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]} onPress={() => onOpen(row.id)}>
-          <Text style={screenStyles.cardTitle} numberOfLines={2}>{item.title}</Text>
-          <Text style={screenStyles.muted}>{item.detail}</Text>
+          <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{item.title}</Text></ClickableCardHeader>
+          <ApprovalMetadata fields={item.fields} />
         </Pressable>;
       })}
   </View>;
@@ -189,4 +244,8 @@ function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpe
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   card: { gap: 7, padding: 16, backgroundColor: colors.paper, borderRadius: 14,
     borderColor: colors.line, borderWidth: 1 },
+  metadata: { gap: 4 },
+  personRow: { flexDirection: 'row', alignItems: 'center' },
+  fieldLabel: { fontWeight: '700' },
+  personName: { fontWeight: '400' },
 }));

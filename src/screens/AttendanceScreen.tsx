@@ -4,6 +4,7 @@ import { PageHeader } from '../components/PageHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { FieldLabel } from '../components/FieldLabel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
 import { ToastLayer, useToast } from '../components/Toast';
@@ -77,7 +78,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   async function downloadAttendance() {
     setExporting(true);
     try {
-      await exportAttendance(selectedMonth, isAdmin ? { company: companyRows } : { personal: personalDays, dailyNotes });
+      await exportAttendance(selectedMonth, isAdmin ? { company: companyRows } : { personal: personalDays, name, dailyNotes });
     } catch {
       toast('Không xuất được bảng công. Vui lòng thử lại.', 'error');
     } finally {
@@ -157,7 +158,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
       {isAdmin && <CompanyAttendanceTable rows={companyRows} onEdit={setEdit} />}
       {detail && <>
         <View style={styles.metrics}>
-          <Metric label="Công thực tế" value={String(detail.summary.work)} detail={'/ ' + detail.summary.standard + ' công chuẩn'} />
+          <Metric label="Công thực tế" value={String(detail.summary.work)} inlineDetail={' / ' + detail.summary.standard + ' công chuẩn'} />
           <Metric label="Phép / công tác" value={String(detail.summary.leave)} />
           <Metric label="Đi muộn" value={detail.summary.late + ' lần'} alertDetail={detail.summary.late > 0} detail={detail.summary.lateMinutes + ' phút'} />
           <View style={[styles.metric, styles.missedPunches]}>
@@ -233,7 +234,7 @@ function AttendanceMonthPicker({ first, current, selected, onSelect }: {
     return Array.from({ length: count }, (_, offset) => offsetMonth(current, -offset));
   }, [current, first]);
 
-  return <Dropdown label="Chọn tháng" hideLabel singleLineValue value={selected} style={styles.monthPicker}
+  return <Dropdown label="Chọn tháng" hideLabel singleLineValue highlightSelection={false} value={selected} style={styles.monthPicker}
     choices={options.map(value => ({ value, label: formatMonth(value) }))}
     fallbackLabel={formatMonth(selected)} onChange={onSelect} />;
 }
@@ -247,12 +248,14 @@ function TableAction({ label, disabled, onPress }: { label: string; disabled?: b
   </Pressable>;
 }
 
-function Metric({ label, value, detail, alertDetail }: { label: string; value: string; detail?: string; alertDetail?: boolean }) {
+function Metric({ label, value, detail, inlineDetail, alertDetail }: {
+  label: string; value: string; detail?: string; inlineDetail?: string; alertDetail?: boolean;
+}) {
   const styles = useStyles();
   const ui = useScreenStyles();
   return <View style={styles.metric}>
     <Text style={ui.muted}>{label}</Text>
-    <Text style={ui.cardTitle}>{value}</Text>
+    <Text style={ui.cardTitle}>{value}{inlineDetail && <Text style={[ui.muted, styles.metricInlineDetail]}>{inlineDetail}</Text>}</Text>
     {detail && <Text style={alertDetail ? styles.alertDetail : ui.muted}>{detail}</Text>}
   </View>;
 }
@@ -321,10 +324,10 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
             </View>
             <Text style={ui.label}>{member.name} · {showAttendanceDate(date)}/{date.slice(0, 4)}</Text>
             <Text style={ui.muted}>Giờ ghi nhận {clock(machineTime(record?.inTs))}–{clock(machineTime(record?.outTs))} · Công hiện tại {calculatedWork}</Text>
-            <Text style={ui.label}>Giờ vào điều chỉnh</Text>
+            <FieldLabel style={ui.label} required>Giờ vào điều chỉnh</FieldLabel>
             <TextInput accessibilityLabel="Giờ vào điều chỉnh" value={manualIn} onChangeText={setIn} maxLength={5}
               placeholder="HH:mm" editable={!pending && !confirmDelete} style={ui.input} />
-            <Text style={ui.label}>Giờ ra điều chỉnh</Text>
+            <FieldLabel style={ui.label} required>Giờ ra điều chỉnh</FieldLabel>
             <TextInput accessibilityLabel="Giờ ra điều chỉnh" value={manualOut} onChangeText={setOut} maxLength={5}
               placeholder="HH:mm" editable={!pending && !confirmDelete} style={ui.input} />
             <Text style={ui.label}>Số công</Text>
@@ -335,7 +338,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
                 <Text style={ui.label}>{value || 'Tự tính'}</Text>
               </Pressable>)}
             </View>
-            <Text style={ui.label}>Lý do điều chỉnh</Text>
+            <FieldLabel style={ui.label} required>Lý do điều chỉnh</FieldLabel>
             <TextInput accessibilityLabel="Lý do điều chỉnh" value={note} onChangeText={setNote} maxLength={1000}
               editable={!pending && !confirmDelete} style={ui.input} />
             {!!error && !confirmDelete && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
@@ -369,9 +372,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   scheduleLabel: { fontWeight: '700' },
   monthPicker: { width: 148, flexShrink: 1 },
   alertDetail: { color: colors.danger, fontSize: 14, fontWeight: '700' },
-  clock: { color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexGrow: 1, flexBasis: '45%', backgroundColor: colors.accentSoft, borderRadius: 10, padding: 10 },
+  metricInlineDetail: { fontWeight: '400' },
   missedPunches: { gap: 4 },
   editor: { flex: 1, backgroundColor: colors.paper },
 }));

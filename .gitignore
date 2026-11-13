@@ -5,6 +5,7 @@ android/
 ios/
 .env*
 !.env.example
+/.kpi-preview.local.json
 *-debug.log
 test-results/
 playwright-report/

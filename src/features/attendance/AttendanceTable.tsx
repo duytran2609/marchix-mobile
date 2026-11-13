@@ -33,21 +33,21 @@ export function CompanyAttendanceTable({ rows, onEdit }: {
     <Animated.ScrollView horizontal showsHorizontalScrollIndicator persistentScrollbar removeClippedSubviews={false}
       onScroll={onNativeScroll} scrollEventThrottle={16}
       style={styles.tableScroll} accessibilityLabel="Bảng công theo nhân viên và ngày">
-      <View accessibilityRole="table" style={{ width: tableWidth }}>
-        <View accessibilityRole="row" style={[styles.row, styles.companyHeader]}>
+      <View role="table" style={{ width: tableWidth }}>
+        <View role="row" style={[styles.row, styles.companyHeader]}>
           <Animated.View style={[styles.nameCell, pinnedName]}>
-            <Text accessibilityRole="columnheader" style={[styles.companyHeading, styles.nameText]}>HỌ TÊN</Text>
+            <Text role="columnheader" style={[styles.companyHeading, styles.nameText]}>HỌ TÊN</Text>
           </Animated.View>
           {days.map(({ date, weight }) => <View key={date} style={[styles.day, styles.dayButton, !weight && styles.dayOff]}>
-            <Text accessibilityRole="columnheader" style={styles.companyHeading}>{weekdays[weekday(date)]}{'\n'}{date.slice(8)}</Text>
+            <Text role="columnheader" style={styles.companyHeading}>{weekdays[weekday(date)]}{'\n'}{date.slice(8)}</Text>
           </View>)}
-          {companyTotals.map((label, index) => <Text key={label} accessibilityRole="columnheader"
+          {companyTotals.map((label, index) => <Text key={label} role="columnheader"
             style={[styles.companyHeading, styles.summary, { width: summaryWidths[index] }]}>{label}</Text>)}
         </View>
-        {rows.map(({ member, month: { days, summary } }, index) => <View key={member.email} accessibilityRole="row"
+        {rows.map(({ member, month: { days, summary } }, index) => <View key={member.email} role="row"
           style={[styles.row, styles.companyRow, index === rows.length - 1 && styles.lastRow]}>
           <Animated.View style={[styles.nameCell, pinnedName]}>
-            <Text accessibilityRole="rowheader" style={[styles.text, styles.nameText]} numberOfLines={1}>{member.name}</Text>
+            <Text role="rowheader" style={[styles.text, styles.nameText]} numberOfLines={1}>{member.name}</Text>
           </Animated.View>
           {days.map(day => {
             const { date, weight, record, result, absent } = day;
@@ -77,10 +77,10 @@ export function PersonalAttendanceTable({ days, dailyNotes }: { days: Attendance
   return <>
     <AttendanceLegend />
     <ScrollView horizontal showsHorizontalScrollIndicator accessibilityLabel="Bảng công cá nhân theo ngày">
-      <View accessibilityRole="table">
-        <View accessibilityRole="row" style={[styles.row, styles.header]}>
+      <View role="table">
+        <View role="row" style={[styles.row, styles.header]}>
           {personalColumns.map((label, index) =>
-            <Text key={label} accessibilityRole="columnheader"
+            <Text key={label} role="columnheader"
               style={[styles.heading, index === 0 ? styles.date : index === 5 ? styles.note : styles.total]}>{label}</Text>)}
         </View>
         {days.map(day => {
@@ -88,12 +88,12 @@ export function PersonalAttendanceTable({ days, dailyNotes }: { days: Attendance
           const { date: label, entered, exited, worked, work, notes } =
             personalAttendanceCells(day, dailyNotes?.get(date));
           const late = !!day.result?.late;
-          return <View key={date} accessibilityRole="row" style={[styles.row, !weight && styles.dayOff]}>
-            <Text accessibilityRole="rowheader" style={[styles.text, styles.date]}>{label}</Text>
-            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{entered}</Text>
-            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{exited}</Text>
-            <Text accessibilityRole="cell" style={[styles.text, styles.total]}>{worked}</Text>
-            <View accessibilityRole="cell" style={[styles.workCell, !!late && styles.lateCell]}>
+          return <View key={date} role="row" style={[styles.row, !weight && styles.dayOff]}>
+            <Text role="rowheader" style={[styles.text, styles.date]}>{label}</Text>
+            <Text role="cell" style={[styles.text, styles.total]}>{entered}</Text>
+            <Text role="cell" style={[styles.text, styles.total]}>{exited}</Text>
+            <Text role="cell" style={[styles.text, styles.total]}>{worked}</Text>
+            <View role="cell" style={[styles.workCell, !!late && styles.lateCell]}>
               <Text style={[styles.text, styles.marker, !!late && styles.lateMark, work === '!' && styles.red]}>{work}</Text>
             </View>
             <View style={styles.note}>

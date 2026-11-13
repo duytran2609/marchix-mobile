@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
 import { FilePickerButton } from '../../components/FilePickerButton';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -121,6 +122,7 @@ export function TaskDiscussion({ task, email, name, members }: {
         </View>;
       })}
       {canComment ? <>
+        <FieldLabel style={screenStyles.label} required>Nội dung trao đổi</FieldLabel>
         <TextInput accessibilityLabel="Nội dung trao đổi" placeholder="Nhập trao đổi về công việc"
           style={[screenStyles.input, screenStyles.messageInput]} value={message} onChangeText={setMessage}
           multiline maxLength={commentMaxLength} editable={!sending} />

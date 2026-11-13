@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { FieldLabel } from '../components/FieldLabel';
 import { FilePickerButton } from '../components/FilePickerButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
-import { SearchableChoiceList } from '../components/SearchableChoiceList';
+import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
 import { useToast } from '../components/Toast';
 import { canAct, cashStatus, cashStatuses, cashTotals, categories, changeCash, createCash, displayDate,
   expenseLimit, parties, verifiedCash, vnd, watchCash, watchCashApprovers } from '../features/cash/cash';
@@ -33,21 +35,24 @@ const validDate = (value: string) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
-function Picker({ label, value, choices, onChange, disabled, style, placeholder = 'Chọn', highlightSelection = false }: {
+function Picker({ label, value, choices, onChange, disabled, style, placeholder = 'Chọn', highlightSelection = false, required }: {
   label: string; value: string; choices: Option[]; onChange: (value: string) => void; disabled?: boolean;
-  style?: StyleProp<ViewStyle>; placeholder?: string; highlightSelection?: boolean;
+  style?: StyleProp<ViewStyle>; placeholder?: string; highlightSelection?: boolean; required?: boolean;
 }) {
-  return <Dropdown label={label} value={value} choices={choices.map(({ id, name }) => ({ value: id, label: name }))}
+  return <Dropdown label={label} required={required} value={value} choices={choices.map(({ id, name }) => ({ value: id, label: name }))}
     fallbackLabel={value || placeholder} onChange={onChange} disabled={disabled} style={style} highlightSelection={highlightSelection} />;
 }
 
-function Field({ label, value, onChange, limit = 250, numeric = false, placeholder }: {
-  label: string; value: string; onChange: (value: string) => void; limit?: number; numeric?: boolean; placeholder?: string;
+function Field({ label, value, onChange, limit = 250, numeric = false, placeholder, required, requiredFor }: {
+  label: string; value: string; onChange: (value: string) => void; limit?: number; numeric?: boolean; placeholder?: string; required?: boolean;
+  requiredFor?: string;
 }) {
   const styles = useScreenStyles();
   const { colors } = useTheme();
   return <View style={{ gap: 6 }}>
-    <Text style={styles.label}>{label}</Text>
+    <FieldLabel style={styles.label} required={required || !!requiredFor}>
+      {requiredFor ? `${label} (${requiredFor})` : label}
+    </FieldLabel>
     <TextInput accessibilityLabel={label} value={value} onChangeText={onChange} style={styles.input}
       placeholder={placeholder} placeholderTextColor={colors.muted} maxLength={limit}
       keyboardType={numeric ? 'number-pad' : 'default'} autoCapitalize="none" />
@@ -129,16 +134,16 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
   const fields = <>
       <Text style={styles.muted}>{row ? 'Chỉ sửa được khi khoản còn chờ duyệt.'
         : 'Khoản mới sẽ ở trạng thái Chờ duyệt.'}</Text>
-      <Field label="Nội dung" value={values.note} onChange={set('note')} limit={1000} />
-      <Field label="Số tiền (VNĐ)" value={formatAmount(values.amount)}
+      <Field required label="Nội dung" value={values.note} onChange={set('note')} limit={1000} />
+      <Field required label="Số tiền (VNĐ)" value={formatAmount(values.amount)}
         onChange={value => set('amount')(amountDigits(value))} numeric limit={32} />
       {type === 'chi' && amount > expenseLimit && <Text style={styles.error}>Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>}
-      <DateCalendarField label="Ngày giao dịch" value={validDate(values.date) ? values.date : ''}
+      <DateCalendarField required label="Ngày giao dịch" value={validDate(values.date) ? values.date : ''}
         onChange={set('date')} disabled={busy} />
       <View style={local.pair}>
-        {type === 'chi' && <Picker label="Nhóm hạng mục" value={group} choices={options(Object.keys(categoryGroups))} style={local.half}
+        {type === 'chi' && <Picker required label="Nhóm hạng mục" value={group} choices={options(Object.keys(categoryGroups))} style={local.half}
           onChange={value => { setGroup(value); set('category')(''); }} />}
-        <Picker label="Hạng mục" value={values.category}
+        <Picker required label="Hạng mục" value={values.category}
           choices={options(type === 'thu' ? categories.thu.Thu : categoryGroups[group] || [])} style={local.half}
           placeholder={type === 'thu' ? 'Chọn hạng mục' : undefined} onChange={set('category')} disabled={type === 'chi' && !group} />
         {type === 'thu' && projectPicker}
@@ -147,7 +152,7 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
       {type === 'chi' && access.canReadCash && ledger && cap > 0 && committed + amount > cap &&
         <Text style={styles.error}>Khoản này sẽ vượt trần vốn dự án ({vnd.format(cap)}) nếu được duyệt.</Text>}
       <View style={local.pair}>
-        <Picker label="Hình thức" value={values.method} choices={options(type === 'chi' ? ['Chuyển khoản'] : ['Chuyển khoản', 'Tiền mặt'])}
+        <Picker required label="Hình thức" value={values.method} choices={options(type === 'chi' ? ['Chuyển khoản'] : ['Chuyển khoản', 'Tiền mặt'])}
           onChange={set('method')} style={local.half} />
         <Picker label="Loại đối tượng" value={values.partyType} choices={options(parties)} onChange={set('partyType')} style={local.half} />
       </View>
@@ -157,7 +162,7 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
       <Field label="Số hóa đơn / báo giá" value={values.invoiceRef} onChange={set('invoiceRef')} limit={150} />
       {!row && <View style={local.field}>
         <Text style={styles.label}>Người duyệt</Text>
-        {access.isAdmin ? <SearchableChoiceList items={approvers} selected={values.approver ? [values.approver] : []}
+        {access.isAdmin ? <SearchableChoiceDropdown title="Người duyệt" items={approvers} selected={values.approver ? [values.approver] : []}
           disabled={busy || picking} label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
           onToggle={id => set('approver')(values.approver === id ? '' : id)} />
           : <Text style={styles.muted}>Quản trị viên sẽ gán người duyệt.</Text>}
@@ -258,21 +263,23 @@ function CashDetail({ row, access, approvers, project, backLabel, operationLock,
       {can('edit') && <Button label="Sửa khoản này" secondary onPress={onEdit} disabled={busy} />}
     </View>
     <Text accessibilityRole="header" style={styles.heading}>{row.note || (row.type === 'chi' ? 'Khoản chi' : 'Khoản thu')}</Text>
-    <Text style={styles.cardTitle}>{row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}</Text>
+    <Text style={[styles.cardTitle, row.type === 'chi' ? local.negative : local.positive]}>
+      {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
+    </Text>
     {fields.filter(([, value]) => !!value).map(([label, value]) => <View key={label} style={styles.detailRow}>
       <Text style={styles.label}>{label}</Text><Text selectable style={styles.body}>{value}</Text>
     </View>)}
     {files.length > 0 && <CashProofs cashId={row.id} files={files} />}
     {can('route') && <View style={local.field}>
-      <Text style={styles.label}>Người duyệt</Text>
-      <SearchableChoiceList items={eligibleApprovers} selected={assignee ? [assignee] : []}
+      <FieldLabel style={styles.label} required>Người duyệt</FieldLabel>
+      <SearchableChoiceDropdown title="Người duyệt" items={eligibleApprovers} selected={assignee ? [assignee] : []}
         disabled={busy} label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
         onToggle={id => setAssignee(current => current === id ? '' : id)} />
       <Button label="Lưu người duyệt" onPress={() => void handle('route', assignee)}
         disabled={busy || !assignee || assignee === row.approverEmail || !eligibleApprovers.some(option => option.id === assignee)} />
     </View>}
     {can('approve') && <>
-      <Field label="Ý kiến xử lý" value={note} onChange={setNote} limit={500} />
+      <Field label="Ý kiến xử lý" value={note} onChange={setNote} limit={500} requiredFor="khi từ chối" />
       <View style={styles.choices}>
         <Button label="Duyệt" onPress={() => void handle('approve', note)} disabled={busy} />
         <Button label="Từ chối" secondary onPress={() => void handle('reject', note)} disabled={busy} />
@@ -283,7 +290,7 @@ function CashDetail({ row, access, approvers, project, backLabel, operationLock,
       <Button label="Đưa về chờ duyệt" secondary onPress={() => void handle('requeue')} disabled={busy} />
     </>}
     {can('record') && <>
-      <Field label="Mã chứng từ hoặc tham chiếu giao dịch" value={proof}
+      <Field required label="Mã chứng từ hoặc tham chiếu giao dịch" value={proof}
         onChange={value => { setProof(value); setConfirm(false); }} limit={150} />
       {confirm && <Text style={styles.muted}>Chỉ xác nhận khi giao dịch {vnd.format(row.amount)} đã thực sự hoàn tất.</Text>}
       <Button label={confirm ? 'Xác nhận giao dịch đã hoàn tất' : row.type === 'chi' ? 'Xác nhận đã chi' : 'Xác nhận đã thu'}
@@ -335,6 +342,8 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
   const months = [...new Set([currentMonth, ...(rows || []).map(row => row.date?.slice(0, 7)).filter(value => /^\d{4}-\d{2}$/.test(value || ''))])]
     .sort().reverse().map(id => ({ id, name: `Tháng ${id.slice(5)}/${id.slice(0, 4)}` }));
   const totals = cashTotals(base);
+  const balance = totals.income - totals.expense;
+  const balanceStyle = balance === 0 ? undefined : balance > 0 ? local.positive : local.negative;
   const backLabel = 'Về Phê duyệt';
   function back() {
     if (detailLock.current) return;
@@ -402,11 +411,13 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
           </View>
           <View style={local.metrics}>
             {([
-              ['Đã thu', totals.income], ['Đã chi', totals.expense], ['Chênh lệch', totals.income - totals.expense],
-              ['Chi chờ duyệt / chờ chi', totals.pending],
-            ] as const).map(([label, value]) => <View key={label} style={local.metric}>
+              ['Đã thu', totals.income, local.positive],
+              ['Đã chi', totals.expense, local.negative],
+              ['Chênh lệch', balance, balanceStyle],
+              ['Chi chờ duyệt / chờ chi', totals.pending, local.pending],
+            ] as const).map(([label, value, amountStyle]) => <View key={label} style={local.metric}>
               <Text style={styles.muted}>{label}</Text>
-              <Text style={[styles.cardTitle, value < 0 && local.negative, label === 'Chênh lệch' && value > 0 && local.positive]}>
+              <Text style={[styles.cardTitle, amountStyle]}>
                 {vnd.format(value)}
               </Text>
             </View>)}
@@ -429,9 +440,11 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
           {visible.slice(0, limit).map(row => <Pressable key={row.id} accessibilityRole="button"
             onPress={() => setSelected(row.id)}
             style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
-            <Text style={styles.badge}>{cashStatus(row)}</Text>
+            <ClickableCardHeader><Text style={styles.badge}>{cashStatus(row)}</Text></ClickableCardHeader>
             <Text style={styles.label}>{row.note || row.category || 'Khoản ' + row.type}</Text>
-            <Text style={row.type === 'chi' ? styles.error : styles.cardTitle}>{row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}</Text>
+            <Text style={[styles.cardTitle, row.type === 'chi' ? local.negative : local.positive]}>
+              {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
+            </Text>
             {([
               ['Ngày giao dịch', displayDate(row.date)], ['Hạng mục', row.category], ['Đối tượng', row.partyName],
             ] as const).filter(([, value]) => !!value).map(([label, value]) => (
@@ -490,6 +503,7 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   ledgerTitle: { gap: 2 },
   positive: { color: colors.success },
   negative: { color: colors.danger },
+  pending: { color: colors.warning },
   field: { gap: 6 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexBasis: '46%', flexGrow: 1, padding: 10, borderRadius: 9, backgroundColor: colors.accentSoft, gap: 4 },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ClickableCardHeader } from '../../components/CardChevron';
 import { AppState, Pressable, Text, View } from 'react-native';
 import type { ReminderWindow } from '../settings/reminderSettings';
 import { useScreenStyles } from '../../theme/screenStyles';
@@ -45,7 +46,7 @@ export function DueTaskReminders({ tasks, email, window, onOpen }: {
       </Pressable>
       {expanded && dueTasks.map(task => (
         <Pressable key={task.id} accessibilityRole="button" style={styles.detailRow} onPress={() => onOpen(task)}>
-          <Text style={styles.label}>{task.title}</Text>
+          <ClickableCardHeader><Text style={styles.label}>{task.title}</Text></ClickableCardHeader>
           <Text style={styles.muted}>{task.due === today ? 'Hạn hôm nay' : formatDue(task.due)}</Text>
         </Pressable>
       ))}

@@ -5,11 +5,10 @@ import {
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { auth, db, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import type { AssignmentInput, AttachmentUpload, ReviewRating, Task } from './tasks';
+import { checklistProgress as percent } from './checklistProgress';
 
 const open = (task: Task) => ['Chưa làm', 'Đang làm', 'Vướng'].includes(task.status);
 const updated = (email: string, now: string) => ({ updatedBy: email, updatedAt: now });
-const percent = (items: NonNullable<Task['checklist']>) =>
-  Math.round(100 * items.filter(item => item.done === true).length / items.length);
 const reviewer = (row: { role?: string; grants?: string[] }) =>
   row.role === 'admin' || (Array.isArray(row.grants) && row.grants.includes('taskReview'));
 
@@ -132,7 +131,7 @@ export async function pilotCreate(input: AssignmentInput) {
       ? [{ by, at: now, kind: 'assignment', text: input.message.trim(), files: attachments }] : [];
     batch.set(ref, { ...details(input), assigneeEmail, assignee, approverEmail, assignedBy: by, mobileAssignmentId: input.taskId,
       status: input.status, progress: input.checklist.length ? 0 : input.progress,
-      checklist: input.checklist.map(t => ({ t, done: false })), comments,
+      checklist: input.checklist.map(({ t, weight }) => ({ t, weight, done: false })), comments,
       spawned: false, doneAt: '', createdAt: now, ...updated(by, now) });
     notify(batch, by, [assigneeEmail], ref.id, 'Bạn được giao việc mới', input.title.trim(), now);
     return { id: ref.id, assignee };
@@ -173,10 +172,18 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
       if (approverEmail && (approverEmail === assigneeEmail || !people.get(approverEmail)?.canReview)) {
         throw new Error('Người duyệt phải có quyền duyệt và khác người thực hiện.');
       }
-      const remaining = [...(task.checklist ?? [])];
-      const items = input.checklist.map(t => {
+      const original = task.checklist ?? [];
+      const indices = input.checklist.flatMap(({ sourceIndex }) => sourceIndex == null ? [] : [sourceIndex]);
+      const reserved = new Set(indices);
+      if (reserved.size !== indices.length || indices.some(index => !Number.isSafeInteger(index) || index < 0 || !original[index])) {
+        throw new Error('Việc con không hợp lệ.');
+      }
+      const remaining = original.filter((_, index) => !reserved.has(index));
+      const items = input.checklist.map(({ t, weight, sourceIndex }) => {
+        if (sourceIndex === null) return { t, weight, done: false };
+        if (sourceIndex !== undefined) return { t, weight, done: original[sourceIndex].done === true };
         const item = remaining.findIndex(row => (row.t || row.text) === t);
-        return item < 0 ? { t, done: false } : remaining.splice(item, 1)[0];
+        return item < 0 ? { t, weight, done: false } : { ...remaining.splice(item, 1)[0], weight };
       });
       Object.assign(patch, { assigneeEmail, approverEmail, status: input.status,
         checklist: items, progress: items.length ? percent(items) : input.progress });

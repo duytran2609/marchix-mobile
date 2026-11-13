@@ -3,9 +3,10 @@ import { Bytes } from 'firebase/firestore';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { SearchableChoiceList } from '../../components/SearchableChoiceList';
+import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
 import { hasPdfHeader } from '../cash/cashAttachments';
@@ -58,15 +59,16 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     return () => { mounted.current = false; };
   }, []);
   const title = action?.label ?? (incoming ? 'Vào sổ và cấp số đến' : 'Lập bản nháp');
-  const people = [{ value: '', label: 'Chưa giao' }, ...Array.from(names, ([value, label]) => ({ value, label }))];
+  const people = Array.from(names, ([id, name]) => ({ id, name }));
   const set = <Key extends keyof RecordDraft>(key: Key, value: RecordDraft[Key]) => {
     setDraft(current => ({ ...current, [key]: value }));
   };
 
   function field(label: string, value: string, change: (text: string) => void, maxLength: number,
-    placeholder?: string, multiline = false) {
+    options: { placeholder?: string; multiline?: boolean; required?: boolean } = {}) {
+    const { placeholder, multiline, required } = options;
     return <View style={{ gap: 5 }}>
-      <Text style={styles.label}>{label}</Text>
+      <FieldLabel style={styles.label} required={required}>{label}</FieldLabel>
       <TextInput accessibilityLabel={label} style={[styles.input, multiline && styles.messageInput]}
         editable={!busy} value={value} onChangeText={change} maxLength={maxLength}
         placeholder={placeholder} placeholderTextColor={colors.muted} multiline={multiline} />
@@ -131,10 +133,10 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   const content = <View style={existing ? styles.panel : styles.stack}>
     {existing && <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>}
     {!existing && <>
-      <Dropdown label="Loại văn bản" value={draft.kind} onChange={value => set('kind', value)} disabled={!!busy} highlightSelection={false}
+      <Dropdown required label="Loại văn bản" value={draft.kind} onChange={value => set('kind', value)} disabled={!!busy} highlightSelection={false}
         choices={[{ value: 'letter', label: recordKinds.letter }, { value: 'decision', label: recordKinds.decision }]} />
-      {field('Trích yếu', draft.subject, value => set('subject', value), 240)}
-      {field(incoming ? 'Nơi gửi' : 'Nơi nhận', draft.partner, value => set('partner', value), 160)}
+      {field('Trích yếu', draft.subject, value => set('subject', value), 240, { required: true })}
+      {field(incoming ? 'Nơi gửi' : 'Nơi nhận', draft.partner, value => set('partner', value), 160, { required: true })}
       {incoming && <>
         <View style={popup.field}>
           <Text style={styles.label}>Ngày vào sổ</Text>
@@ -147,15 +149,21 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       </>}
       <DateCalendarField label="Hạn xử lý" value={draft.dueOn} clearLabel="Bỏ ngày"
         disabled={!!busy} onChange={day => set('dueOn', day)} />
-      <Dropdown label="Mức độ" value={draft.priority} disabled={!!busy} highlightSelection={false} onChange={value => set('priority', value)}
+      <Dropdown required label="Mức độ" value={draft.priority} disabled={!!busy} highlightSelection={false} onChange={value => set('priority', value)}
         choices={[{ value: 'normal', label: 'Thường' }, { value: 'urgent', label: 'Khẩn' }]} />
     </>}
-    {(!existing || existing.status === 'registered') && <Dropdown label="Người xử lý" value={draft.assigneeEmail}
-      onChange={value => set('assigneeEmail', value)} choices={people} disabled={!!busy} highlightSelection={!!existing} />}
+    {(!existing || existing.status === 'registered') && <View style={popup.field}>
+      <FieldLabel style={styles.label} required={!!existing}>Người xử lý</FieldLabel>
+      <SearchableChoiceDropdown title="Người xử lý" label="Tìm người xử lý" placeholder="Chưa giao"
+        items={people}
+        selected={draft.assigneeEmail ? [draft.assigneeEmail] : []}
+        onToggle={value => set('assigneeEmail', value === draft.assigneeEmail ? '' : value)}
+        disabled={!!busy} emptyMessage="Không có người xử lý phù hợp." />
+    </View>}
     {!existing && <View style={styles.stack}>
       <Text style={styles.label}>Người theo dõi</Text>
       <Text style={styles.muted}>Chọn tối đa 5 người. Họ có thể xem hồ sơ và nhận thông báo cập nhật.</Text>
-      <SearchableChoiceList items={Array.from(names, ([id, name]) => ({ id, name }))}
+      <SearchableChoiceDropdown title="Người theo dõi" multiple items={people}
         selected={watchers} disabled={!!busy} label="Tìm người theo dõi" emptyMessage="Không tìm thấy thành viên."
         showAvatar={false} onToggle={id => {
           if (!watchers.includes(id) && watchers.length >= 5) {
@@ -167,8 +175,8 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
         }} />
     </View>}
     {signing && <>
-      {field('Họ tên người ký', signedByName, setSignedByName, 160)}
-      <DateCalendarField label="Ngày ký" value={signedOn} max={todayInVietnam()} disabled={!!busy} onChange={setSignedOn} />
+      {field('Họ tên người ký', signedByName, setSignedByName, 160, { required: true })}
+      <DateCalendarField required label="Ngày ký" value={signedOn} max={todayInVietnam()} disabled={!!busy} onChange={setSignedOn} />
       <Text style={styles.muted}>Chọn bản PDF đã ký hoặc dùng bản đã lưu nếu đã kiểm tra chữ ký.</Text>
     </>}
     {issuing && <Text style={styles.body}>Số, ký hiệu {existing ? recordNumber(existing) : ''}. Kiểm tra bản phát hành trước khi xác nhận.</Text>}
@@ -186,7 +194,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
           <Text style={[popup.fileHint, { color: colors.muted }]}>1 tệp PDF, tối đa 5 MB.</Text>
         </Pressable>
       </View> : <>
-        <Text style={styles.label}>Bản PDF (tối đa 5 MB)</Text>
+        <FieldLabel style={styles.label} required={(signing || issuing) && !existing.fileId}>Bản PDF (tối đa 5 MB)</FieldLabel>
         <Button label={pdf ? 'Chọn PDF khác' : 'Chọn PDF'} secondary disabled={!!busy} onPress={() => void pick()} />
       </>}
       {pdf && <Text style={styles.muted}>{existing ? pdf.name : `${pdf.name} · ${formatFileSize(pdf.size)}`}</Text>}
@@ -196,13 +204,16 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     </>}
     {existing?.fileId && !starting && <RecordPdfButton key={existing.fileId} recordId={existing.id} fileId={existing.fileId}
       fileName={existing.fileName} disabled={!!busy} onPreview={onPreview && (file => onPreview(file, true))} />}
-    {(signing || issuing) && <Button secondary selected={confirmed} disabled={!!busy}
+    {(signing || issuing) && <Button required secondary selected={confirmed} disabled={!!busy}
       label={signing ? 'Tôi đã kiểm tra chữ ký trên PDF' : 'Tôi đã kiểm tra chữ ký, số và ngày trên PDF'}
       onPress={() => setConfirmed(value => !value)} />}
     {field(starting ? 'Ghi chú xử lý' : issuing ? 'Bằng chứng phát hành' : voiding ? 'Lý do hủy số' : 'Ghi chú nhật ký', note, setNote, 500,
-      issuing ? 'Nơi nhận, thời điểm, kênh gửi và tham chiếu' : undefined, true)}
+      { placeholder: issuing ? 'Nơi nhận, thời điểm, kênh gửi và tham chiếu' : undefined,
+        multiline: true, required: issuing || voiding })}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <View style={[styles.choices, (!existing || starting) && popup.rightActions]}>
+    <View style={[styles.choices,
+      (!existing || starting || action?.status === 'assigned' ||
+        action?.status === 'completed' || action?.status === 'archived') && popup.rightActions]}>
       <Button label="Hủy" secondary disabled={!!busy} onPress={onCancel} />
       <Button label={busy || (existing ? 'Xác nhận' : title)} disabled={!!busy} onPress={() => void submit()} />
     </View>

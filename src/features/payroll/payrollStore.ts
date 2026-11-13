@@ -20,7 +20,10 @@ export function watchPayroll(email: string, admin: boolean, receive: (data: Payr
   const slips = collection(db, 'payroll');
   let firstSlip = true;
   stops.push(onSnapshot(admin ? slips : query(slips, where('email', '==', email), where('status', 'in', ['Đã chốt', 'Đã trả'])), snapshot => {
-    data.slips = snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Payslip)
+    data.slips = snapshot.docs.map(item => {
+      const stored = item.data();
+      return { ...stored, id: item.id, name: typeof stored.name === 'string' ? stored.name : '' } as Payslip;
+    })
       .filter(item => validMonth(item.month)).sort((a, b) => b.month.localeCompare(a.month));
     publish(firstSlip);
     firstSlip = false;
@@ -57,7 +60,8 @@ export function watchPayroll(email: string, admin: boolean, receive: (data: Payr
 export function approvedAdvance(requests: PayrollRequest[], email: string, month: string) {
   if (!email) return 0;
   return requests.filter(request => request.type === 'Tạm ứng lương' && request.createdBy === email &&
-    (request.month || request.createdAt?.slice(0, 7)) === month).reduce((sum, request) => sum + amount(request.amount), 0);
+    (request.month || (typeof request.createdAt === 'string' ? request.createdAt.slice(0, 7) : undefined)) === month)
+    .reduce((sum, request) => sum + amount(request.amount), 0);
 }
 
 export async function saveEmployee(email: string, fields: EmployeeFields, id?: string) {

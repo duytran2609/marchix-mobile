@@ -1,7 +1,8 @@
 import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
-import { MemberAvatar } from '../../components/MemberAvatar';
+import { PeopleSummary } from '../../components/PeopleSummary';
 import { SearchInput } from '../../components/SearchInput';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
 import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
@@ -51,8 +52,8 @@ function TaskPerson({ label, name, photoURL, selectable, fallback = 'Chưa rõ' 
   return (
     <View style={[styles.metadataRow, styles.personRow]}>
       <Text selectable={selectable} style={[styles.muted, styles.metaLabel]}>{label}: </Text>
-      {name ? <MemberAvatar name={name} photoURL={photoURL} compact /> : null}
-      <Text selectable={selectable} style={[styles.muted, styles.personName]}>{name || fallback}</Text>
+      <PeopleSummary people={[{ id: name || '', name: name || fallback, photoURL }]}
+        textStyle={styles.personName} selectable={selectable} />
     </View>
   );
 }
@@ -72,11 +73,10 @@ const TaskCard = memo(function TaskCard({
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
       accessibilityHint={`Người giao việc: ${assignerName || 'Chưa rõ'}. Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdueLabel ? `${overdueLabel}. ` : ''}${due}.`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <View style={styles.cardHeader}>
+      <ClickableCardHeader>
         <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
           style={styles.cardTitle}>{task.title}</Text>
-        <Text style={styles.chevron}>›</Text>
-      </View>
+      </ClickableCardHeader>
       <View style={styles.metadata}>
         <TaskPerson label="Người giao việc" name={assignerName} photoURL={assignerPhoto} selectable={selectable} />
         <TaskPerson label="Người thực hiện" name={assigneeKey(task) ? assigneeName : undefined}
@@ -253,13 +253,11 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   clearButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   card: { gap: 9, padding: 13, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.paper },
   pressed: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '800' },
-  chevron: { fontSize: 20, lineHeight: 22, color: colors.muted },
+  cardTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   metadata: { gap: 5 },
   metadataRow: { minHeight: 22, justifyContent: 'center' },
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
-  personName: { flexShrink: 1 },
+  personName: { color: colors.muted, fontSize: 13, fontWeight: '400' },
   metaLabel: { fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },

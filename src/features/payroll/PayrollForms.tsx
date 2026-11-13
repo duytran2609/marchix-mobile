@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
@@ -68,8 +69,9 @@ const payFields = [
   ['bonus', 'Thưởng / khoản thêm', 'money'], ['deduction', 'Khấu trừ khác', 'money'],
 ] as const;
 
-function TextField({ label, value, onChange, busy, kind = 'text' }: {
+function TextField({ label, value, onChange, busy, kind = 'text', required }: {
   label: string; value: string; onChange: (value: string) => void; busy: boolean;
+  required?: boolean;
   kind?: 'text' | 'email' | 'integer' | 'decimal' | 'money';
 }) {
   const styles = useScreenStyles();
@@ -85,7 +87,7 @@ function TextField({ label, value, onChange, busy, kind = 'text' }: {
   }
 
   return <View style={{ gap: 5 }}>
-    <Text style={styles.label}>{fieldLabel}</Text>
+    <FieldLabel style={styles.label} required={required}>{fieldLabel}</FieldLabel>
     <TextInput style={styles.input} accessibilityLabel={fieldLabel} value={displayValue} onChangeText={change}
       editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'} maxLength={250} />
   </View>;
@@ -123,11 +125,11 @@ export function EmployeeForm({ employee, busy, onSave }: {
     {employeeTextFields.map(([key, label]) => key === 'startDate'
       ? <DateCalendarField key={key} label={label} value={fields[key]} clearLabel="Bỏ ngày"
           disabled={busy} onChange={day => change(key, day)} />
-      : <TextField key={key} label={label} value={fields[key]}
+      : <TextField key={key} label={label} value={fields[key]} required={key === 'name'}
           onChange={value => change(key, value)} busy={busy} kind={key === 'email' ? 'email' : key === 'taxCode' ? 'integer' : 'text'} />)}
     {([['contract', 'Loại hợp đồng', contracts], ['status', 'Tình trạng', employeeStatuses]] as const).map(([key, label, items]) =>
       <View key={key} style={styles.stack}>
-        <Text style={styles.label}>{label}</Text>
+        <FieldLabel style={styles.label} required>{label}</FieldLabel>
         <View style={styles.choices}>{items.map(item =>
           <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: item === fields[key] }}
             disabled={busy} onPress={() => change(key, item)} style={[styles.choice, item === fields[key] && styles.selected]}>
@@ -160,6 +162,7 @@ export function PayEditor({ employee, month, rates, advance, slip, pay, busy, on
   return <>
     <Text style={styles.badge}>{slip?.status || 'Nháp'}</Text>
     {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
+      required={key === 'workDays' || key === 'standardDays'}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
     <PayBreakdown pay={preview} />
     <Text style={styles.muted}>Thu nhập tính thuế: {money(preview.taxable)}</Text>

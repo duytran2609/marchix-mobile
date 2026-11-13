@@ -3,11 +3,12 @@ import type { ComponentRef } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { LayoutRectangle, StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FieldLabel } from './FieldLabel';
 import { createThemedStyles } from '../theme/theme';
 import { ToastLayer } from './Toast';
 
 export function Dropdown<Value extends string | number>({ label, value, choices, onChange, style, disabled,
-  singleLineValue = false, fallbackLabel = String(value), menuLabel = label, hideLabel = false, highlightSelection = true }: {
+  singleLineValue = false, fallbackLabel = String(value), menuLabel = label, hideLabel = false, highlightSelection = true, required }: {
   label: string; value: Value; choices: readonly { value: Value; label: string }[]; onChange: (value: Value) => void;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
@@ -15,6 +16,7 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
   fallbackLabel?: string;
   menuLabel?: string;
   hideLabel?: boolean;
+  required?: boolean;
   highlightSelection?: boolean;
 }) {
   const styles = useStyles();
@@ -48,7 +50,7 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
 
   return (
     <View style={[styles.field, style]}>
-      {!hideLabel && <Text style={styles.filterLabel}>{label}</Text>}
+      {!hideLabel && <FieldLabel style={styles.filterLabel} required={required}>{label}</FieldLabel>}
       <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${label}: ${selectedLabel}`}
         aria-expanded={!!anchor} disabled={disabled} onPress={open}
         style={[styles.filterButton, { height: 44 * Math.max(1, fontScale) },

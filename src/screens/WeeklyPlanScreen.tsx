@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { AssignmentCalendar } from '../features/tasks/AssignmentCalendar';
@@ -130,7 +131,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
           <Pressable key={task.id} accessibilityRole="button" accessibilityHint="Mở chi tiết công việc"
             onPress={() => onOpenTask(task.id)}
             style={({ pressed }) => [ui.detailRow, styles.task, pressed && ui.dimmed]}>
-            <Text style={ui.label}>{task.title}</Text>
+            <ClickableCardHeader><Text style={ui.label}>{task.title}</Text></ClickableCardHeader>
             <Text style={task.status === 'Vướng' ? ui.error : ui.muted}>
               {[task.status, formatDue(task.due), task.priority].filter(Boolean).join(' · ')}
             </Text>

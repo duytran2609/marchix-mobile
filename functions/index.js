@@ -228,7 +228,12 @@ function parseAssignment(data, editing = false) {
       typeof projectId !== 'string' || (projectId && (projectId.includes('/') || Buffer.byteLength(projectId) > 1500)) ||
       typeof note !== 'string' || note.length > 2000 || typeof message !== 'string' || message.length > 1000 ||
       !Array.isArray(checklist) || checklist.length > 30 ||
-      !checklist.every(item => typeof item === 'string' && item.trim() && item.trim().length <= 160) ||
+      !checklist.every(item => {
+        const label = typeof item === 'string' ? item : item?.t;
+        return typeof label === 'string' && label.trim() && label.trim().length <= 160 &&
+          (typeof item === 'string' || (validChecklistWeight(item.weight) &&
+            (!editing || item.sourceIndex == null || (Number.isSafeInteger(item.sourceIndex) && item.sourceIndex >= 0))));
+      }) ||
       !Array.isArray(watchers) || watchers.length > 30 || !watchers.every(isMemberEmail) ||
       (approverEmail != null && approverEmail !== '' && !isMemberEmail(approverEmail))) {
     throw new HttpsError('invalid-argument', 'Thông tin công việc không hợp lệ.');
@@ -239,7 +244,10 @@ function parseAssignment(data, editing = false) {
   return {
     taskId, title: title.trim(), assigneeEmails: [...assigneeEmails].sort(), due, startDate, priority, status,
     progress: checklist.length ? 0 : progress, repeat, projectId, note: note.trim(), message: message.trim(),
-    checklist: checklist.map(item => item.trim()), watchers: [...new Set(watchers)].sort(), milestone,
+    checklist: checklist.map(item => typeof item === 'string' ? { t: item.trim() }
+      : { t: item.t.trim(), weight: item.weight,
+        ...(editing && item.sourceIndex !== undefined ? { sourceIndex: item.sourceIndex } : {}) }),
+    watchers: [...new Set(watchers)].sort(), milestone,
     approverEmail: approverEmail ?? null,
   };
 }
@@ -288,7 +296,8 @@ exports.createMobileTask = onCall(async request => {
   const { email, db } = assignmentContext(request);
   const { taskId, assigneeEmails, checklist, message, approverEmail, ...fields } = parseAssignment(request.data ?? {});
   const attachments = parseAttachments(request.data?.attachments ?? [], assigneeEmails.length);
-  const fingerprintData = { assigneeEmails, checklist, message, approverEmail, fields,
+  const fingerprintData = { assigneeEmails, checklist: checklist.map(item => (item.weight ?? 1) === 1 ? item.t : item),
+    message, approverEmail, fields,
     ...(attachments.length ? { attachments: attachments.map(({ name, type, digest }) => ({ name, type, digest })) } : {}) };
   const fingerprint = createHash('sha256').update(JSON.stringify(fingerprintData)).digest('hex');
   const members = db.collection('members');
@@ -341,7 +350,7 @@ exports.createMobileTask = onCall(async request => {
       transaction.create(ref, {
         ...fields, startDate, assignee, assigneeEmail, assignedBy: email,
         approverEmail: approverEmail ?? (assigneeEmail !== email && canReviewTasks(assigner) ? email : ''),
-        checklist: checklist.map(t => ({ t, done: false })),
+        checklist: checklist.map(({ t, weight = 1 }) => ({ t, weight, done: false })),
         comments: message || files.length ? [{ by: email, at: createdAt, text: message, files }] : [],
         spawned: false, doneAt: '', createdAt, updatedAt: createdAt, updatedBy: email,
       });
@@ -428,10 +437,20 @@ exports.updateMobileTask = onCall(async request => {
     }
     const change = { ...details, comments, updatedAt, updatedBy: email };
     if (open) {
-      const remaining = Array.isArray(task.checklist) ? [...task.checklist] : [];
-      const items = checklist.map(t => {
+      const original = Array.isArray(task.checklist) ? task.checklist : [];
+      const indices = checklist.flatMap(({ sourceIndex }) => sourceIndex == null ? [] : [sourceIndex]);
+      const reserved = new Set(indices);
+      if (reserved.size !== indices.length || indices.some(index => !original[index])) {
+        throw new HttpsError('invalid-argument', 'Việc con không hợp lệ.');
+      }
+      const remaining = original.filter((_, index) => !reserved.has(index));
+      const items = checklist.map(({ t, weight, sourceIndex }) => {
+        if (sourceIndex === null) return { t, weight, done: false };
+        if (sourceIndex !== undefined) return { t, weight, done: original[sourceIndex].done === true };
         const index = remaining.findIndex(item => (item?.t || item?.text) === t);
-        return index < 0 ? { t, done: false } : remaining.splice(index, 1)[0];
+        if (index < 0) return { t, weight: weight ?? 1, done: false };
+        const existing = remaining.splice(index, 1)[0];
+        return weight === undefined ? existing : { ...existing, weight };
       });
       Object.assign(change, { assigneeEmail, approverEmail: nextApprover, status, checklist: items,
         progress: items.length ? checklistProgress(items) : progress });
@@ -505,8 +524,19 @@ exports.downloadMobileTaskAttachment = onCall(async request => {
   return { base64: Buffer.concat(buffers).toString('base64') };
 });
 
+function validChecklistWeight(weight) {
+  return Number.isSafeInteger(weight) && weight > 0 && weight <= Math.floor(Number.MAX_SAFE_INTEGER / 30);
+}
+
 function checklistProgress(items) {
-  return Math.round(items.filter(item => item?.done === true).length * 100 / items.length);
+  let total = 0;
+  let completed = 0;
+  for (const item of items) {
+    const weight = validChecklistWeight(item?.weight) ? item.weight : 1;
+    total += weight;
+    if (item?.done === true) completed += weight;
+  }
+  return total ? Math.round(completed / total * 100) : 0;
 }
 
 function getTaskId(value) {

@@ -24,7 +24,7 @@ export type AssignmentOptions = {
   milestone: boolean;
 };
 
-type ChecklistItem = { t?: string; text?: string; done: boolean };
+type ChecklistItem = { t?: string; text?: string; done: boolean; weight?: number };
 type TaskComment = { by: string; at: string; text: string; files?: TaskAttachment[]; kind?: 'assignment' };
 
 export type Task = {
@@ -257,7 +257,7 @@ export function newTaskId() {
 
 export type AssignmentInput = {
   taskId: string; title: string; assigneeEmails: string[]; due: string; startDate: string;
-  note: string; message: string; checklist: string[]; watchers: string[]; progress: number; approverEmail?: string;
+  note: string; message: string; checklist: { t: string; weight: number; sourceIndex?: number | null }[]; watchers: string[]; progress: number; approverEmail?: string;
   attachments?: AttachmentUpload[];
 } & AssignmentOptions;
 

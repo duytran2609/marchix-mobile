@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
@@ -92,7 +93,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
               }
               const multiline = multilineFields.includes(field);
               return <View key={field} style={popup.field}>
-                <Text style={styles.label}>{label}</Text>
+                <FieldLabel style={styles.label} required={field === 'name'}>{label}</FieldLabel>
                 <TextInput accessibilityLabel={label} editable={!saving} value={values[field]}
                   autoCapitalize={field === 'ownerEmail' ? 'none' : 'sentences'}
                   keyboardType={field === 'ownerEmail' ? 'email-address' : 'default'}
@@ -101,7 +102,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
                   style={[styles.input, multiline && styles.messageInput]} />
               </View>;
             })}
-            <Text style={styles.label}>Trạng thái</Text>
+            <FieldLabel style={styles.label} required>Trạng thái</FieldLabel>
             <View style={styles.choices}>
               {projectStatuses.map(value => <Pressable key={value} accessibilityRole="button"
                 accessibilityState={{ selected: value === status, disabled: saving }} disabled={saving}

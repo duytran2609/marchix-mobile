@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Button } from '../components/Button';
-import { MemberAvatar } from '../components/MemberAvatar';
+import { FieldLabel } from '../components/FieldLabel';
+import { PeopleSummary } from '../components/PeopleSummary';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
@@ -10,12 +12,13 @@ import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskDiscussion } from '../features/tasks/TaskDiscussion';
 import { TaskPriority } from '../features/tasks/TaskPriority';
 import { TaskProgress } from '../features/tasks/TaskProgress';
+import { checklistWeight } from '../features/tasks/checklistProgress';
 import {
   commentMaxLength, editableStatus, editableStatuses, listTaskAssignees, parseTaskProgress, reportTaskCompletion,
   saveProgress, setTaskChecklistItem, watchTask,
 } from '../features/tasks/tasks';
 import type { AssignmentProject, EditableStatus, Task, TaskAssignee } from '../features/tasks/tasks';
-import { auth, emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
+import { auth, db, emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { useScreenStyles } from '../theme/screenStyles';
 
@@ -27,30 +30,25 @@ function TaskMetadata({ task, email, name, members, project }: {
   const styles = useStyles();
   const watchers = Array.isArray(task.watchers) ? task.watchers : [];
   const assignee = task.assignee?.trim();
+  const assigner = task.assignedBy?.trim();
 
-  function renderPerson(personEmail: string, storedName?: string) {
+  function person(personEmail: string, storedName?: string) {
     const member = members.get(personEmail);
     const self = personEmail === email;
     const displayName = (self && name.trim()) || storedName || member?.name?.trim() || personEmail;
     const photoURL = member?.photoURL || (self ? auth.currentUser?.photoURL : undefined);
-    return (
-      <View key={personEmail} style={styles.metadataPerson}>
-        <MemberAvatar name={displayName} photoURL={photoURL} compact />
-        <Text style={styles.metadataValue}>{displayName}</Text>
-      </View>
-    );
+    return { id: personEmail || displayName, name: displayName, photoURL };
   }
 
   const fields = [
-    ['Người thực hiện', task.assigneeEmail || assignee ? <View style={styles.metadataPeople}>
-      {renderPerson(task.assigneeEmail, assignee)}
-    </View> : 'Chưa rõ'],
-    ['Người duyệt', task.approverEmail ? <View style={styles.metadataPeople}>
-      {renderPerson(task.approverEmail)}
-    </View> : 'Chưa chỉ định'],
-    ['Người theo dõi', watchers.length ? <View style={styles.metadataPeople}>
-      {watchers.map(personEmail => renderPerson(personEmail))}
-    </View> : 'Chưa chọn'],
+    ['Người giao việc', assigner
+      ? <PeopleSummary wrap people={[person(assigner)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+    ['Người thực hiện', task.assigneeEmail || assignee
+      ? <PeopleSummary wrap people={[person(task.assigneeEmail, assignee)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+    ['Người duyệt', task.approverEmail
+      ? <PeopleSummary wrap people={[person(task.approverEmail)]} textStyle={styles.metadataName} /> : 'Chưa chỉ định'],
+    ['Người theo dõi', watchers.length
+      ? <PeopleSummary wrap people={watchers.map(personEmail => person(personEmail))} textStyle={styles.metadataName} /> : 'Chưa chọn'],
     ['Dự án', project || task.projectId || 'Chung toàn công ty'],
     ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
     ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
@@ -99,11 +97,19 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const previewStatus = canEdit ? progressDraft?.status ?? (awaitingProgress ? status : undefined) : undefined;
   const [busy, setBusy] = useState<'progress' | 'checklist' | 'report' | null>(null);
   const [reportNote, setReportNote] = useState('');
+  const [reportNoteRequired, setReportNoteRequired] = useState(false);
   const [directory, setDirectory] = useState<TaskDirectory>();
-  const needsDirectory = taskAssignmentEnabled && Boolean(liveTask.assigneeEmail || liveTask.projectId || liveTask.watchers?.length ||
+  const needsDirectory = taskAssignmentEnabled && Boolean(liveTask.assignedBy || liveTask.assigneeEmail || liveTask.projectId || liveTask.watchers?.length ||
     liveTask.approverEmail || liveTask.comments?.some(comment => comment.by !== email));
   const members = new Map(directory?.members.map(member => [member.email, member]));
   const project = directory?.projects?.find(item => item.id === liveTask.projectId)?.name;
+
+  useEffect(() => {
+    if (!canReport) return;
+    return onSnapshot(doc(db, 'settings', 'work'),
+      snapshot => setReportNoteRequired(snapshot.get('requireReportNote') === true),
+      () => setReportNoteRequired(false));
+  }, [canReport]);
 
   useEffect(() => {
     if (!needsDirectory) return;
@@ -191,7 +197,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
             ))}
           </View>
           {!lockedProgress && <>
-            <Text style={screenStyles.label}>Tiến độ (%)</Text>
+            <FieldLabel style={screenStyles.label} required>Tiến độ (%)</FieldLabel>
             <TextInput accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input}
                 value={progress} editable={!busy} onChangeText={value => {
                   if (value === '' || parseTaskProgress(value) !== undefined) {
@@ -222,6 +228,9 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
                   <Text style={screenStyles.label}>{checked ? '✓' : ''}</Text>
                 </View>
                 <Text style={[screenStyles.body, styles.grow]}>{label || `Việc con ${index + 1}`}</Text>
+                <Text style={screenStyles.muted}>
+                  <Text style={{ fontWeight: '700' }}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
+                </Text>
               </Pressable>
             );
           })}
@@ -233,9 +242,12 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
           <Text accessibilityRole="header" style={screenStyles.cardTitle}>Báo hoàn thành</Text>
           {reportBlockReason
             ? <Text style={screenStyles.muted}>{reportBlockReason}</Text>
-            : <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
+            : <>
+              <FieldLabel style={screenStyles.label} required={reportNoteRequired}>Kết quả thực hiện</FieldLabel>
+              <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
                 style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
-                value={reportNote} onChangeText={setReportNote} editable={!busy} />}
+                value={reportNote} onChangeText={setReportNote} editable={!busy} />
+            </>}
           <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
             disabled={!!busy || !!reportBlockReason}
             onPress={() => void changeWorkflow('report', () =>
@@ -330,8 +342,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   metadataDivider: { borderTopWidth: 1, borderTopColor: colors.line },
   metadataLabel: { width: '44%', color: colors.ink, fontSize: 15, lineHeight: 24, fontWeight: '700' },
   metadataValue: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 17, lineHeight: 24 },
-  metadataPeople: { flex: 1, minWidth: 0, gap: 6 },
-  metadataPerson: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metadataName: { fontSize: 17, lineHeight: 24, fontWeight: '400' },
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: colors.line, borderRadius: 5,
     alignItems: 'center', justifyContent: 'center' },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ClickableCardHeader } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { PopupCloseButton } from '../components/PopupCloseButton';
@@ -161,16 +162,18 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
           {filtered.map(row => (
             <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
               style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
-              <Text style={styles.muted}>{recordNumber(row)} · {recordKinds[row.kind ?? 'letter']}</Text>
-              <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
-              <Text style={styles.muted}>{row.partner || '—'} · {assignee(row)}</Text>
-              <View style={styles.choices}>
-                <Text style={styles.badge}>{recordStates[row.status]}</Text>
-                {row.priority === 'urgent' && <Text style={styles.badge}>Khẩn</Text>}
-                {row.fileId && <Text style={styles.badge}>PDF đã lưu</Text>}
-                {overdue(row) && <Text style={styles.error}>Quá hạn</Text>}
-              </View>
-              {!!row.dueOn && <Text style={styles.muted}>Hạn {displayDate(row.dueOn)}</Text>}
+              <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
+              <Text style={styles.muted}>{recordNumber(row)}</Text>
+              <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
+              <Text style={styles.muted}>
+                <Text style={styles.label}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
+                {row.partner || '—'}
+              </Text>
+              <Text style={styles.muted}>
+                <Text style={styles.label}>Người phụ trách: </Text>
+                {assignee(row)}
+              </Text>
+              <Text style={styles.badge}>{recordStates[row.status]}</Text>
             </Pressable>
           ))}
         </>
@@ -193,7 +196,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
               </View>}
               <ScrollView style={editing ? local.formScroll : local.flex} keyboardShouldPersistTaps="handled"
                 contentContainerStyle={local.body}>
-                {editing ? editor : selected ? <View style={styles.panel}>
+                {editing ? editor : selected ? <View style={styles.stack}>
                   <Text style={styles.badge}>{recordBooks[selected.direction]}</Text>
                   <Text accessibilityRole="header" style={styles.cardTitle}>{selected.subject || 'Hồ sơ văn thư'}</Text>
                   {[
@@ -211,12 +214,12 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                     ['Người ký', selected.signedByName],
                     ['Ngày ký', selected.signedOn ? displayDate(selected.signedOn) : undefined],
                   ].filter(([, value]) => value).map(([label, value]) => (
-                    <View key={label} style={styles.detailRow}>
+                    <View key={label} style={[styles.detailRow, local.detailInset]}>
                       <Text style={styles.label}>{label}</Text>
                       <Text selectable style={styles.body}>{value}</Text>
                     </View>
                   ))}
-                  <View style={styles.detailRow}>
+                  <View style={[styles.detailRow, local.detailInset]}>
                     <Text style={styles.label}>Tài liệu đính kèm</Text>
                     {selected.fileId ? <RecordPdfButton key={selected.fileId} recordId={selected.id} fileId={selected.fileId}
                       fileName={selected.fileName} onPreview={file => openPreview?.(file, true)} /> : <Text style={styles.muted}>Chưa lưu tệp</Text>}
@@ -273,7 +276,7 @@ function RecordHistory({ rows, names, onSelect }: {
     {entries.map(({ row, event }) => (
       <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
         onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
-        <Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text>
+        <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
         <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
         <Text style={styles.label}>{recordStates[event.to]}</Text>
         <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
@@ -289,6 +292,7 @@ const local = StyleSheet.create({
   tallDialog: { height: '92%' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   body: { padding: 12 },
+  detailInset: { marginStart: 8 },
   formContainer: { flexShrink: 1 },
   formScroll: { flexGrow: 0 },
   hidden: { display: 'none' },

@@ -164,7 +164,9 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
 
     await openRequests(admin, 'Đăng nhập quản trị (mô phỏng)');
     await requestCard(admin).click();
-    await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
+    await admin.getByRole('button', { name: /^Người duyệt:/ }).click();
+    await admin.getByRole('dialog', { name: 'Người duyệt', exact: true })
+      .getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
     await expect(admin.getByRole('heading', { name: 'Chi tiết đơn' })).toHaveCount(0);
 
@@ -190,7 +192,9 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
 
     const adminOvertime = admin.getByTestId(`request-${overtimeId}`);
     await adminOvertime.click();
-    await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
+    await admin.getByRole('button', { name: /^Người duyệt:/ }).click();
+    await admin.getByRole('dialog', { name: 'Người duyệt', exact: true })
+      .getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
@@ -414,20 +418,26 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
       await expect(page.getByText(text, { exact: true }).first()).toHaveCSS('color', 'rgb(158, 52, 43)');
     }
 
-    for (const [target, filename, header] of [[admin, 'cong-ty', 'HỌ TÊN'], [page, 'ca-nhan', 'NGÀY']] as const) {
+    for (const [target, filename] of [[admin, 'cong-ty'], [page, 'ca-nhan']] as const) {
       const downloadPromise = target.waitForEvent('download');
       await target.getByRole('button', { name: 'Xuất Excel' }).click();
       const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBe('Bang-cong-' + filename + '-' + local.slice(0, 7) + '.xlsx');
+      expect(download.suggestedFilename()).toBe(`Bang-cong-${filename}-${local.slice(5, 7)}-${local.slice(0, 4)}.xlsx`);
       const filePath = await download.path();
       const workbook = read(await readFile(filePath!));
-      const rows = utils.sheet_to_json<(string | number)[]>(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-      expect(rows[0][0]).toBe(header);
+      const summarySheet = workbook.Sheets['Bảng chấm công'];
+      expect(summarySheet.A4.v).toBe('BẢNG CHẤM CÔNG');
+      expect(summarySheet.B7.v).toBe('Họ và tên');
+      expect(summarySheet.AI7.v).toBe('SP');
+      expect(summarySheet.AM7.v).toBe('CĐ');
+      const summaryRows = utils.sheet_to_json<(string | number)[]>(summarySheet, { header: 1 });
+      const employeeRow = summaryRows.find(row => row[1] === 'Nhân viên demo');
+      expect(employeeRow?.[Number(local.slice(8)) + 2]).toBe('x');
+      expect(employeeRow?.[34]).toBe(1);
       if (target === admin) {
-        const employeeRow = rows.find(row => row[0] === 'Nhân viên demo');
-        expect(employeeRow?.[Number(local.slice(8))]).toBe('x');
-        expect(employeeRow?.at(-2)).toBe('1 (30′)');
+        expect(workbook.SheetNames).toEqual(['Bảng chấm công']);
       } else {
+        const rows = utils.sheet_to_json<(string | number)[]>(workbook.Sheets['Chi tiết cá nhân'], { header: 1 });
         expect(rows.find(row => row[0] === dateLabel)).toEqual([
           dateLabel, '08:30', '17:00', '07:30', 'x',
           [adjustmentReason, noteText].join('\n'),
@@ -1161,9 +1171,11 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
       .evaluate(element => getComputedStyle(element).color);
     await expect(close.getByText('×', { exact: true })).toHaveCSS('color', titleColor);
     await form.getByRole('textbox', { name: 'Tên công việc' }).fill(title);
-    const search = form.getByRole('textbox', { name: 'Tìm thành viên' });
+    await form.getByRole('button', { name: /^Người thực hiện:/ }).click();
+    const assigneePicker = page.getByRole('dialog', { name: 'Người thực hiện', exact: true });
+    const search = assigneePicker.getByRole('textbox', { name: 'Tìm thành viên' });
     await search.fill('nhan vien demo');
-    const staff = form.getByRole('checkbox', { name: 'Nhân viên demo', exact: true });
+    const staff = assigneePicker.getByRole('checkbox', { name: 'Nhân viên demo', exact: true });
     await staff.click();
     await expect(staff.getByText('ND', { exact: true })).toBeVisible();
     await expect(staff).not.toContainText('nhanvien@example.test');
@@ -1172,11 +1184,12 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(staff).not.toBeChecked();
     await staff.click();
     await search.clear();
-    const own = form.getByRole('checkbox', { name: 'Người giao việc demo', exact: true });
+    const own = assigneePicker.getByRole('checkbox', { name: 'Người giao việc demo', exact: true });
     await own.click();
     await expect(own).toBeChecked();
     await expect(staff).toBeChecked();
-    await expect(form.getByText('Người thực hiện · Đã chọn 2')).toBeVisible();
+    await assigneePicker.getByRole('button', { name: 'Xong', exact: true }).click();
+    await expect(form.getByRole('button', { name: 'Người thực hiện: Nhân viên demo, Người giao việc demo', exact: true })).toBeVisible();
     await form.getByRole('radio', { name: 'Cao', exact: true }).click();
     const create = form.getByRole('button', { name: 'Tạo công việc', exact: true });
     await create.click();
@@ -1215,7 +1228,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await form.getByRole('button', { name: 'Bỏ tệp Bỏ.txt' }).click();
     await expect(form.getByText('Bỏ.txt', { exact: true })).toHaveCount(0);
 
-    await form.getByRole('button', { name: 'Tùy chọn thêm' }).click();
+    await form.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
     const initialProgress = form.getByRole('textbox', { name: 'Tiến độ ban đầu (%)' });
     await initialProgress.fill('101');
     await expect(initialProgress).toHaveValue('0');
@@ -1225,11 +1238,14 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(initialProgress).toHaveValue('100');
     await form.getByRole('radio', { name: 'Hằng tuần', exact: true }).click();
     await form.getByRole('checkbox', { name: 'Mốc bàn giao dự án' }).click();
-    await form.getByRole('textbox', { name: 'Tìm người theo dõi' }).fill('nhan vien');
-    const watcher = form.getByRole('checkbox', { name: 'Nhân viên demo', exact: true }).last();
+    await form.getByRole('button', { name: /^Người theo dõi:/ }).click();
+    const watcherPicker = page.getByRole('dialog', { name: 'Người theo dõi', exact: true });
+    await watcherPicker.getByRole('textbox', { name: 'Tìm người theo dõi' }).fill('nhan vien');
+    const watcher = watcherPicker.getByRole('checkbox', { name: 'Nhân viên demo', exact: true });
     await watcher.click();
     await expect(watcher).toBeChecked();
     await expect(watcher.getByText('ND', { exact: true })).toBeVisible();
+    await watcherPicker.getByRole('button', { name: 'Xong', exact: true }).click();
     await form.getByRole('textbox', { name: 'Tên việc con' }).fill('Kiểm tra trước khi bàn giao');
     await form.getByRole('button', { name: '+ Thêm việc con' }).click();
     await form.getByRole('textbox', { name: 'Mô tả / chỗ vướng' }).fill('Mô tả cho cả hai người thực hiện.');
@@ -1320,7 +1336,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(receiverPage.getByText('Mô tả cho cả hai người thực hiện.')).toBeVisible();
     await expect(receiverPage.getByText('Nhắn khi có vướng mắc.')).toBeVisible();
     await expect(receiverPage.getByText('Lời nhắn khi giao việc', { exact: true })).toBeVisible();
-    const discussion = receiverPage.getByRole('heading', { name: 'Trao đổi', exact: true }).locator('..');
+    const discussion = receiverPage.getByRole('heading', { name: 'Trao đổi', exact: true }).locator('../..');
     await expect(discussion.getByText('Người giao việc demo', { exact: true })).toBeVisible();
     await expect(discussion.getByText('ND', { exact: true })).toBeVisible();
     await expect(discussion.getByText(assignmentTime, { exact: true })).toBeVisible();
@@ -1360,17 +1376,22 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(editTitle).toHaveValue(title);
     await expect(editForm.getByRole('radio', { name: 'Cao', exact: true })).toBeChecked();
     await expect(editForm.getByText(attachment.name, { exact: true })).toBeVisible();
-    await expect(editForm.getByRole('checkbox', { name: 'Nhân viên demo', exact: true })).toBeChecked({ timeout: 15000 });
+    await expect(editForm.getByRole('button', { name: 'Người thực hiện: Nhân viên demo', exact: true })).toBeVisible({ timeout: 15000 });
     await editForm.getByRole('button', { name: `Hạn chót, ${deadline}` }).click();
     const newDeadline = `22/${suffix}`;
     await dueCalendar.getByRole('button', { name: `Ngày ${newDeadline}` }).click();
     const updatedTitle = `${title} đã sửa`;
     await editTitle.fill(updatedTitle);
     await editForm.getByRole('radio', { name: 'Thấp', exact: true }).click();
-    await editForm.getByRole('button', { name: 'Tùy chọn thêm' }).click();
+    await editForm.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
     await expect(editForm.getByRole('textbox', { name: 'Mô tả / chỗ vướng' })).toHaveValue('Mô tả cho cả hai người thực hiện.');
     await editForm.getByRole('textbox', { name: 'Lời nhắn khi giao việc' }).fill('Lời nhắn đã chỉnh sửa.');
-    await editForm.getByRole('textbox', { name: 'Tên việc con' }).fill('Mục mới sau khi sửa');
+    await editForm.getByRole('textbox', { name: 'Tên việc con', exact: true }).fill('Mục mới sau khi sửa');
+    await editForm.getByRole('button', { name: 'Thông tin chính', exact: true }).click();
+    await expect(editTitle).toHaveValue(updatedTitle);
+    await expect(editForm.getByRole('textbox', { name: 'Tên việc con', exact: true })).toHaveCount(0);
+    await editForm.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
+    await expect(editForm.getByRole('textbox', { name: 'Tên việc con', exact: true })).toHaveValue('Mục mới sau khi sửa');
     const editing = page.waitForResponse(response => response.url().endsWith('/updateMobileTask') &&
       response.request().method() === 'POST');
     await editForm.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();

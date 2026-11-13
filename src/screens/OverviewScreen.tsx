@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { ReactNode } from 'react';
+import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { PageHeader } from '../components/PageHeader';
@@ -180,7 +181,7 @@ export function OverviewScreen({
         {!!entry.detail && <Text style={screen.muted}>{entry.detail}</Text>}
         {entry.metadata}
       </View>
-      <Text style={styles.link} accessibilityElementsHidden importantForAccessibility="no">›</Text>
+      <CardChevron />
     </Pressable>;
   }
 

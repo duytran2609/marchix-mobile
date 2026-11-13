@@ -3,6 +3,7 @@ import { ToastLayer, useToast } from '../components/Toast';
 import type { ComponentRef } from 'react';
 import { Animated, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from '../components/Button';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { createThemedStyles } from '../theme/theme';
@@ -25,7 +26,7 @@ const sidebarIcons = {
   'cai-dat': require('../../assets/sidebar/settings.png'),
 } satisfies Record<WorkspaceTab, number>;
 
-export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onClose, onSelect, onLogout }: {
+export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onClose, onSelect, onOpenWeb, onLogout }: {
   open: boolean;
   activeTab: WorkspaceTab;
   isAdmin: boolean;
@@ -33,6 +34,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   photoURL: string | null;
   onClose: () => void;
   onSelect: (tab: WorkspaceTab) => void;
+  onOpenWeb: () => void;
   onLogout: () => Promise<void>;
 }) {
   const styles = useStyles();
@@ -93,9 +95,12 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
         }] }]}>
           <SafeAreaView style={styles.fill} edges={['top', 'bottom', 'left']}>
             <View style={styles.header}>
-              <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain"
-                accessible accessibilityLabel="Logo Marchix" style={styles.logo} />
-              <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} />
+              <View style={styles.brandRow}>
+                <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain"
+                  accessible accessibilityLabel="Logo Marchix" style={styles.logo} />
+                <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} />
+              </View>
+              <Button label="Mở Quản lý Marchix bản web" secondary disabled={confirming} onPress={onOpenWeb} />
             </View>
             <ScrollView contentContainerStyle={styles.list}>
               {workspaceTabs.map(item => {
@@ -156,8 +161,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   fill: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(33, 25, 53, 0.54)' },
   drawer: { zIndex: 1, backgroundColor: colors.paper, elevation: 12, boxShadow: '8px 0 24px rgba(33, 25, 53, 0.15)' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10,
+  header: { gap: 8, paddingHorizontal: 20, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: colors.line },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   logo: { width: 56, height: 56, transform: [{ scale: 1.4 }] },
   logoutButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background },

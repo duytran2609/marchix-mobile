@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
+import { FieldLabel } from '../components/FieldLabel';
 import { Dropdown } from '../components/Dropdown';
-import { SearchableChoiceList } from '../components/SearchableChoiceList';
+import { SearchableChoiceDropdown, SearchableChoiceList } from '../components/SearchableChoiceList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
@@ -134,19 +136,22 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
     </View>}
     {!initialRequestId && !error && rows !== null && <View style={shared.stack}>
       {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
-      {rows.map(row => <View key={row.id} style={[shared.panel, styles.requestRow]}>
-        <Pressable testID={`request-${row.id}`} accessibilityRole="button"
-          onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, pressed && shared.dimmed]}>
-          <View style={styles.cardHeader}>
-            <Text style={[shared.cardTitle, shared.listHeading]}>{row.type}</Text>
-            <RequestStatus status={row.status} />
-          </View>
-          <Text style={shared.muted}>Ngày tạo: {displayDate(row.createdAt)}</Text>
-        </Pressable>
-        {canActOnRequest(row, 'delete', access) && <DeleteIconButton
-          label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
-          onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />}
-      </View>)}
+      {rows.map(row => {
+        const canDelete = canActOnRequest(row, 'delete', access);
+        return <View key={row.id} style={shared.panel}>
+          <Pressable testID={`request-${row.id}`} accessibilityRole="button"
+            onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, canDelete && styles.deletable, pressed && shared.dimmed]}>
+            <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
+              <Text style={shared.cardTitle}>{row.type}</Text>
+            </ClickableCardHeader>
+            <Text style={[shared.muted, canDelete && styles.dateWithDelete]}>Ngày tạo: {displayDate(row.createdAt)}</Text>
+          </Pressable>
+          {canDelete && <View style={styles.deleteRequest}>
+            <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
+              onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />
+          </View>}
+        </View>;
+      })}
     </View>}
     {deleteTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelDelete}>
       <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?" message={requestDeleteMessage(deleteTarget)}
@@ -280,17 +285,21 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function input(label: string, value: string, onChangeText: (value: string) => void,
-    options: Pick<TextInputProps, 'keyboardType' | 'inputMode' | 'multiline' | 'maxLength' | 'placeholder'>) {
+    options: Pick<TextInputProps, 'keyboardType' | 'inputMode' | 'multiline' | 'maxLength' | 'placeholder'> &
+      { required?: boolean; requiredFor?: string }) {
+    const { required, requiredFor, ...inputOptions } = options;
     return <View style={styles.field}>
-      <Text style={shared.label}>{label}</Text>
-      <TextInput accessibilityLabel={label} style={[shared.input, options.multiline && shared.messageInput]}
-        placeholderTextColor={colors.muted} editable={!busy} value={value} onChangeText={onChangeText} {...options} />
+      <FieldLabel style={shared.label} required={required || !!requiredFor}>
+        {requiredFor ? `${label} (${requiredFor})` : label}
+      </FieldLabel>
+      <TextInput accessibilityLabel={label} style={[shared.input, inputOptions.multiline && shared.messageInput]}
+        placeholderTextColor={colors.muted} editable={!busy} value={value} onChangeText={onChangeText} {...inputOptions} />
     </View>;
   }
 
   function dateField(field: 'from' | 'to', label: string, value: string) {
     return <View style={styles.dateRow}>
-      <Text style={[shared.label, styles.dateLabel]}>{label}</Text>
+      <FieldLabel style={[shared.label, styles.dateLabel]} required={range || overtime}>{label}</FieldLabel>
       <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
         disabled={busy} style={styles.dropdown} onChange={day => selectDate(field, day)} />
     </View>;
@@ -321,7 +330,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             </>}
             {editable ? <>
               <View style={styles.dateRow}>
-                <Text style={[shared.label, styles.dateLabel]}>Loại đơn</Text>
+                <FieldLabel style={[shared.label, styles.dateLabel]} required>Loại đơn</FieldLabel>
                 <Dropdown label="Loại đơn" hideLabel highlightSelection={false} style={styles.dropdown} value={type} choices={requestTypeChoices}
                   disabled={busy} onChange={item => {
                     if (item !== type && (item === 'Nghỉ phép' || item === 'Công tác')) setDays(String(rangeDays(from, to)));
@@ -330,8 +339,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </View>
               {advance ? <>
                 {input('Số tiền tạm ứng (VND)', groupDigits(amount), value => setAmount(digitsOnly(value)),
-                  { keyboardType: 'number-pad', maxLength: 24 })}
-                <Text style={shared.label}>Trừ vào lương tháng</Text>
+                  { keyboardType: 'number-pad', maxLength: 24, required: true })}
+                <FieldLabel style={shared.label} required>Trừ vào lương tháng</FieldLabel>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Đổi tháng năm, ${displayMonth(month)}`}
                   aria-expanded={monthPickerYear !== null} disabled={busy} style={[shared.input, styles.picker]}
                   onPress={() => {
@@ -343,8 +352,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </> : <>
                 {dateField('from', overtime ? 'Ngày' : 'Từ ngày', from)}
                 {overtime ? <>
-                  {input('Số giờ làm thêm', hours, setHours, { inputMode: 'decimal', placeholder: 'Ví dụ: 2,5', maxLength: 12 })}
-                  <Text style={shared.label}>Công việc phụ trách · Đã chọn {selectedTasks.length}</Text>
+                  {input('Số giờ làm thêm', hours, setHours, { inputMode: 'decimal', placeholder: 'Ví dụ: 2,5', maxLength: 12, required: true })}
+                  <FieldLabel style={shared.label} required>Công việc phụ trách · Đã chọn {selectedTasks.length}</FieldLabel>
                   {tasksError ? <Button label="Tải lại công việc" secondary disabled={busy} onPress={onRetryTasks} />
                     : tasks === null && <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />}
                   {(tasks !== null || taskChoices.length > 0) && <SearchableChoiceList
@@ -365,17 +374,17 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                     }} />}
                 </> : <>
                   {dateField('to', 'Đến ngày', to)}
-                  {input('Số ngày', days, changeDays, { keyboardType: 'numeric', maxLength: 5 })}
+                  {input('Số ngày', days, changeDays, { keyboardType: 'numeric', maxLength: 5, required: type !== 'Đề xuất khác' })}
                 </>}
                 {trip && <>
-                  {input('Địa điểm công tác', destination, setDestination, { maxLength: 250 })}
+                  {input('Địa điểm công tác', destination, setDestination, { maxLength: 250, required: true })}
                   {input('Đơn vị làm việc', host, setHost, { maxLength: 250 })}
                   {input('Chi phí dự kiến (VND)', groupDigits(cost), value => setCost(digitsOnly(value)),
                     { keyboardType: 'number-pad', maxLength: 24 })}
                 </>}
               </>}
               {input(overtime ? 'Lý do làm thêm giờ' : trip ? 'Mục đích / nội dung công tác' : 'Lý do / nội dung',
-                reason, setReason, { multiline: true, maxLength: 2000 })}
+                reason, setReason, { multiline: true, maxLength: 2000, required: true })}
             </> : row && <>
               <Text style={shared.cardTitle}>{row.type}</Text>
               <Text style={shared.body}>{row.reason}</Text>
@@ -392,13 +401,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </View>}
             </>}
             <View style={shared.detailRow}>
-              <Text style={shared.label}>{!row || canRoute ? `Người duyệt · Đã chọn ${approver ? 1 : 0}` : 'Người duyệt'}</Text>
+              <FieldLabel style={shared.label} required={canRoute}>Người duyệt</FieldLabel>
               {!row || canRoute ? <>
                 {!!approver && (directoryState !== 'ready' || !approvers.some(member => member.email === approver)) &&
                   <Text style={shared.muted}>{getMemberName(approver, members)}</Text>}
                 {directoryState === 'loading' && <ActivityIndicator accessibilityLabel="Đang tải người duyệt" color={colors.accent} />}
                 {directoryState === 'error' && <Button label="Tải lại danh sách người duyệt" secondary disabled={busy} onPress={retryDirectory} />}
-                {directoryState === 'ready' && <SearchableChoiceList label="Tìm người duyệt"
+                {directoryState === 'ready' && <SearchableChoiceDropdown title="Người duyệt" label="Tìm người duyệt"
                   items={approvers.map(member => ({ id: member.email, name: member.name }))}
                   selected={approver ? [approver] : []} onToggle={id => setApprover(id === approver ? '' : id)}
                   disabled={busy} emptyMessage="Không có người duyệt phù hợp." />}
@@ -409,7 +418,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             {row?.reply ? <Text style={shared.body}>Ý kiến người duyệt · {row.reply}</Text> : null}
             {error && !confirmDelete && <Text accessibilityRole="alert" style={shared.error}>{error}</Text>}
             {canDecide && <>
-              {input('Ý kiến xử lý', reply, setReply, { maxLength: 500, multiline: true })}
+              {input('Ý kiến xử lý', reply, setReply, { maxLength: 500, multiline: true, requiredFor: 'khi từ chối' })}
               <View style={shared.choices}>
                 <Button label="Duyệt" disabled={busy} onPress={() => void submit('approve')} />
                 <Button label="Từ chối" secondary disabled={busy} onPress={() => void submit('reject')} />
@@ -452,9 +461,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     borderWidth: 1, borderColor: colors.line },
   popupContent: { gap: 14, padding: 20 },
   field: { gap: 6 },
-  requestRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  requestCard: { flex: 1, minWidth: 0, gap: 4 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  requestCard: { gap: 4 },
+  deletable: { minHeight: 58 },
+  dateWithDelete: { paddingRight: 48 },
+  deleteRequest: { position: 'absolute', right: 4, bottom: 6 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dateLabel: { width: 76 },
   dropdown: { flex: 1 },

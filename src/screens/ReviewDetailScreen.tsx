@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
+import { FieldLabel } from '../components/FieldLabel';
 import { useToast } from '../components/Toast';
 import { formatDue } from '../features/tasks/taskDates';
 import { TaskProgress } from '../features/tasks/TaskProgress';
+import { checklistWeight } from '../features/tasks/checklistProgress';
 import { commentMaxLength, reviewRatings, reviewTaskCompletion, submissionVersion } from '../features/tasks/tasks';
 import type { ReviewRating, Task } from '../features/tasks/tasks';
 import { taskAssignmentEnabled } from '../services/firebase/firebase';
@@ -49,7 +51,9 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
         <TaskProgress task={task} />
         {task.note ? <Text style={screenStyles.body}>{task.note}</Text> : null}
         {task.checklist?.map((item, index) => (
-          <Text key={index} style={screenStyles.body}>{item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`}</Text>
+          <Text key={index} style={screenStyles.body}>
+            {item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`} · Khối lượng {checklistWeight(item.weight)}
+          </Text>
         ))}
         <View style={screenStyles.detailRow}>
           <Text style={screenStyles.label}>Kết quả nhân viên gửi</Text>
@@ -61,6 +65,7 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
         : !taskAssignmentEnabled ? <Text style={screenStyles.muted}>Bản này chỉ cho xem kết quả gửi duyệt.</Text> : (
         <View style={screenStyles.panel}>
           <Text accessibilityRole="header" style={screenStyles.cardTitle}>Đánh giá kết quả</Text>
+          <FieldLabel style={screenStyles.label} required>Mức đánh giá khi duyệt</FieldLabel>
           <View accessibilityRole="radiogroup" accessibilityLabel="Mức đánh giá" style={screenStyles.choices}>
             {reviewRatings.map(value => (
               <Pressable key={value} accessibilityRole="radio" aria-checked={value === rating}
@@ -70,7 +75,7 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
               </Pressable>
             ))}
           </View>
-          <Text style={screenStyles.muted}>Chọn mức đánh giá để duyệt hoặc nhập lý do để trả lại công việc.</Text>
+          <FieldLabel style={screenStyles.label} required>Nhận xét khi trả lại</FieldLabel>
           <TextInput accessibilityLabel="Nhận xét" placeholder="Nhập nhận xét hoặc lý do trả lại"
             style={[screenStyles.input, screenStyles.messageInput]} value={note} onChangeText={setNote}
             multiline maxLength={commentMaxLength} editable={!busy} />

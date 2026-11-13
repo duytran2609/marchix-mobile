@@ -69,7 +69,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     <>
       <View style={styles.workspaceHeader}>
         <WorkspaceHeader menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)}
-          inbox={{ email, onOpenNote: openNote }} onOpenWeb={openWeb} />
+          inbox={{ email, onOpenNote: openNote }} />
       </View>
       <ScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
@@ -83,7 +83,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       </ScrollView>
       <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
         isAdmin={isAdmin} name={name} photoURL={photoURL}
-        onClose={() => setMenuOpen(false)} onSelect={selectTab} onLogout={logout} />
+        onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
     </>
   );
 }

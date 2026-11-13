@@ -10,6 +10,7 @@ const lanApk = process.env.MARCHIX_LAN_APK === '1';
 const id = pilot ? 'vn.marchix.quanly.pilot' : staging ? 'vn.marchix.quanly.staging' : 'vn.marchix.quanly.emulator';
 const plugins = lanApk || pilot ? [] : ['expo-dev-client'];
 const pushProjectId = (staging || pilot) ? process.env.MARCHIX_EAS_PROJECT_ID?.trim() : undefined;
+const easProjectId = pushProjectId || (pilot ? process.env.MARCHIX_EXPO_PROJECT_ID?.trim() : undefined);
 const googleServicesFile = pushProjectId ? process.env.MARCHIX_GOOGLE_SERVICES_FILE?.trim() : undefined;
 if (pushProjectId) plugins.push(['expo-notifications', { defaultChannel: 'workspace' }]);
 plugins.push(['expo-location', {
@@ -55,7 +56,7 @@ if (lanApk) {
   });
 }
 
-if (staging && iosClientId) {
+if ((staging || pilot) && iosClientId) {
   plugins.push(['@react-native-google-signin/google-signin', {
     iosUrlScheme: iosClientId.split('.').reverse().join('.'),
   }]);
@@ -64,14 +65,17 @@ if (staging && iosClientId) {
 module.exports = {
   name: pilot ? 'Quản lý Marchix Pilot' : staging ? 'Quản lý Marchix Staging' : 'Quản lý Marchix Demo',
   slug: 'marchix-mobile',
-  version: pilot ? '0.5.6' : '0.4.0',
+  version: pilot ? '0.5.8' : '0.4.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
   android: { package: id, ...(googleServicesFile ? { googleServicesFile } : {}),
-    ...(pilot ? { versionCode: 7, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
+    ...(pilot ? { versionCode: 9, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
   ios: { bundleIdentifier: id, supportsTablet: false },
   web: { favicon: './assets/favicon.png' },
-  ...(pushProjectId ? { extra: { eas: { projectId: pushProjectId }, workspacePushEnabled: true } } : {}),
+  ...(easProjectId ? { extra: {
+    eas: { projectId: easProjectId },
+    ...(pushProjectId ? { workspacePushEnabled: true } : {}),
+  } } : {}),
   plugins,
 };

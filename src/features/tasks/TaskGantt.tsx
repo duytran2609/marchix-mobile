@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CardChevron } from '../../components/CardChevron';
 import { createThemedStyles } from '../../theme/theme';
 import { formatTaskDate } from './taskDates';
 import { taskProgressValue } from './TaskProgress';
@@ -59,6 +60,7 @@ export function TaskGantt({ tasks, today, onOpen }: { tasks: Task[]; today: stri
               <Text numberOfLines={1} style={styles.dateLabel}>{label}</Text>
             </View>
             <Text style={styles.progressValue}>{progress}%</Text>
+            <View style={styles.chevron}><CardChevron /></View>
           </Pressable>
         ))}
       </View>
@@ -122,6 +124,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   pressed: { backgroundColor: colors.accentSoft },
   taskDetails: { flex: 1, minWidth: 0, gap: 3 },
   taskTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  chevron: { alignSelf: 'flex-start', paddingTop: 6 },
   progressValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   dateLabel: { color: colors.muted, fontSize: 11 },
   year: { color: colors.muted, fontSize: 10 },

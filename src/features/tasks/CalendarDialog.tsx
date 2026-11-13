@@ -4,6 +4,7 @@ import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View } from '
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
@@ -63,11 +64,11 @@ export function DateCalendarButton({ label, value, initialDay, min, max, disable
   </>;
 }
 
-export function DateCalendarField(props: ComponentProps<typeof DateCalendarButton>) {
+export function DateCalendarField({ required, ...props }: ComponentProps<typeof DateCalendarButton> & { required?: boolean }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   return <View style={styles.field}>
-    <Text style={ui.label}>{props.label}</Text>
+    <FieldLabel style={ui.label} required={required}>{props.label}</FieldLabel>
     <DateCalendarButton {...props} />
   </View>;
 }

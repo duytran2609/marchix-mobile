@@ -2,8 +2,10 @@ import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
 import { Button } from '../../components/Button';
+import { FieldLabel } from '../../components/FieldLabel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -33,6 +35,7 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
 }) {
   const ui = useScreenStyles();
   const { colors } = useTheme();
+  const required = field.required || typeof field.initial === 'number';
   const isRole = field.key === 'role';
   const isRecurring = tab === 'recurring';
   const isWorkday = /^day[0-6]$/.test(field.key);
@@ -54,7 +57,7 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   if (field.time) {
     const [hour = '', minute = ''] = String(value).split(':');
     return <View style={fieldStyles.plain}>
-      <Text style={ui.label}>{field.label}</Text>
+      <FieldLabel style={ui.label} required={required}>{field.label}</FieldLabel>
       <View style={fieldStyles.clockRow}>
         <Dropdown label={`${field.label} – Giờ`} hideLabel highlightSelection={false} style={fieldStyles.clockPart}
           value={hour} choices={field.required ? hours : optionalHours} fallbackLabel="Giờ" disabled={disabled}
@@ -67,8 +70,8 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   }
   if (field.choices) return (
     <View style={isWorkday ? fieldStyles.workdayRow : fieldStyles.plain}>
-      {showFieldLabel && <Text style={[ui.label, isWorkday && fieldStyles.workdayLabel]}>{field.label}</Text>}
-      <Dropdown label={field.label} value={typeof value === 'boolean' ? String(value) : value} disabled={disabled}
+      {showFieldLabel && <FieldLabel style={[ui.label, isWorkday && fieldStyles.workdayLabel]} required={required || isRole}>{field.label}</FieldLabel>}
+      <Dropdown label={field.label} required={required} value={typeof value === 'boolean' ? String(value) : value} disabled={disabled}
         style={isWorkday ? fieldStyles.workdayDropdown : undefined}
         hideLabel={showFieldLabel} highlightSelection={highlightSelection}
         choices={field.choices.map(([value, label]) => ({ value, label }))} onChange={onChange} />
@@ -76,7 +79,7 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   );
   return (
     <View style={fieldStyles.plain}>
-      <Text style={ui.label}>{label}</Text>
+      <FieldLabel style={ui.label} required={required}>{label}</FieldLabel>
       <TextInput accessibilityLabel={label} editable={!disabled} value={inputValue} style={ui.input}
         autoCapitalize={field.key === 'email' ? 'none' : undefined}
         inputMode={digitsOnly ? 'numeric' : field.key === 'email' ? 'email' :
@@ -298,25 +301,27 @@ export function AdminSettings({ tab, email, onScrollTop }: {
         const photoURL = [row.data.photoURL, row.data.avatarUrl, row.data.avatarURL]
           .find((url): url is string => typeof url === 'string' && /^https:\/\//i.test(url));
         return (
-          <View key={row.id} style={[ui.detailRow, fieldStyles.memberRow]}>
+          <View key={row.id} style={ui.detailRow}>
             <Pressable accessibilityRole="button" style={[fieldStyles.memberDetails, isMember && fieldStyles.memberRow]}
               onPress={() => setEdit(row)}>
               {isMember && <MemberAvatar name={name} photoURL={photoURL} />}
-              <View style={isMember ? fieldStyles.memberDetails : fieldStyles.metadata}>
-                <Text style={ui.label}>{name}</Text>
+              <View style={fieldStyles.memberDetails}>
+                <ClickableCardHeader><Text style={ui.label}>{name}</Text></ClickableCardHeader>
                 {isMember ? <View style={fieldStyles.metadata}>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Email: </Text>{String(row.data.email || row.id)}</Text>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
-                </View> : <View style={fieldStyles.metadata}>
+                </View> : <View style={[fieldStyles.metadata, fieldStyles.recurringDetails]}>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Số tiền / tháng: </Text>{formatMoney.format(Number(row.data.amount) || 0)}</Text>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Ngày chi: </Text>{String(row.data.day || 1)}</Text>
                   <Text style={ui.muted}><Text style={fieldStyles.metaLabel}>Trạng thái: </Text>{row.data.active === false ? 'Tạm dừng' : 'Đang áp dụng'}</Text>
                 </View>}
               </View>
             </Pressable>
-            {!isMember && <DeleteIconButton label={`Xóa khoản chi ${name}`}
-              onPress={() => { setRemoveError(''); setRemoveTarget(row); }} />}
+            {!isMember && <View style={fieldStyles.deleteRecurring}>
+              <DeleteIconButton label={`Xóa khoản chi ${name}`}
+                onPress={() => { setRemoveError(''); setRemoveTarget(row); }} />
+            </View>}
           </View>
         );
       })}
@@ -341,6 +346,8 @@ const fieldStyles = StyleSheet.create({
   permissions: { gap: 8 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberDetails: { flex: 1, minWidth: 0, gap: 5 },
+  recurringDetails: { paddingRight: 48 },
+  deleteRecurring: { position: 'absolute', right: 0, bottom: 0 },
   metadata: { gap: 5 },
   metaLabel: { fontWeight: '700' },
   total: { padding: 12, borderRadius: 10 },

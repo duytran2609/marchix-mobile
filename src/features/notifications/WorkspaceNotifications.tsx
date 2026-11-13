@@ -7,6 +7,7 @@ import { formatVietnamDateTime } from '../../utils/dateTime';
 import { db } from '../../services/firebase/firebase';
 import { markNotificationsRead, watchNotifications } from './notifications';
 import type { WorkspaceNotification } from './notifications';
+import { ClickableCardHeader } from '../../components/CardChevron';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
@@ -157,7 +158,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
                         accessibilityLabel={note.read ? note.title : `Chưa đọc: ${note.title}`}
                         accessibilityHint={note.body || undefined} disabled={saving} onPress={() => openNote(note)}
                         style={({ pressed }) => [styles.note, !note.read && styles.unread, pressed && styles.pressed]}>
-                        <Text style={styles.noteTitle}>{note.title}</Text>
+                        <ClickableCardHeader><Text style={styles.noteTitle}>{note.title}</Text></ClickableCardHeader>
                         {note.body ? <Text style={styles.muted}>{note.body}</Text> : null}
                         {time ? <Text style={styles.date}>{time}</Text> : null}
                       </Pressable>

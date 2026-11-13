@@ -82,7 +82,38 @@ try {
   assert.equal(task.progress, 67);
   assert.deepEqual(task.checklist[1], { text: item.label, done: true });
   await tick({ ...item, done: false });
-  assert.equal((await readTask()).progress, 33);
+  task = await readTask();
+  assert.equal(task.progress, 33);
+  await login(reviewer, 'marchix-mobile-demo-reviewer');
+  const weightedEdit = {
+    taskId, title: task.title, assigneeEmails: [staff], due: task.due, startDate: task.startDate,
+    revision: task.updatedAt, repeat: task.repeat, status: task.status,
+    checklist: [
+      { t: 'Mục bản web', weight: 2 }, { t: item.label, weight: 1 }, { t: 'Mục cuối', weight: 1 },
+    ],
+  };
+  await assert.rejects(editAssignment({
+    ...weightedEdit, checklist: [{ t: 'Mục bản web', weight: 0 }],
+  }), { code: 'functions/invalid-argument' });
+  await editAssignment(weightedEdit);
+  task = await readTask();
+  assert.equal(task.progress, 50);
+  assert.deepEqual(task.checklist[0], { t: 'Mục bản web', done: true, weight: 2 });
+  await editAssignment({
+    ...weightedEdit, revision: task.updatedAt,
+    checklist: [
+      { t: 'Mục bản web đã đổi tên', weight: 2, sourceIndex: 0 },
+      { t: item.label, weight: 1, sourceIndex: 1 },
+      { t: 'Mục cuối', weight: 1, sourceIndex: null },
+    ],
+  });
+  task = await readTask();
+  assert.equal(task.progress, 50);
+  assert.deepEqual(task.checklist[0], { t: 'Mục bản web đã đổi tên', done: true, weight: 2 });
+  await login(staff, 'marchix-mobile-demo-staff');
+  await tick(item);
+  assert.equal((await readTask()).progress, 75);
+  await tick({ ...item, done: false });
   await Promise.all([tick(item), tick({ taskId, index: 2, label: 'Mục cuối', done: true })]);
   assert.equal((await readTask()).progress, 100);
 
@@ -172,6 +203,7 @@ try {
   assert.equal(next.progress, 0);
   assert.equal(next.assigneeEmail, staff);
   assert(next.checklist.every(item => item.done === false));
+  assert.deepEqual(next.checklist.map(item => item.weight), [2, 1, 1]);
 
   const designatedProfile = { enabled: { booleanValue: true } };
   const grant = { arrayValue: { values: [{ stringValue: 'taskReview' }] } };

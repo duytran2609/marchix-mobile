@@ -110,23 +110,29 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     for (const kind of ['thu', 'chi']) {
       await button(admin, '+ Tạo đề nghị ' + kind).click();
       const dialog = admin.getByRole('dialog').filter({ has: admin.getByRole('heading', { name: 'Tạo đề nghị ' + kind }) });
-      const search = dialog.getByRole('textbox', { name: 'Tìm người duyệt', exact: true });
-      const approver = dialog.getByRole('checkbox', { name: 'Người giao việc demo' });
+      await dialog.getByRole('button', { name: /^Người duyệt:/ }).click();
+      const picker = admin.getByRole('dialog', { name: 'Người duyệt', exact: true });
+      const search = picker.getByRole('textbox', { name: 'Tìm người duyệt', exact: true });
+      const approver = picker.getByRole('checkbox', { name: 'Người giao việc demo' });
       await expect(approver).toBeVisible();
       await expect(dialog.getByText('Chỉ định sau')).toHaveCount(0);
       await search.fill('khong co ten nay');
-      await expect(dialog.getByText('Không có người duyệt phù hợp.')).toBeVisible();
+      await expect(picker.getByText('Không có người duyệt phù hợp.')).toBeVisible();
       await search.fill('nguoi giao viec');
       await approver.click();
+      const selectedApprover = dialog.getByRole('button', { name: 'Người duyệt: Người giao việc demo', exact: true });
+      await expect(selectedApprover).toBeVisible();
+      await selectedApprover.click();
       await expect(approver).toBeChecked();
       await approver.click();
-      await expect(approver).not.toBeChecked();
+      await expect(dialog.getByRole('button', { name: 'Người duyệt: Chưa chọn', exact: true })).toBeVisible();
       await dialog.getByRole('button', { name: 'Đóng đề nghị' }).click();
     }
     await expect(entry(admin)).toContainText('Hạng mục: Chi khác');
     await entry(admin).click();
     await expect(admin.getByRole('dialog').getByRole('heading', { name: note })).toBeVisible();
     await expect(button(admin, 'Lưu người duyệt')).toBeDisabled();
+    await admin.getByRole('button', { name: /^Người duyệt:/ }).click();
     await admin.getByRole('textbox', { name: 'Tìm người duyệt', exact: true }).fill('nguoi giao viec');
     await admin.getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await button(admin, 'Lưu người duyệt').click();
