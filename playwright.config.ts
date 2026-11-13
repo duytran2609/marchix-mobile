@@ -6,8 +6,11 @@ const port = new URL(previewUrl).port || '8081';
 export default defineConfig({
   testDir: './tests',
   workers: 1,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
+    timezoneId: 'Asia/Ho_Chi_Minh',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: `npm run web -- --localhost --port ${port}`,

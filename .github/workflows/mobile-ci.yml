@@ -1,0 +1,75 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, emulator tests and web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_PUBLIC_FIREBASE_MODE: emulator
+      MARCHIX_PREVIEW_URL: http://127.0.0.1:8081
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+            tools/firebase-cli/package-lock.json
+      - name: Install app dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install emulator and Functions dependencies
+        run: |
+          npm ci --prefix tools/firebase-cli
+          npm ci --prefix functions
+      - name: Install Chromium and browser dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Test Firestore rules, workflows and mobile web preview
+        run: npm run test:local
+      - name: Upload diagnostics if tests fail
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-ci-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+            *-debug.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Build Expo web preview
+        run: npx expo export --platform web --output-dir dist-ci
+      - name: Publish verified web preview artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: marchix-mobile-web-preview
+          path: dist-ci/
+          if-no-files-found: error
+          retention-days: 14
