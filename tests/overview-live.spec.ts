@@ -81,7 +81,8 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await navigate(source, 'Thu chi');
     const cashRow = button(source, new RegExp(cash));
     await expect(cashRow).toBeVisible();
-    const cashTotal = source.getByText('Đã chi', { exact: true }).locator('..').and(source.locator('div'));
+    const cashTotal = source.getByText('Đã chi', { exact: true }).locator('..')
+      .filter({ hasText: /^Đã chi\s*[\d.]+\s*₫$/ });
     await expect(cashTotal).toBeVisible();
     const spentBefore = numberFrom(await cashTotal.innerText());
     const payable = page.getByText('Phải chi', { exact: true }).locator('..');
