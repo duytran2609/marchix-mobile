@@ -131,7 +131,8 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await expect(page.getByText('Tạm ứng lương', { exact: true })).toBeVisible();
     await expect(page.getByText('750.000 đ', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: advanceLabel, exact: true }).click();
-    await expect(page.getByRole('dialog').getByText(advanceReason, { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Chi tiết đơn', exact: true }))
+      .toContainText('Lý do / nội dung: ' + advanceReason);
     await page.getByRole('dialog').getByRole('button', { name: 'Đóng đơn', exact: true }).click();
     await expect(page.getByText('Tháng ' + label, { exact: true })).toBeVisible();
     await expect(requestPayment).toBeDisabled();
