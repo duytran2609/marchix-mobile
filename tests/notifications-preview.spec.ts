@@ -1,4 +1,5 @@
-import { devices, expect, test } from '@playwright/test';
+import { test } from './helpers/startupReminder';
+import { devices, expect } from '@playwright/test';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
@@ -45,12 +46,6 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
       timeout: 90_000, waitUntil: 'domcontentloaded',
     });
     await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)', exact: true }).click();
-    const reminder = page.getByRole('dialog', { name: /cần chú ý hôm nay/ });
-    if (await reminder.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false)) {
-      await reminder.getByRole('button', { name: 'Đã xem', exact: true }).click();
-      await expect(reminder).toBeHidden();
-    }
-
     await openNote('Thông báo thử giao việc');
     await expect(page.getByRole('heading', { name: 'Cập nhật hướng dẫn bàn giao', exact: true })).toBeVisible();
     await openNote('Thông báo thử đơn từ');
@@ -58,6 +53,8 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
     await page.getByRole('button', { name: 'Đóng đơn', exact: true }).click();
     await openNote('Thông báo thử thu chi');
     await expect(page.getByRole('heading', { name: 'Chứng từ thử từ chuông', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Về sổ thu chi', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Chứng từ thử từ chuông', exact: true })).toBeHidden();
     await openNote('Thông báo thử phiếu lương');
     await expect(page.getByRole('button', { name: 'Chọn tháng: 07/2026', exact: true })).toBeVisible();
     await expect(page.getByText('Tháng 07/2026', { exact: true })).toBeVisible();

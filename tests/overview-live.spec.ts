@@ -1,4 +1,5 @@
-import { devices, expect, test, type Page } from '@playwright/test';
+import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
+import { devices, expect, type Page } from '@playwright/test';
 import { todayInVietnam } from '../src/features/tasks/taskDates';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium', actionTimeout: 10_000 });
@@ -24,6 +25,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
       createdBy: staff, approverEmail: 'nguoigiao@example.test', approvedBy: 'nguoigiao@example.test' }],
   ] as const;
   const source = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(source);
   source.setDefaultTimeout(10_000);
   const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
   const numberFrom = (text: string) => Number(text.replace(/\D/g, ''));
@@ -50,7 +52,21 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await navigate(source, 'Công việc');
     const open = await source.getByLabel(/^Chưa xong: \d+ công việc$/).getAttribute('aria-label');
     const pending = await source.getByLabel(/^Chờ duyệt: \d+ công việc$/).getAttribute('aria-label');
-    await expect(page.getByLabel(`${numberFrom(open ?? '') + numberFrom(pending ?? '')} việc đang mở`)).toBeVisible();
+    // The admin task board contains the whole team; the overview ring contains
+    // received/sent personal work. Compare each UI with its actual source scope.
+    const taskSnapshot = await request.post(base + ':runQuery', { headers, data: {
+      structuredQuery: { from: [{ collectionId: 'tasks' }] },
+    } });
+    expect(taskSnapshot.ok()).toBe(true);
+    const taskDocuments = (await taskSnapshot.json()) as Array<{
+      document?: { fields: Record<string, { stringValue?: string }> };
+    }>;
+    const openTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : [])
+      .filter(fields => fields.status?.stringValue !== 'Xong');
+    expect(numberFrom(open ?? '') + numberFrom(pending ?? '')).toBe(openTasks.length);
+    const personalOpen = openTasks.filter(fields =>
+      fields.assigneeEmail?.stringValue === admin || fields.assignedBy?.stringValue === admin);
+    await expect(page.getByLabel(`${personalOpen.length} việc đang mở`)).toBeVisible();
     const blocked = button(page, /^Đang vướng \d+$/);
     const blockedBefore = numberFrom(await blocked.innerText());
     await blocked.click();

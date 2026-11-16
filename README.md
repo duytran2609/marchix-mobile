@@ -90,6 +90,8 @@ npm.cmd run test:local
 
 Có thể dùng Edge đã cài bằng cách đặt `$env:PLAYWRIGHT_CHANNEL='msedge'` và bỏ qua bước cài Chromium. Bộ kiểm thử xác nhận phân quyền bằng nhiều tài khoản và thao tác giao diện ở kích thước điện thoại bằng hai phiên trình duyệt.
 
+Các bài kiểm thử luồng nghiệp vụ dùng fixture `tests/helpers/startupReminder.ts` để bấm **Đã xem** khi popup nhắc việc xuất hiện sau đăng nhập. Với trang phụ tạo bằng `browser.newPage()` hoặc `context.newPage()`, gọi `acknowledgeStartupReminder(page)` trước khi điều hướng. Bài `startup-reminder-preview.spec.ts` dùng Playwright gốc để tự kiểm tra nội dung, đóng popup và hiển thị lại sau đăng nhập, không tự động bỏ qua popup.
+
 ## Thử trên thiết bị native
 
 - Dùng Expo development build. Trên Android Studio, chạy `npx expo run:android` với Android Emulator. App kết nối máy Windows qua `10.0.2.2`. Trên macOS, chạy `npx expo run:ios` với iOS Simulator.

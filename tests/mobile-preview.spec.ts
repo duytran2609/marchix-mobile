@@ -1,4 +1,5 @@
-import { devices, expect, test } from '@playwright/test';
+import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
+import { devices, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { read, utils } from 'xlsx';
 import { formatTaskDate, shiftDay, todayInVietnam } from '../src/features/tasks/taskDates';
@@ -15,14 +16,11 @@ async function openTasks(page: import('@playwright/test').Page) {
 
 test('Người giao trả lời trao đổi và người thực hiện thấy trích dẫn', async ({ page, browser }) => {
   const sender = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(sender);
   const task = 'Cập nhật hướng dẫn bàn giao';
   const original = `Mình đã cập nhật hướng dẫn (${Date.now()}).`;
   const reply = 'Bạn bổ sung ảnh minh họa nhé.';
   try {
-    for (const view of [page, sender]) {
-      const reminder = view.getByRole('dialog', { name: /cần chú ý hôm nay/ });
-      await view.addLocatorHandler(reminder, () => reminder.getByRole('button', { name: 'Đã xem' }).click());
-    }
     await Promise.all([page.goto(previewUrl), sender.goto(previewUrl)]);
     await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
     await sender.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click();
@@ -83,7 +81,9 @@ test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặ
 test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', async ({ page, browser, request }) => {
   test.setTimeout(120_000);
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   const reviewer = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(reviewer);
   const reason = 'Tạm ứng kiểm thử ' + Date.now();
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
   const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
@@ -319,6 +319,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
   }
 
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   try {
     await page.setViewportSize({ width: 678, height: 794 });
     await page.context().grantPermissions(['geolocation']);
@@ -336,6 +337,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     const personalPanel = await personalHeading.locator('../..').boundingBox();
     expect(punchPanel?.width).toBeCloseTo(personalPanel!.width);
     const deniedPage = await browser.newPage();
+    await acknowledgeStartupReminder(deniedPage);
     try {
       const cdp = await deniedPage.context().newCDPSession(deniedPage);
       const { targetInfo } = await cdp.send('Target.getTargetInfo');
@@ -607,6 +609,7 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
 test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu theo vai trò', async ({ page, browser }) => {
   test.setTimeout(60_000);
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   async function openOverview(target: typeof page, login: string) {
     await target.goto(previewUrl);
     await target.getByRole('button', { name: login }).click();
@@ -752,6 +755,7 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
   }
 
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   try {
     const seeded = await Promise.all(paths.map(([path, values]) => request.patch(`${emulator}/${path}`, {
       headers, data: { fields: Object.fromEntries(Object.entries(values).map(([key, value]) =>
@@ -822,6 +826,7 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
   }
 
   const admin = await browser.newPage(devices['iPhone 13']);
+  await acknowledgeStartupReminder(admin);
   try {
     expect((await request.patch(taskPath, { headers, data: { fields: fields({
       title, assigneeEmail: employee, status: 'Đang làm', due: shiftDay(week, 6),
@@ -1262,10 +1267,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
   let assignmentTime = '';
   try {
     const receiverPage = await receiver.newPage();
-    for (const view of [page, receiverPage]) {
-      const reminder = view.getByRole('dialog', { name: /cần chú ý hôm nay/ });
-      await view.addLocatorHandler(reminder, () => reminder.getByRole('button', { name: 'Đã xem' }).click());
-    }
+    await acknowledgeStartupReminder(receiverPage);
     await Promise.all([page.goto(previewUrl), receiverPage.goto(previewUrl)]);
     await Promise.all([
       page.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click(),
@@ -1599,6 +1601,7 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
   const other = await browser.newContext({ ...devices['iPhone 13'] });
   try {
     const otherPage = await other.newPage();
+    await acknowledgeStartupReminder(otherPage);
     await Promise.all([page.goto(previewUrl), otherPage.goto(previewUrl)]);
     await Promise.all([login(page), login(otherPage)]);
     await Promise.all([openTasks(page), openTasks(otherPage)]);

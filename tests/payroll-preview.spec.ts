@@ -1,4 +1,5 @@
-import { devices, expect, test } from '@playwright/test';
+import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
+import { devices, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { read, utils } from 'xlsx';
@@ -11,9 +12,6 @@ const columns = ['Họ tên', 'Công', 'Lương theo công', 'Phụ cấp + thư
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
 async function openPayroll(page: Page, admin: boolean) {
-  const startupReminder = page.getByRole('dialog', { name: /cần chú ý hôm nay/ });
-  await page.addLocatorHandler(startupReminder, () =>
-    startupReminder.getByRole('button', { name: 'Đã xem', exact: true }).click(), { times: 1 });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: admin ? 'Đăng nhập quản trị (mô phỏng)' : 'Đăng nhập Google (mô phỏng)' }).click();
   await page.getByRole('button', { name: 'Mở menu' }).click();
@@ -23,6 +21,7 @@ async function openPayroll(page: Page, admin: boolean) {
 test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản chi một lần', async ({ page, browser, request }) => {
   test.setTimeout(90_000);
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
   const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
   const base = 'http://' + host + ':' + port + '/v1/projects/demo-marchix-mobile/databases/(default)/documents';
@@ -132,7 +131,8 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await expect(page.getByText('Tạm ứng lương', { exact: true })).toBeVisible();
     await expect(page.getByText('750.000 đ', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: advanceLabel, exact: true }).click();
-    await expect(page.getByRole('dialog').getByText(advanceReason, { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Chi tiết đơn', exact: true }))
+      .toContainText('Lý do / nội dung: ' + advanceReason);
     await page.getByRole('dialog').getByRole('button', { name: 'Đóng đơn', exact: true }).click();
     await expect(page.getByText('Tháng ' + label, { exact: true })).toBeVisible();
     await expect(requestPayment).toBeDisabled();
