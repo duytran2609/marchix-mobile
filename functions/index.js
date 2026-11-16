@@ -211,7 +211,7 @@ function parseAssignment(data, editing = false) {
   const {
     taskId, title, assigneeEmail, assigneeEmails = [assigneeEmail], due, startDate = '',
     priority = 'Trung bình', status = 'Chưa làm', progress = 0, repeat = 'Không lặp', projectId = '',
-    note = '', message = '', checklist = [], watchers = [], milestone = false, approverEmail,
+    note = '', message = '', checklist = [], watchers = [], milestone = false, approverEmail, category,
   } = data;
   if ((!editing && (typeof taskId !== 'string' || !/^[a-zA-Z0-9]{20}$/.test(taskId))) ||
       typeof title !== 'string' || !title.trim() || title.trim().length > 160 ||
@@ -222,6 +222,9 @@ function parseAssignment(data, editing = false) {
   if ((!validDay(due) && !(editing && due === '')) ||
       (startDate !== '' && (!validDay(startDate) || (due && startDate > due)))) {
     throw new HttpsError('invalid-argument', 'Hạn chót và ngày bắt đầu phải hợp lệ.');
+  }
+  if (category !== undefined && (typeof category !== 'string' || category.trim().length > 160)) {
+    throw new HttpsError('invalid-argument', 'Hạng mục công việc chỉ được tối đa 160 ký tự.');
   }
   if (!taskPriorities.includes(priority) || !openStatuses.includes(status) || !taskRepeatOptions.includes(repeat) ||
       !Number.isInteger(progress) || progress < 0 || progress > 100 || typeof milestone !== 'boolean' ||
@@ -243,6 +246,7 @@ function parseAssignment(data, editing = false) {
   }
   return {
     taskId, title: title.trim(), assigneeEmails: [...assigneeEmails].sort(), due, startDate, priority, status,
+    ...(category === undefined || (!editing && !category.trim()) ? {} : { category: category.trim() }),
     progress: checklist.length ? 0 : progress, repeat, projectId, note: note.trim(), message: message.trim(),
     checklist: checklist.map(item => typeof item === 'string' ? { t: item.trim() }
       : { t: item.t.trim(), weight: item.weight,

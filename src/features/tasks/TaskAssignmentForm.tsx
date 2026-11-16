@@ -20,7 +20,7 @@ import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachmen
 import type { PickedAttachment } from './taskAttachments';
 import {
   createTask, editableStatus, editableStatuses, getAssignmentComment, listTaskAssignees, newTaskId, parseTaskProgress,
-  taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
+  taskCategoryMaxLength, taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
 } from './tasks';
 import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee } from './tasks';
 import { createThemedStyles, useTheme } from '../../theme/theme';
@@ -105,6 +105,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   const [directoryError, setDirectoryError] = useState('');
   const [reload, setReload] = useState(0);
   const [title, setTitle] = useState(task?.title ?? '');
+  const [category, setCategory] = useState(task?.category ?? '');
   const [assignees, setAssignees] = useState(task?.assigneeEmail ? [task.assigneeEmail] : []);
   const [watchers, setWatchers] = useState(task?.watchers ?? []);
   const [approver, setApprover] = useState<string | undefined>(task?.approverEmail ?? (emulatorMode && !task ? undefined : ''));
@@ -227,6 +228,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
       }
       const data = {
         ...options, progress, taskId, title: taskTitle, assigneeEmails: assignees, due, startDate: start,
+        category: category.trim(),
         note, message, checklist: checklist.map(({ t, weight, sourceIndex }) =>
           task ? { t, weight, sourceIndex } : { t, weight }), watchers, attachments,
       };
@@ -268,6 +270,11 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
                   <FieldLabel style={styles.label} required>Tên công việc</FieldLabel>
                   <TextInput accessibilityLabel="Tên công việc" style={styles.input} value={title} editable={!saving}
                     onChangeText={setTitle} maxLength={taskTitleMaxLength} placeholder="Nhập tên việc cần làm" />
+                </View>
+                <View style={styles.field}>
+                  <FieldLabel style={styles.label}>Hạng mục</FieldLabel>
+                  <TextInput accessibilityLabel="Hạng mục" style={styles.input} value={category} editable={!saving}
+                    onChangeText={setCategory} maxLength={taskCategoryMaxLength} placeholder="Nhập hạng mục công việc" />
                 </View>
                 <View style={styles.field}>
                   <FieldLabel style={styles.label} required={!workflowLocked}>Người thực hiện</FieldLabel>

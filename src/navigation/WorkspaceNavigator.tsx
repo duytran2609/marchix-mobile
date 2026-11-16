@@ -70,7 +70,6 @@ export function WorkspaceNavigator({
 
   function openReviewQueue() {
     setRoute({ screen: 'cho-duyet' });
-    onScrollTop();
   }
 
   if (route.screen === 'tong-quan') return <OverviewScreen
@@ -80,14 +79,11 @@ export function WorkspaceNavigator({
     tasksError={error || sentError} onRetryTasks={retryTasks} onNavigate={setRoute} />;
   if (route.screen === 'luong') return <PayrollScreen key={email + '-' + isAdmin} email={email} isAdmin={isAdmin} />;
   if (route.screen === 'cham-cong') return <AttendanceScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
-  if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests, route.requestId])}
+  if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests])}
     email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
-    initialRequestId={route.requestId} onBackToReview={route.requestId ? openReviewQueue : undefined}
     tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />;
-  if (route.screen === 'thu-chi') return <CashScreen key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, route.cashId])}
-    access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.cashId}
-    onBackToReview={route.cashId ? openReviewQueue : undefined}
-    onScrollTop={onScrollTop} />;
+  if (route.screen === 'thu-chi') return <CashScreen key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash])}
+    access={{ email, isAdmin, canReadCash, canReviewCash }} />;
   if (route.screen === 'kpi') return <KpiScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
   if (route.screen === 'ke-hoach-tuan') return <WeeklyPlanScreen key={`${email}-${isAdmin}`}
     email={email} name={name} isAdmin={isAdmin} tasks={tasksComplete ? tasks : null}
@@ -98,15 +94,25 @@ export function WorkspaceNavigator({
     isAdmin={isAdmin} email={email} onScrollTop={onScrollTop} />;
   if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, isAdmin])}
     email={email} isAdmin={isAdmin} recordId={route.recordId}
-    onBackToReview={route.fromReview ? openReviewQueue : undefined}
-    onSelect={recordId => setRoute({ screen: 'van-thu', recordId, fromReview: route.fromReview })} />;
-  if (route.screen === 'cho-duyet') return <ReviewQueueScreen key={JSON.stringify([email, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests])}
-    cashAccess={{ email, isAdmin, canReadCash, canReviewCash }} hasReviewGrant={hasReviewGrant}
-    canReviewRequests={canReviewRequests}
-    onOpenCash={cashId => { setRoute({ screen: 'thu-chi', cashId }); onScrollTop(); }}
-    onOpenRequest={requestId => { setRoute({ screen: 'don-tu', requestId }); onScrollTop(); }}
-    onOpenRecord={recordId => { setRoute({ screen: 'van-thu', recordId, fromReview: true }); onScrollTop(); }}
-    onScrollTop={onScrollTop} />;
+    onSelect={recordId => setRoute({ screen: 'van-thu', recordId })} />;
+  if (route.screen === 'cho-duyet') return <>
+    <ReviewQueueScreen key={JSON.stringify([email, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests])}
+      cashAccess={{ email, isAdmin, canReadCash, canReviewCash }} hasReviewGrant={hasReviewGrant}
+      canReviewRequests={canReviewRequests}
+      onOpenCash={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'cash', id } })}
+      onOpenRequest={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'request', id } })}
+      onOpenRecord={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'record', id } })} />
+    {route.detail?.kind === 'cash' && <CashScreen key={route.detail.id}
+      access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.detail.id}
+      onBackToReview={openReviewQueue} />}
+    {route.detail?.kind === 'request' && <RequestsScreen key={route.detail.id}
+      email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
+      initialRequestId={route.detail.id} onBackToReview={openReviewQueue}
+      tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />}
+    {route.detail?.kind === 'record' && <RecordsScreen key={route.detail.id}
+      email={email} isAdmin={isAdmin} recordId={route.detail.id} onSelect={openReviewQueue}
+      onBackToReview={openReviewQueue} />}
+  </>;
   if (route.screen === 'du-an') return <ProjectsScreen key={String(isAdmin)} route={route}
     onNavigate={next => setRoute(current => current === route ? next : current)}
     email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} tasks={tasksComplete ? tasks : null}

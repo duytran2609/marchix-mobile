@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
-import { useToast } from '../components/Toast';
+import { PopupCloseButton } from '../components/PopupCloseButton';
+import { ToastLayer, useToast } from '../components/Toast';
 import { formatDue } from '../features/tasks/taskDates';
 import { TaskProgress } from '../features/tasks/TaskProgress';
 import { checklistWeight } from '../features/tasks/checklistProgress';
@@ -10,12 +12,14 @@ import { commentMaxLength, reviewRatings, reviewTaskCompletion, submissionVersio
 import type { ReviewRating, Task } from '../features/tasks/tasks';
 import { taskAssignmentEnabled } from '../services/firebase/firebase';
 import { formatVietnamDateTime } from '../utils/dateTime';
+import { createThemedStyles } from '../theme/theme';
 import { useScreenStyles } from '../theme/screenStyles';
 
 export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onReviewed }: {
   task: Task; active: boolean; needsReviewer: boolean; onBack: () => void; onReviewed: () => void;
 }) {
   const screenStyles = useScreenStyles();
+  const styles = useStyles();
   const showToast = useToast();
   const [rating, setRating] = useState<ReviewRating | ''>('');
   const [note, setNote] = useState('');
@@ -40,51 +44,73 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
     }
   }
 
-  return (
-    <View style={screenStyles.stack}>
-      <Button label="‹ Việc chờ duyệt" secondary onPress={onBack} disabled={!!busy} />
-      <View style={screenStyles.panel}>
-        <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
-        <Text style={screenStyles.muted}>Người thực hiện · {task.assignee || task.assigneeEmail}</Text>
-        <Text style={screenStyles.muted}>{formatDue(task.due)}</Text>
-        {submittedAt ? <Text style={screenStyles.muted}>Gửi duyệt lúc {submittedAt}</Text> : null}
-        <TaskProgress task={task} />
-        {task.note ? <Text style={screenStyles.body}>{task.note}</Text> : null}
-        {task.checklist?.map((item, index) => (
-          <Text key={index} style={screenStyles.body}>
-            {item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`} · Khối lượng {checklistWeight(item.weight)}
-          </Text>
-        ))}
-        <View style={screenStyles.detailRow}>
-          <Text style={screenStyles.label}>Kết quả nhân viên gửi</Text>
-          <Text style={result?.text ? screenStyles.body : screenStyles.muted}>{result?.text || 'Không có ghi chú kết quả.'}</Text>
-        </View>
-      </View>
-      {!active ? <Text style={screenStyles.muted}>Lượt gửi duyệt này đã thay đổi. Quay về danh sách để kiểm tra lại.</Text>
-        : needsReviewer ? <Text style={screenStyles.muted}>Cần chỉ định người có quyền duyệt công việc này.</Text>
-        : !taskAssignmentEnabled ? <Text style={screenStyles.muted}>Bản này chỉ cho xem kết quả gửi duyệt.</Text> : (
-        <View style={screenStyles.panel}>
-          <Text accessibilityRole="header" style={screenStyles.cardTitle}>Đánh giá kết quả</Text>
-          <FieldLabel style={screenStyles.label} required>Mức đánh giá khi duyệt</FieldLabel>
-          <View accessibilityRole="radiogroup" accessibilityLabel="Mức đánh giá" style={screenStyles.choices}>
-            {reviewRatings.map(value => (
-              <Pressable key={value} accessibilityRole="radio" aria-checked={value === rating}
-                accessibilityState={{ checked: value === rating, disabled: !!busy }} disabled={!!busy}
-                onPress={() => setRating(value)} style={[screenStyles.choice, value === rating && screenStyles.selected]}>
-                <Text style={screenStyles.label}>{value}</Text>
-              </Pressable>
-            ))}
+  return <Modal transparent animationType="fade" statusBarTranslucent navigationBarTranslucent
+    onRequestClose={() => { if (!busy) onBack(); }}>
+    <SafeAreaView style={styles.overlay}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.center}>
+        <View role="dialog" accessibilityLabel="Chi tiết phê duyệt công việc" accessibilityViewIsModal style={styles.popup}>
+          <View style={styles.header}>
+            <Text style={screenStyles.cardTitle}>Chi tiết phê duyệt công việc</Text>
+            <PopupCloseButton label="Đóng chi tiết phê duyệt" onPress={onBack} disabled={!!busy} />
           </View>
-          <FieldLabel style={screenStyles.label} required>Nhận xét khi trả lại</FieldLabel>
-          <TextInput accessibilityLabel="Nhận xét" placeholder="Nhập nhận xét hoặc lý do trả lại"
-            style={[screenStyles.input, screenStyles.messageInput]} value={note} onChangeText={setNote}
-            multiline maxLength={commentMaxLength} editable={!busy} />
-          <Button label={busy === 'approve' ? 'Đang duyệt…' : 'Duyệt'} disabled={!!busy || !rating}
-            onPress={() => void decide('approve')} />
-          <Button label={busy === 'rework' ? 'Đang trả lại…' : 'Trả lại'} secondary
-            disabled={!!busy || !note.trim()} onPress={() => void decide('rework')} />
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, screenStyles.stack]}
+            keyboardShouldPersistTaps="handled">
+            <View style={screenStyles.panel}>
+              <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
+              <Text style={screenStyles.muted}>Người thực hiện · {task.assignee || task.assigneeEmail}</Text>
+              <Text style={screenStyles.muted}>{formatDue(task.due)}</Text>
+              {submittedAt ? <Text style={screenStyles.muted}>Gửi duyệt lúc {submittedAt}</Text> : null}
+              <TaskProgress task={task} />
+              {task.note ? <Text style={screenStyles.body}>{task.note}</Text> : null}
+              {task.checklist?.map((item, index) => (
+                <Text key={index} style={screenStyles.body}>
+                  {item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`} · Khối lượng {checklistWeight(item.weight)}
+                </Text>
+              ))}
+              <View style={screenStyles.detailRow}>
+                <Text style={screenStyles.label}>Kết quả nhân viên gửi</Text>
+                <Text style={result?.text ? screenStyles.body : screenStyles.muted}>{result?.text || 'Không có ghi chú kết quả.'}</Text>
+              </View>
+            </View>
+            {!active ? <Text style={screenStyles.muted}>Lượt gửi duyệt này đã thay đổi. Quay về danh sách để kiểm tra lại.</Text>
+              : needsReviewer ? <Text style={screenStyles.muted}>Cần chỉ định người có quyền duyệt công việc này.</Text>
+              : !taskAssignmentEnabled ? <Text style={screenStyles.muted}>Bản này chỉ cho xem kết quả gửi duyệt.</Text> : (
+              <View style={screenStyles.panel}>
+                <Text accessibilityRole="header" style={screenStyles.cardTitle}>Đánh giá kết quả</Text>
+                <FieldLabel style={screenStyles.label} required>Mức đánh giá khi duyệt</FieldLabel>
+                <View accessibilityRole="radiogroup" accessibilityLabel="Mức đánh giá" style={screenStyles.choices}>
+                  {reviewRatings.map(value => (
+                    <Pressable key={value} accessibilityRole="radio" aria-checked={value === rating}
+                      accessibilityState={{ checked: value === rating, disabled: !!busy }} disabled={!!busy}
+                      onPress={() => setRating(value)} style={[screenStyles.choice, value === rating && screenStyles.selected]}>
+                      <Text style={screenStyles.label}>{value}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <FieldLabel style={screenStyles.label} required>Nhận xét khi trả lại</FieldLabel>
+                <TextInput accessibilityLabel="Nhận xét" placeholder="Nhập nhận xét hoặc lý do trả lại"
+                  style={[screenStyles.input, screenStyles.messageInput]} value={note} onChangeText={setNote}
+                  multiline maxLength={commentMaxLength} editable={!busy} />
+                <Button label={busy === 'approve' ? 'Đang duyệt…' : 'Duyệt'} disabled={!!busy || !rating}
+                  onPress={() => void decide('approve')} />
+                <Button label={busy === 'rework' ? 'Đang trả lại…' : 'Trả lại'} secondary
+                  disabled={!!busy || !note.trim()} onPress={() => void decide('rework')} />
+              </View>
+            )}
+          </ScrollView>
         </View>
-      )}
-    </View>
-  );
+      </KeyboardAvoidingView>
+      <ToastLayer safeAreaApplied />
+    </SafeAreaView>
+  </Modal>;
 }
+
+const useStyles = createThemedStyles(colors => StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
+  popup: { width: '100%', maxWidth: 560, flexShrink: 1, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.paper },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
+  scroll: { flexShrink: 1, minHeight: 0 },
+  content: { padding: 16 },
+}));

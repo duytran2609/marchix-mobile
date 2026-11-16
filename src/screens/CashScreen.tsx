@@ -213,10 +213,10 @@ function writeError(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Không lưu được khoản thu chi.';
 }
 
-function CashDetail({ row, access, approvers, project, backLabel, operationLock, onBack, onEdit }: {
-  row: Cash; access: CashAccess; approvers: Option[]; project: string; backLabel?: string;
+function CashDetail({ row, access, approvers, project, operationLock, onEdit }: {
+  row: Cash; access: CashAccess; approvers: Option[]; project: string;
   operationLock: { current: boolean };
-  onBack: () => void; onEdit: () => void;
+  onEdit: () => void;
 }) {
   const styles = useScreenStyles();
   const local = useLocalStyles();
@@ -256,8 +256,7 @@ function CashDetail({ row, access, approvers, project, backLabel, operationLock,
     ['Ý kiến xử lý', row.approvalNote], ['Người xác nhận', row.paidBy], ['Ngày xác nhận', row.paidAt && displayDate(row.paidAt)],
     ['Hóa đơn / báo giá', row.invoiceRef], ['Mã chứng từ / giao dịch', row.ref], ['Mã hồ sơ', row.id],
   ];
-  return <View style={[styles.panel, !backLabel && local.popupContent]}>
-    {backLabel && <Button label={backLabel} secondary onPress={onBack} disabled={busy} />}
+  return <View style={[styles.panel, local.popupContent]}>
     <View style={local.detailActions}>
       <Text style={styles.badge}>{cashStatus(row)}</Text>
       {can('edit') && <Button label="Sửa khoản này" secondary onPress={onEdit} disabled={busy} />}
@@ -302,8 +301,8 @@ function CashDetail({ row, access, approvers, project, backLabel, operationLock,
 }
 
 const pageSize = 25;
-export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop }: {
-  access: CashAccess; initialCashId?: string; onBackToReview?: () => void; onScrollTop: () => void;
+export function CashScreen({ access, initialCashId, onBackToReview }: {
+  access: CashAccess; initialCashId?: string; onBackToReview?: () => void;
 }) {
   const styles = useScreenStyles();
   const local = useLocalStyles();
@@ -344,7 +343,6 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
   const totals = cashTotals(base);
   const balance = totals.income - totals.expense;
   const balanceStyle = balance === 0 ? undefined : balance > 0 ? local.positive : local.negative;
-  const backLabel = 'Về Phê duyệt';
   function back() {
     if (detailLock.current) return;
     if (onBackToReview) return onBackToReview();
@@ -362,8 +360,8 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
     return <CashForm type={kind} row={row} access={access} projects={projects} ledger={rows}
       approvers={approvers.filter(option => option.id !== email)}
       operationLock={row ? detailLock : undefined}
-      inPopup={!!row && !onBackToReview}
-      onBack={() => { setEditor(undefined); if (row && onBackToReview) onScrollTop(); }}
+      inPopup={!!row}
+      onBack={() => setEditor(undefined)}
       onSaved={(id, date) => {
         if (!row) {
           setAwaiting(id); setMonth(date.slice(0, 7)); setType(''); setStatus(''); setProject(''); setLimit(pageSize);
@@ -371,117 +369,123 @@ export function CashScreen({ access, initialCashId, onBackToReview, onScrollTop 
         setSelected(id); setEditor(undefined); toast('Đã lưu khoản thu chi.', 'success');
       }} />;
   }
-  const showDetail = !!selected && !error;
+  const showDetail = !!selected && (!error || !!onBackToReview);
   const detail = editRow ? renderForm(editRow.type, editRow) : selectedRow ? <CashDetail
       key={selectedRow.id + ':' + (selectedRow.updatedAt || '')} row={selectedRow} access={access}
       approvers={approvers} project={projectName(selectedRow.projectId)}
-      backLabel={onBackToReview ? backLabel : undefined} onBack={back} operationLock={detailLock}
-      onEdit={() => { setEditor({ type: selectedRow.type, row: selectedRow }); if (onBackToReview) onScrollTop(); }} /> : <View style={[styles.panel, !onBackToReview && local.popupContent]}>
-      {!rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
-        : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
-      {onBackToReview && <Button label={backLabel} secondary onPress={back} />}
-    </View>;
-  return <View style={styles.stack}>
-    {(!onBackToReview || !showDetail) && <PageHeader title="Thu chi" />}
-    {!!lookupError && <View style={styles.panel}>
-      <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
-      <Button label="Tải lại danh mục" secondary onPress={reload} />
-    </View>}
-    {onBackToReview && showDetail ? detail : <>
-      <View style={styles.stack}>
-        <Text style={styles.muted}>{canReadCash ? 'Theo dõi dòng tiền và các khoản đang chờ xử lý.'
-          : 'Bạn thấy khoản mình lập và khoản được giao duyệt.'}</Text>
-        <View style={local.pair}>
-          <Button label="+ Tạo đề nghị thu" style={local.half} onPress={() => setEditor({ type: 'thu' })} />
-          <Button label="+ Tạo đề nghị chi" style={local.half} onPress={() => setEditor({ type: 'chi' })} />
-        </View>
-      </View>
-      {error ? <View style={styles.panel}>
-        <Text accessibilityRole="alert" style={styles.error}>Không tải được sổ thu chi. Kiểm tra quyền truy cập hoặc thử lại.</Text>
-        {onBackToReview && <Button label={backLabel} secondary onPress={back} />}
+      operationLock={detailLock}
+      onEdit={() => setEditor({ type: selectedRow.type, row: selectedRow })} /> : <View style={[styles.panel, local.popupContent]}>
+      {error ? <>
+        <Text accessibilityRole="alert" style={styles.error}>Không tải được khoản thu chi.</Text>
         <Button label="Thử lại" secondary onPress={reload} />
-      </View> : !rows ? <ActivityIndicator accessibilityLabel="Đang tải sổ thu chi" color={colors.accent} /> : <>
-        <View style={styles.panel}>
-          <Text accessibilityRole="header" style={styles.cardTitle}>Tổng quan</Text>
+      </> : !rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
+        : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
+    </View>;
+  return <>
+    {!onBackToReview && <View style={styles.stack}>
+      <PageHeader title="Thu chi" />
+      {!!lookupError && <View style={styles.panel}>
+        <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
+        <Button label="Tải lại danh mục" secondary onPress={reload} />
+      </View>}
+        <View style={styles.stack}>
+          <Text style={styles.muted}>{canReadCash ? 'Theo dõi dòng tiền và các khoản đang chờ xử lý.'
+            : 'Bạn thấy khoản mình lập và khoản được giao duyệt.'}</Text>
           <View style={local.pair}>
-            <Picker label="Tháng" value={month} choices={[blank('Tất cả các tháng'), ...months]} style={local.half} highlightSelection
-              onChange={value => { setMonth(value); setLimit(pageSize); }} />
-            <Picker label="Dự án" value={project} choices={[blank('Tất cả dự án'), ...projects]} style={local.half} highlightSelection
-              onChange={value => { setProject(value); setLimit(pageSize); }} />
+            <Button label="+ Tạo đề nghị thu" style={local.half} onPress={() => setEditor({ type: 'thu' })} />
+            <Button label="+ Tạo đề nghị chi" style={local.half} onPress={() => setEditor({ type: 'chi' })} />
           </View>
-          <View style={local.metrics}>
-            {([
-              ['Đã thu', totals.income, local.positive],
-              ['Đã chi', totals.expense, local.negative],
-              ['Chênh lệch', balance, balanceStyle],
-              ['Chi chờ duyệt / chờ chi', totals.pending, local.pending],
-            ] as const).map(([label, value, amountStyle]) => <View key={label} style={local.metric}>
-              <Text style={styles.muted}>{label}</Text>
-              <Text style={[styles.cardTitle, amountStyle]}>
-                {vnd.format(value)}
+        </View>
+        {error ? <View style={styles.panel}>
+          <Text accessibilityRole="alert" style={styles.error}>Không tải được sổ thu chi. Kiểm tra quyền truy cập hoặc thử lại.</Text>
+          <Button label="Thử lại" secondary onPress={reload} />
+        </View> : !rows ? <ActivityIndicator accessibilityLabel="Đang tải sổ thu chi" color={colors.accent} /> : <>
+          <View style={styles.panel}>
+            <Text accessibilityRole="header" style={styles.cardTitle}>Tổng quan</Text>
+            <View style={local.pair}>
+              <Picker label="Tháng" value={month} choices={[blank('Tất cả các tháng'), ...months]} style={local.half} highlightSelection
+                onChange={value => { setMonth(value); setLimit(pageSize); }} />
+              <Picker label="Dự án" value={project} choices={[blank('Tất cả dự án'), ...projects]} style={local.half} highlightSelection
+                onChange={value => { setProject(value); setLimit(pageSize); }} />
+            </View>
+            <View style={local.metrics}>
+              {([
+                ['Đã thu', totals.income, local.positive],
+                ['Đã chi', totals.expense, local.negative],
+                ['Chênh lệch', balance, balanceStyle],
+                ['Chi chờ duyệt / chờ chi', totals.pending, local.pending],
+              ] as const).map(([label, value, amountStyle]) => <View key={label} style={local.metric}>
+                <Text style={styles.muted}>{label}</Text>
+                <Text style={[styles.cardTitle, amountStyle]}>
+                  {vnd.format(value)}
+                </Text>
+              </View>)}
+            </View>
+          </View>
+          <View style={styles.panel}>
+            <View style={local.ledgerTitle}>
+              <Text accessibilityRole="header" style={styles.cardTitle}>Sổ thu chi</Text>
+              <Text style={styles.muted}>{visible.length} khoản</Text>
+            </View>
+            <View style={local.pair}>
+              <Picker label="Loại" value={type} choices={[blank('Thu và chi'), { id: 'thu', name: 'Chỉ khoản thu' }, { id: 'chi', name: 'Chỉ khoản chi' }]}
+                onChange={value => { setType(value); setLimit(pageSize); }} style={local.half} highlightSelection />
+              <Picker label="Trạng thái" value={status} choices={[blank('Mọi trạng thái'), ...options(cashStatuses)]}
+                onChange={value => { setStatus(value); setLimit(pageSize); }} style={local.half} highlightSelection />
+            </View>
+            {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
+              secondary onPress={() => void download()} disabled={exporting || !base.length} />}
+            {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
+            {visible.slice(0, limit).map(row => <Pressable key={row.id} accessibilityRole="button"
+              onPress={() => setSelected(row.id)}
+              style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
+              <ClickableCardHeader><Text style={styles.badge}>{cashStatus(row)}</Text></ClickableCardHeader>
+              <Text style={styles.label}>{row.note || row.category || 'Khoản ' + row.type}</Text>
+              <Text style={[styles.cardTitle, row.type === 'chi' ? local.negative : local.positive]}>
+                {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
               </Text>
+              {([
+                ['Ngày giao dịch', displayDate(row.date)], ['Hạng mục', row.category], ['Đối tượng', row.partyName],
+              ] as const).filter(([, value]) => !!value).map(([label, value]) => (
+                <Text key={label} style={styles.muted}><Text style={local.metaLabel}>{label}: </Text>{value}</Text>
+              ))}
+              {row.projectId ? <Text style={local.entryTag}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
+            </Pressable>)}
+            {visible.length > limit && <Button label="Xem thêm" secondary onPress={() => setLimit(n => n + pageSize)} />}
+          </View>
+          <View style={styles.panel}>
+            <Text accessibilityRole="header" style={styles.cardTitle}>Đã chi theo hạng mục</Text>
+            {!totals.categories.length && <Text style={styles.muted}>Chưa có khoản đã chi trong kỳ.</Text>}
+            {totals.categories.map(([category, value]) => <View key={category} style={{ gap: 5 }}>
+              <Text style={styles.label}>{category} · {vnd.format(value)}</Text>
+              <View style={local.barTrack}><View style={[local.bar, { width: `${value / totals.categories[0][1] * 100}%` }]} /></View>
             </View>)}
+            <Text style={styles.muted}>Không chi tiền mặt. Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>
           </View>
-        </View>
-        <View style={styles.panel}>
-          <View style={local.ledgerTitle}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>Sổ thu chi</Text>
-            <Text style={styles.muted}>{visible.length} khoản</Text>
-          </View>
-          <View style={local.pair}>
-            <Picker label="Loại" value={type} choices={[blank('Thu và chi'), { id: 'thu', name: 'Chỉ khoản thu' }, { id: 'chi', name: 'Chỉ khoản chi' }]}
-              onChange={value => { setType(value); setLimit(pageSize); }} style={local.half} highlightSelection />
-            <Picker label="Trạng thái" value={status} choices={[blank('Mọi trạng thái'), ...options(cashStatuses)]}
-              onChange={value => { setStatus(value); setLimit(pageSize); }} style={local.half} highlightSelection />
-          </View>
-          {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
-            secondary onPress={() => void download()} disabled={exporting || !base.length} />}
-          {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
-          {visible.slice(0, limit).map(row => <Pressable key={row.id} accessibilityRole="button"
-            onPress={() => setSelected(row.id)}
-            style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
-            <ClickableCardHeader><Text style={styles.badge}>{cashStatus(row)}</Text></ClickableCardHeader>
-            <Text style={styles.label}>{row.note || row.category || 'Khoản ' + row.type}</Text>
-            <Text style={[styles.cardTitle, row.type === 'chi' ? local.negative : local.positive]}>
-              {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
-            </Text>
-            {([
-              ['Ngày giao dịch', displayDate(row.date)], ['Hạng mục', row.category], ['Đối tượng', row.partyName],
-            ] as const).filter(([, value]) => !!value).map(([label, value]) => (
-              <Text key={label} style={styles.muted}><Text style={local.metaLabel}>{label}: </Text>{value}</Text>
-            ))}
-            {row.projectId ? <Text style={local.entryTag}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
-          </Pressable>)}
-          {visible.length > limit && <Button label="Xem thêm" secondary onPress={() => setLimit(n => n + pageSize)} />}
-        </View>
-        <View style={styles.panel}>
-          <Text accessibilityRole="header" style={styles.cardTitle}>Đã chi theo hạng mục</Text>
-          {!totals.categories.length && <Text style={styles.muted}>Chưa có khoản đã chi trong kỳ.</Text>}
-          {totals.categories.map(([category, value]) => <View key={category} style={{ gap: 5 }}>
-            <Text style={styles.label}>{category} · {vnd.format(value)}</Text>
-            <View style={local.barTrack}><View style={[local.bar, { width: `${value / totals.categories[0][1] * 100}%` }]} /></View>
-          </View>)}
-          <Text style={styles.muted}>Không chi tiền mặt. Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>
-        </View>
-      </>}
-      {editor && !editor.row && renderForm(editor.type)}
-      {showDetail && <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={back}>
+        </>}
+        {editor && !editor.row && renderForm(editor.type)}
+    </View>}
+    {showDetail && <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={back}>
         <SafeAreaView style={local.formOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={local.formKeyboard}>
-            <View style={[local.formPanel, local.detailPopup]}>
+            <View role="dialog" accessibilityViewIsModal accessibilityLabel="Chi tiết khoản thu chi"
+              style={[local.formPanel, local.detailPopup]}>
               <View style={[local.formHeader, local.detailHeader]}>
                 <Text style={styles.cardTitle}>Chi tiết khoản thu chi</Text>
-                <PopupCloseButton label="Đóng chi tiết khoản thu chi" onPress={back} />
+                <PopupCloseButton label={onBackToReview ? "Về Phê duyệt" : "Đóng chi tiết khoản thu chi"} onPress={back} />
               </View>
               <ScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
+                {onBackToReview && lookupError && <View style={styles.panel}>
+                  <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
+                  <Button label="Tải lại danh mục" secondary onPress={reload} />
+                </View>}
                 {detail}
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
-      </Modal>}
-    </>}
-  </View>;
+    </Modal>}
+  </>;
 }
 
 const useLocalStyles = createThemedStyles(colors => StyleSheet.create({

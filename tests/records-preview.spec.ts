@@ -158,6 +158,8 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await button('Mở menu').click();
   await page.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
   await button('Mở hồ sơ: ' + title + ' đi').click();
+  await expect(detail).toBeVisible();
+  await expect(page.getByText('PHÊ DUYỆT', { exact: true })).toBeAttached();
   await expect(page.getByRole('heading', { name: title + ' đi' })).toBeVisible();
   await action('Duyệt nội dung', 'Đã duyệt nội dung');
   await action('Chuyển chờ ký', 'Chờ ký');

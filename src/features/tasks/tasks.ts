@@ -2,6 +2,7 @@ import { collection, doc, onSnapshot, query, runTransaction, where } from 'fireb
 import { httpsCallable } from 'firebase/functions';
 import { db, pilotMode, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
 import { pilotAddAttachments, pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
+export { taskCategoryMaxLength } from './pilotTasks';
 
 export const editableStatuses = ['Chưa làm', 'Đang làm', 'Vướng'] as const;
 export type EditableStatus = typeof editableStatuses[number];
@@ -30,6 +31,7 @@ type TaskComment = { by: string; at: string; text: string; files?: TaskAttachmen
 export type Task = {
   id: string;
   title: string;
+  category?: string;
   note?: string;
   startDate?: string;
   due?: string;
@@ -257,6 +259,7 @@ export function newTaskId() {
 
 export type AssignmentInput = {
   taskId: string; title: string; assigneeEmails: string[]; due: string; startDate: string;
+  category?: string;
   note: string; message: string; checklist: { t: string; weight: number; sourceIndex?: number | null }[]; watchers: string[]; progress: number; approverEmail?: string;
   attachments?: AttachmentUpload[];
 } & AssignmentOptions;

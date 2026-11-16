@@ -175,12 +175,21 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
     const queuedRequest = reviewer.getByRole('button', { name: 'Mở hồ sơ: Tạm ứng lương: ' + reason, exact: true });
     await queuedRequest.click();
+    await expect(reviewer.getByRole('dialog', { name: 'Chi tiết đơn' })).toBeVisible();
+    await expect(reviewer.getByText('PHÊ DUYỆT', { exact: true })).toBeAttached();
     await reviewer.getByRole('button', { name: 'Từ chối', exact: true }).click();
     await expect(reviewer.getByRole('alert')).toContainText('Nhập lý do từ chối');
     await reviewer.getByLabel('Ý kiến xử lý').fill('Đã kiểm tra');
     await reviewer.getByRole('button', { name: 'Duyệt', exact: true }).click();
+    await expect(reviewer.getByRole('dialog', { name: 'Chi tiết đơn' })).toHaveCount(0);
     await expect(reviewer.getByRole('heading', { name: 'PHÊ DUYỆT', exact: true })).toBeVisible();
     await expect(queuedRequest).toHaveCount(0);
+    await reviewer.getByRole('button', { name: /^(Xem|Duyệt) công việc: Rà soát tài liệu hướng dẫn$/ }).click();
+    const taskReview = reviewer.getByRole('dialog', { name: 'Chi tiết phê duyệt công việc' });
+    await expect(taskReview.getByText('Đã rà soát nội dung hướng dẫn.')).toBeVisible();
+    await expect(reviewer.getByText('PHÊ DUYỆT', { exact: true })).toBeAttached();
+    await taskReview.getByRole('button', { name: 'Đóng chi tiết phê duyệt' }).click();
+    await expect(taskReview).toHaveCount(0);
     await reviewer.getByRole('button', { name: 'Mở menu' }).click();
     await reviewer.getByRole('dialog').getByRole('button', { name: 'Đơn từ', exact: true }).click();
     await expect(requestCard(page)).toContainText('Đã duyệt');
@@ -1196,6 +1205,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
       .evaluate(element => getComputedStyle(element).color);
     await expect(close.getByText('×', { exact: true })).toHaveCSS('color', titleColor);
     await form.getByRole('textbox', { name: 'Tên công việc' }).fill(title);
+    await form.getByRole('textbox', { name: 'Hạng mục', exact: true }).fill('  Bàn giao  ');
     await form.getByRole('button', { name: /^Người thực hiện:/ }).click();
     const assigneePicker = page.getByRole('dialog', { name: 'Người thực hiện', exact: true });
     const search = assigneePicker.getByRole('textbox', { name: 'Tìm thành viên' });
@@ -1341,6 +1351,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const detailMilestone = metadataValue('Mốc bàn giao dự án', 'Có');
     await expect(detailDue).toBeVisible();
     await expect(metadataValue('Mức độ ưu tiên', 'Cao')).toBeVisible();
+    await expect(metadataValue('Hạng mục', 'Bàn giao')).toBeVisible();
     await expect(metadataValue('Ngày bắt đầu', `15/${suffix}`)).toBeVisible();
     await expect(metadataValue('Người thực hiện', 'Nhân viên demo')).toBeVisible();
     await expect(metadataValue('Dự án', 'Chung toàn công ty')).toBeVisible();
@@ -1399,6 +1410,9 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(editForm).toBeVisible();
     const editTitle = editForm.getByRole('textbox', { name: 'Tên công việc' });
     await expect(editTitle).toHaveValue(title);
+    const editCategory = editForm.getByRole('textbox', { name: 'Hạng mục', exact: true });
+    await expect(editCategory).toHaveValue('Bàn giao');
+    await editCategory.fill('Nghiệm thu');
     await expect(editForm.getByRole('radio', { name: 'Cao', exact: true })).toBeChecked();
     await expect(editForm.getByText(attachment.name, { exact: true })).toBeVisible();
     await expect(editForm.getByRole('button', { name: 'Người thực hiện: Nhân viên demo', exact: true })).toBeVisible({ timeout: 15000 });
@@ -1427,6 +1441,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(receiverPage.getByRole('heading', { name: updatedTitle, exact: true })).toBeVisible();
     await expect(metadataValue('Hạn chót', newDeadline)).toBeVisible();
     await expect(metadataValue('Mức độ ưu tiên', 'Thấp')).toBeVisible();
+    await expect(metadataValue('Hạng mục', 'Nghiệm thu')).toBeVisible();
     await expect(receiverPage.getByText('Lời nhắn đã chỉnh sửa.')).toBeVisible();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
     await expect(receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` })).toBeVisible();

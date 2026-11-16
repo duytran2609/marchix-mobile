@@ -111,52 +111,68 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
   }
 
   return <>
-    <PageHeader title="Đơn từ">
-      {onBackToReview ? <Button label="Về Phê duyệt" secondary onPress={onBackToReview} />
-        : <Button label="+ Tạo đơn" onPress={() => setSelected('new')} />}
-    </PageHeader>
-    {(!initialRequestId || !selected) && <View style={shared.panel}>
-      {error ? <>
-        <Text accessibilityRole="alert" style={shared.error}>Không tải được danh sách đơn.</Text>
-        <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
-      </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn từ" color={colors.accent} />
-        : initialRequestId ? <Text style={shared.muted}>Không tìm thấy đơn hoặc bạn không còn quyền xem.</Text> : <>
-        <View style={shared.choices}>
-          <View style={styles.metric}>
-            <Text style={shared.muted}>Đơn chờ duyệt</Text>
-            <Text style={shared.cardTitle}>{rows.filter(row => row.status === pendingRequest).length}</Text>
+    {!onBackToReview && <>
+      <PageHeader title="Đơn từ">
+        <Button label="+ Tạo đơn" onPress={() => setSelected('new')} />
+      </PageHeader>
+      <View style={shared.panel}>
+        {error ? <>
+          <Text accessibilityRole="alert" style={shared.error}>Không tải được danh sách đơn.</Text>
+          <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
+        </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn từ" color={colors.accent} />
+          : <>
+          <View style={shared.choices}>
+            <View style={styles.metric}>
+              <Text style={shared.muted}>Đơn chờ duyệt</Text>
+              <Text style={shared.cardTitle}>{rows.filter(row => row.status === pendingRequest).length}</Text>
+            </View>
+            <View style={styles.metric}>
+              <Text style={shared.muted}>Đơn đã duyệt</Text>
+              <Text style={shared.cardTitle}>{rows.filter(row => row.status === 'Đã duyệt').length}</Text>
+            </View>
           </View>
-          <View style={styles.metric}>
-            <Text style={shared.muted}>Đơn đã duyệt</Text>
-            <Text style={shared.cardTitle}>{rows.filter(row => row.status === 'Đã duyệt').length}</Text>
+          <Text style={shared.muted}>Đơn tạm ứng được duyệt sẽ tạo đề nghị chi trong Thu chi.</Text>
+        </>}
+      </View>
+      {!error && rows !== null && <View style={shared.stack}>
+        {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
+        {rows.map(row => {
+          const canDelete = canActOnRequest(row, 'delete', access);
+          return <View key={row.id} style={shared.panel}>
+            <Pressable testID={`request-${row.id}`} accessibilityRole="button"
+              onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, canDelete && styles.deletable, pressed && shared.dimmed]}>
+              <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
+                <Text style={shared.cardTitle}>{row.type}</Text>
+              </ClickableCardHeader>
+              <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
+            </Pressable>
+            {canDelete && <View style={styles.deleteRequest}>
+              <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
+                onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />
+            </View>}
+          </View>;
+        })}
+      </View>}
+      {deleteTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelDelete}>
+        <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?" message={requestDeleteMessage(deleteTarget)}
+          action="Xác nhận xóa" pendingAction="Đang xóa…" pending={deleting} error={deleteError}
+          onCancel={cancelDelete} onConfirm={() => void confirmListDelete()} />
+      </Modal>}
+    </>}
+    {onBackToReview && !selected && <Modal visible transparent animationType="fade" onRequestClose={onBackToReview}>
+      <SafeAreaView style={styles.modal}>
+        <View role="dialog" accessibilityLabel="Chi tiết đơn" accessibilityViewIsModal style={[styles.popup, styles.popupContent]}>
+          <View style={shared.listHeader}>
+            <Text style={shared.cardTitle}>Chi tiết đơn</Text>
+            <PopupCloseButton label="Đóng đơn" onPress={onBackToReview} />
           </View>
+          {error ? <>
+            <Text accessibilityRole="alert" style={shared.error}>Không tải được đơn.</Text>
+            <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
+          </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn" color={colors.accent} />
+            : <Text style={shared.muted}>Không tìm thấy đơn hoặc bạn không còn quyền xem.</Text>}
         </View>
-        <Text style={shared.muted}>Đơn tạm ứng được duyệt sẽ tạo đề nghị chi trong Thu chi.</Text>
-      </>}
-    </View>}
-    {!initialRequestId && !error && rows !== null && <View style={shared.stack}>
-      {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
-      {rows.map(row => {
-        const canDelete = canActOnRequest(row, 'delete', access);
-        return <View key={row.id} style={shared.panel}>
-          <Pressable testID={`request-${row.id}`} accessibilityRole="button"
-            onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, canDelete && styles.deletable, pressed && shared.dimmed]}>
-            <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
-              <Text style={shared.cardTitle}>{row.type}</Text>
-            </ClickableCardHeader>
-            <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
-          </Pressable>
-          {canDelete && <View style={styles.deleteRequest}>
-            <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
-              onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />
-          </View>}
-        </View>;
-      })}
-    </View>}
-    {deleteTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelDelete}>
-      <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?" message={requestDeleteMessage(deleteTarget)}
-        action="Xác nhận xóa" pendingAction="Đang xóa…" pending={deleting} error={deleteError}
-        onCancel={cancelDelete} onConfirm={() => void confirmListDelete()} />
+      </SafeAreaView>
     </Modal>}
     {selected && <RequestDialog row={selected === 'new' ? null : selected} access={access}
       tasks={tasks} tasksError={tasksError} onRetryTasks={onRetryTasks}

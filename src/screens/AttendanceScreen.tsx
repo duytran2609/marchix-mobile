@@ -129,7 +129,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             <Metric label="Vào" value={clock(todayResult.entered)} alertDetail detail={todayResult.late ? 'Muộn ' + todayResult.late + ' phút' : undefined} />
             <Metric label="Ra" value={clock(todayResult.exited)} alertDetail detail={todayResult.early ? 'Sớm ' + todayResult.early + ' phút' : undefined} />
           </>}
-          <Metric label="Giờ làm" value={clock(todayWorked || null)} />
+          <Metric label="Giờ làm" value={todayWorked ? `${Math.floor(todayWorked / 60)} tiếng ${todayWorked % 60} phút` : '–'} />
           {todayResult && <Metric label="Công" value={todayResult.flag === 'Đang làm' ? '…' : String(todayResult.work)} />}
         </View>
         {!completedToday && !!todayResult?.flag && <Text style={ui.muted}>{todayResult.flag}</Text>}

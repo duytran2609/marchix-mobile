@@ -152,7 +152,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
                 ) : null}
                 <ScrollView key={tab} style={styles.list} contentContainerStyle={styles.listContent}>
                   {visibleNotes.map(note => {
-                    const time = formatVietnamDateTime(note.createdAt);
+                    const time = formatVietnamDateTime(note.createdAt, 'time-first');
                     return (
                       <Pressable key={note.id} accessibilityRole="button"
                         accessibilityLabel={note.read ? note.title : `Chưa đọc: ${note.title}`}

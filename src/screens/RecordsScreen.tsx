@@ -114,71 +114,73 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   const closeLabel = onBackToReview ? 'Về Phê duyệt' : 'Về sổ văn thư';
 
   return (
-    <View style={styles.stack}>
-      <PageHeader title="Văn thư" />
-      <View style={styles.panel}>
-        <SegmentedButtons label="Sổ văn thư" value={tab} choices={tabChoices}
-          onChange={value => { setTab(value); setStatus(''); }} />
-        {tab !== 'history' && <>
-          {isAdmin && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
-            onPress={() => setForm({ direction: book })} />}
-          {rows && <>
-            <View style={styles.choices}>
-              <Text style={styles.badge}>{current.filter(recordIsOpen).length} đang mở</Text>
-              <Text style={styles.badge}>{current.filter(overdue).length} quá hạn</Text>
-              <Text style={styles.badge}>{current.filter(row => row.status === 'archived').length} đã lưu</Text>
-            </View>
-            <View style={styles.choices}>
-              <Button label={`Đang theo dõi (${current.filter(follows).length})`} secondary
-                selected={watching} onPress={() => setWatching(value => !value)} />
-              <Button label={`Cần tôi xử lý (${current.filter(row => actions(row).length).length})`} secondary
-                selected={actionOnly} onPress={() => setActionOnly(value => !value)} />
-              <Button label="Chỉ quá hạn" secondary selected={late} onPress={() => setLate(value => !value)} />
-            </View>
+    <>
+      {!onBackToReview && <View style={styles.stack}>
+        <PageHeader title="Văn thư" />
+        <View style={styles.panel}>
+          <SegmentedButtons label="Sổ văn thư" value={tab} choices={tabChoices}
+            onChange={value => { setTab(value); setStatus(''); }} />
+          {tab !== 'history' && <>
+            {isAdmin && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
+              onPress={() => setForm({ direction: book })} />}
+            {rows && <>
+              <View style={styles.choices}>
+                <Text style={styles.badge}>{current.filter(recordIsOpen).length} đang mở</Text>
+                <Text style={styles.badge}>{current.filter(overdue).length} quá hạn</Text>
+                <Text style={styles.badge}>{current.filter(row => row.status === 'archived').length} đã lưu</Text>
+              </View>
+              <View style={styles.choices}>
+                <Button label={`Đang theo dõi (${current.filter(follows).length})`} secondary
+                  selected={watching} onPress={() => setWatching(value => !value)} />
+                <Button label={`Cần tôi xử lý (${current.filter(row => actions(row).length).length})`} secondary
+                  selected={actionOnly} onPress={() => setActionOnly(value => !value)} />
+                <Button label="Chỉ quá hạn" secondary selected={late} onPress={() => setLate(value => !value)} />
+              </View>
+            </>}
           </>}
-        </>}
-      </View>
-      {error ? <View style={styles.panel}>
-        <Text accessibilityRole="alert" style={styles.error}>Không tải được sổ văn thư.</Text>
-        <Button label="Thử lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
-      </View> : !rows ? (
-        <ActivityIndicator accessibilityLabel="Đang tải sổ văn thư" color={colors.accent} />
-      ) : tab === 'history' ? (
-        <RecordHistory rows={rows} names={names} onSelect={setLocalRecordId} />
-      ) : (
-        <>
-          <View style={styles.panel}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>{recordBooks[book]} · {filtered.length} hồ sơ</Text>
-            <SearchInput accessibilityLabel="Tìm văn bản" placeholder="Số, mã hồ sơ, trích yếu, đơn vị"
-              value={term} onChangeText={setTerm} style={styles.input} placeholderTextColor={colors.muted} />
-            <View style={local.row}>
-              <Dropdown label="Loại văn bản" value={kind} choices={kindChoices} onChange={setKind} style={local.flex} />
-              <Dropdown label="Trạng thái" value={status} onChange={setStatus} style={local.flex}
-                choices={[{ value: '', label: 'Tất cả' }, ...bookStatuses[book].map(value => ({ value, label: recordStates[value] }))]} />
+        </View>
+        {error ? <View style={styles.panel}>
+          <Text accessibilityRole="alert" style={styles.error}>Không tải được sổ văn thư.</Text>
+          <Button label="Thử lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
+        </View> : !rows ? (
+          <ActivityIndicator accessibilityLabel="Đang tải sổ văn thư" color={colors.accent} />
+        ) : tab === 'history' ? (
+          <RecordHistory rows={rows} names={names} onSelect={setLocalRecordId} />
+        ) : (
+          <>
+            <View style={styles.panel}>
+              <Text accessibilityRole="header" style={styles.cardTitle}>{recordBooks[book]} · {filtered.length} hồ sơ</Text>
+              <SearchInput accessibilityLabel="Tìm văn bản" placeholder="Số, mã hồ sơ, trích yếu, đơn vị"
+                value={term} onChangeText={setTerm} style={styles.input} placeholderTextColor={colors.muted} />
+              <View style={local.row}>
+                <Dropdown label="Loại văn bản" value={kind} choices={kindChoices} onChange={setKind} style={local.flex} />
+                <Dropdown label="Trạng thái" value={status} onChange={setStatus} style={local.flex}
+                  choices={[{ value: '', label: 'Tất cả' }, ...bookStatuses[book].map(value => ({ value, label: recordStates[value] }))]} />
+              </View>
+              {!filtered.length && <Text style={styles.muted}>{current.length
+                ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'}</Text>}
             </View>
-            {!filtered.length && <Text style={styles.muted}>{current.length
-              ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'}</Text>}
-          </View>
-          {filtered.map(row => (
-            <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
-              style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
-              <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
-              <Text style={styles.muted}>{recordNumber(row)}</Text>
-              <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
-              <Text style={styles.muted}>
-                <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
-                {row.partner || '—'}
-              </Text>
-              <Text style={styles.muted}>
-                <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
-                {assignee(row)}
-              </Text>
-              <Text style={styles.badge}>{recordStates[row.status]}</Text>
-            </Pressable>
-          ))}
-        </>
-      )}
-      {!form?.existing && editor}
+            {filtered.map(row => (
+              <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
+                style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
+                <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
+                <Text style={styles.muted}>{recordNumber(row)}</Text>
+                <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
+                  {row.partner || '—'}
+                </Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
+                  {assignee(row)}
+                </Text>
+                <Text style={styles.badge}>{recordStates[row.status]}</Text>
+              </Pressable>
+            ))}
+          </>
+        )}
+        {!form?.existing && editor}
+      </View>}
       {!!recordId && <Modal visible transparent animationType="fade" onRequestClose={() => {
         if (activePreview) setPreview(undefined);
         else if (!editing) closeRecord();
@@ -236,7 +238,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
           </View>
         </SafeAreaView>
       </Modal>}
-    </View>
+    </>
   );
 }
 

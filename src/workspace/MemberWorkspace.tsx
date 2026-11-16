@@ -27,9 +27,10 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const [draggingTask, setDraggingTask] = useState(false);
   const unregisterPush = useWorkspacePush(email, openNote);
 
+  const scrollRoute = route.screen === 'cho-duyet' ? route.screen : route;
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
-  }, [route]);
+  }, [scrollRoute]);
 
   function openWeb() {
     void Linking.openURL('https://quanly.marchix.vn/').catch(() =>

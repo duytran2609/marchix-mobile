@@ -12,15 +12,15 @@ export type ProjectRoute = {
 export type WorkspaceRoute =
   | { screen: 'tong-quan' }
   | { screen: 'cong-viec'; taskPopupId?: string }
-  | { screen: 'cho-duyet' }
+  | { screen: 'cho-duyet'; detail?: { kind: 'cash' | 'request' | 'record'; id: string } }
   | { screen: 'ke-hoach-tuan' }
   | { screen: 'kpi' }
   | { screen: 'cham-cong' }
-  | { screen: 'don-tu'; requestId?: string }
-  | { screen: 'thu-chi'; cashId?: string }
+  | { screen: 'don-tu' }
+  | { screen: 'thu-chi' }
   | { screen: 'luong' }
   | { screen: 'cai-dat' }
-  | { screen: 'van-thu'; recordId?: string; fromReview?: boolean }
+  | { screen: 'van-thu'; recordId?: string }
   | ProjectRoute
   | { screen: 'task-detail'; task: TaskSelection; backTo?: 'tong-quan' };
 

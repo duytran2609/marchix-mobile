@@ -41,6 +41,7 @@ function TaskMetadata({ task, email, name, members, project }: {
   }
 
   const fields = [
+    ['Hạng mục', task.category?.trim() || 'Chưa xác định'],
     ['Người giao việc', assigner
       ? <PeopleSummary wrap people={[person(assigner)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
     ['Người thực hiện', task.assigneeEmail || assignee

@@ -49,10 +49,10 @@ export function WeeklyPlanScreen({ name, selectedWeek, onSelectWeek, draftStorag
       <Text style={[ui.body, styles.weekRange]}>{formatTaskDate(week)} – {formatTaskDate(sunday)}</Text>
       <View style={styles.weekControls}>
         <View style={styles.weekSteps}>
-          <WeekArrow label="Tuần trước" arrow="←" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, -7))} />
+          <WeekArrow label="Tuần trước" direction="left" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, -7))} />
           <Button secondary style={styles.weekStep} label="Tuần này" selected={week === currentWeek}
             disabled={saving} onPress={() => onSelectWeek(currentWeek)} />
-          <WeekArrow label="Tuần sau" arrow="→" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, 7))} />
+          <WeekArrow label="Tuần sau" direction="right" disabled={saving} onPress={() => onSelectWeek(shiftDay(week, 7))} />
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Chọn tuần trên lịch" disabled={saving}
           accessibilityState={{ disabled: saving, expanded: calendarOpen }} aria-pressed={calendarSelected}
@@ -80,15 +80,15 @@ export function WeeklyPlanScreen({ name, selectedWeek, onSelectWeek, draftStorag
   </>;
 }
 
-function WeekArrow({ label, arrow, disabled, onPress }: {
-  label: string; arrow: string; disabled: boolean; onPress: () => void;
+function WeekArrow({ label, direction, disabled, onPress }: {
+  label: string; direction: 'left' | 'right'; disabled: boolean; onPress: () => void;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
     disabled={disabled} onPress={onPress}
     style={({ pressed }) => [ui.secondary, styles.calendarButton, (pressed || disabled) && ui.dimmed]}>
-    <Text aria-hidden style={styles.calendarIcon}>{arrow}</Text>
+    <Text aria-hidden style={[styles.calendarIcon, direction === 'left' && styles.mirroredArrow]}>→</Text>
   </Pressable>;
 }
 
@@ -234,6 +234,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   weekStep: { paddingHorizontal: 6, flexShrink: 1 },
   calendarButton: { width: 44, height: 44, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   calendarIcon: { color: colors.accent, fontSize: 22, fontWeight: '700' },
+  mirroredArrow: { transform: [{ scaleX: -1 }] },
   field: { gap: 6 },
   task: { minHeight: 44, paddingBottom: 4 },
   memberHeader: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },

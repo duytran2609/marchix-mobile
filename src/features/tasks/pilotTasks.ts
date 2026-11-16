@@ -7,6 +7,8 @@ import { auth, db, taskAssignmentEnabled } from '../../services/firebase/firebas
 import type { AssignmentInput, AttachmentUpload, ReviewRating, Task } from './tasks';
 import { checklistProgress as percent } from './checklistProgress';
 
+export const taskCategoryMaxLength = 160;
+
 const open = (task: Task) => ['Chưa làm', 'Đang làm', 'Vướng'].includes(task.status);
 const updated = (email: string, now: string) => ({ updatedBy: email, updatedAt: now });
 const reviewer = (row: { role?: string; grants?: string[] }) =>
@@ -103,8 +105,17 @@ function details(input: AssignmentInput) {
     projectId: input.projectId, milestone: input.milestone, watchers: input.watchers };
 }
 
+function assignmentCategory(value: AssignmentInput['category']) {
+  const category = value?.trim();
+  if (category !== undefined && category.length > taskCategoryMaxLength) {
+    throw new Error('Hạng mục công việc chỉ được tối đa 160 ký tự.');
+  }
+  return category;
+}
+
 export async function pilotCreate(input: AssignmentInput) {
   const by = email();
+  const category = assignmentCategory(input.category);
   const targets = [...new Set(input.assigneeEmails)];
   if (!targets.length || targets.length > 30 || !input.title.trim()) throw new Error('Nhập tên và chọn người thực hiện.');
   const files = uploadBytes(input.attachments ?? [], targets.length);
@@ -129,7 +140,8 @@ export async function pilotCreate(input: AssignmentInput) {
     const attachments = attach(batch, ref, files, by, now);
     const comments = input.message || attachments.length
       ? [{ by, at: now, kind: 'assignment', text: input.message.trim(), files: attachments }] : [];
-    batch.set(ref, { ...details(input), assigneeEmail, assignee, approverEmail, assignedBy: by, mobileAssignmentId: input.taskId,
+    batch.set(ref, { ...details(input), ...(category ? { category } : {}),
+      assigneeEmail, assignee, approverEmail, assignedBy: by, mobileAssignmentId: input.taskId,
       status: input.status, progress: input.checklist.length ? 0 : input.progress,
       checklist: input.checklist.map(({ t, weight }) => ({ t, weight, done: false })), comments,
       spawned: false, doneAt: '', createdAt: now, ...updated(by, now) });
@@ -143,6 +155,7 @@ export async function pilotCreate(input: AssignmentInput) {
 export async function pilotUpdate(input: AssignmentInput & { revision: string; retainedFileIds: string[] }) {
   const by = email();
   const [assigneeEmail] = input.assigneeEmails;
+  const category = assignmentCategory(input.category);
   const files = uploadBytes(input.attachments ?? []);
   const people = new Map((await directory()).map(member => [member.email, member]));
   const ref = doc(db, 'tasks', input.taskId);
@@ -166,6 +179,7 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
     if (input.message || attachments.length) comments.splice(Math.max(0, index), 0,
       { by, at: original?.at ?? now, kind: 'assignment', text: input.message.trim(), files: attachments });
     const patch: Record<string, unknown> = { ...details(input), comments, ...updated(by, now) };
+    if (category !== undefined && category !== (task.category ?? '')) patch.category = category;
     if (open(task)) {
       const approverEmail = input.approverEmail ?? task.approverEmail ?? '';
       if (!people.has(assigneeEmail) && assigneeEmail !== task.assigneeEmail) throw new Error('Người thực hiện không còn hoạt động.');
@@ -190,7 +204,7 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
       if (assigneeEmail !== task.assigneeEmail) patch.assignee = people.get(assigneeEmail)!.name;
       if (input.status !== task.status) {
         const fields = ['assignedBy','assigneeEmail','assignee','approverEmail','due','projectId','priority',
-          'repeat','watchers','title','startDate','note','milestone'] as const;
+          'repeat','watchers','title','startDate','note','milestone','category'] as const;
         const taskFields = { ...task, id: input.taskId };
         if (fields.some(key => Object.hasOwn(patch, key) &&
           JSON.stringify(patch[key]) !== JSON.stringify(taskFields[key]))) {
@@ -247,6 +261,7 @@ function stageNextOccurrence(tx: DocumentWriter, ref: DocumentReference,
       const seriesId = task.seriesId ?? ref.id;
       tx.set(doc(collection(db, 'tasks')), {
         title: task.title, note: task.note ?? '', startDate: shift(task.startDate), due,
+        ...(task.category ? { category: task.category } : {}),
         status: 'Chưa làm', progress: 0, priority: task.priority ?? 'Trung bình', repeat: task.repeat,
         assigneeEmail: task.assigneeEmail, assignee: task.assignee ?? '', assignedBy: task.assignedBy ?? by,
         approverEmail: task.approverEmail ?? '', projectId: task.projectId ?? '', watchers: task.watchers ?? [],

@@ -27,9 +27,9 @@ const reviewGroups = [
 ] as const;
 
 export function ReviewQueueScreen({
-  cashAccess, hasReviewGrant, canReviewRequests, onScrollTop, onOpenCash, onOpenRequest, onOpenRecord,
+  cashAccess, hasReviewGrant, canReviewRequests, onOpenCash, onOpenRequest, onOpenRecord,
 }: {
-  cashAccess: CashAccess; hasReviewGrant: boolean; canReviewRequests: boolean; onScrollTop: () => void;
+  cashAccess: CashAccess; hasReviewGrant: boolean; canReviewRequests: boolean;
   onOpenCash: (id: string) => void; onOpenRequest: (id: string) => void; onOpenRecord: (id: string) => void;
 }) {
   const { email, isAdmin, canReadCash, canReviewCash } = cashAccess;
@@ -86,10 +86,10 @@ export function ReviewQueueScreen({
 
   function backToQueue() {
     setSelected(undefined);
-    onScrollTop();
   }
 
-  if (selected) {
+  function renderTaskReview() {
+    if (!selected) return null;
     const live = tasks?.[selected.group]?.find(task => task.id === selected.task.id);
     const active = !!live && submissionVersion(live) === submissionVersion(selected.task);
     return <ReviewDetailScreen key={selected.task.id} task={active ? live : selected.task} active={active}
@@ -135,7 +135,7 @@ export function ReviewQueueScreen({
               <Pressable key={task.id} accessibilityRole="button"
                 accessibilityLabel={`${key === 'mine' && taskAssignmentEnabled ? 'Duyệt' : 'Xem'} công việc: ${task.title}`}
                 style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]}
-                onPress={() => { setSelected({ task, group: key }); onScrollTop(); }}>
+                onPress={() => setSelected({ task, group: key })}>
                 <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text></ClickableCardHeader>
                 <ApprovalMetadata fields={[
                   { label: 'Người giao việc', person: personName(task.assignedBy), value: 'Chưa rõ' },
@@ -190,6 +190,7 @@ export function ReviewQueueScreen({
             { label: 'Ngày giao dịch', value: displayDate(row.date) },
           ],
         })} />}
+      {renderTaskReview()}
     </View>
   );
 }

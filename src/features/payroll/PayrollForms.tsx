@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { Dropdown } from '../../components/Dropdown';
 import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
@@ -59,6 +60,7 @@ const employeeTextFields = [
   ['name', 'Họ tên'], ['email', 'Email nhận phiếu lương'], ['position', 'Chức danh'],
   ['startDate', 'Ngày vào làm'], ['taxCode', 'Mã số thuế cá nhân'],
 ] as const;
+const contractChoices = contracts.map(value => ({ value, label: value }));
 const employeeNumbers = [
   ['salary', 'Lương thỏa thuận / tháng', 'money'], ['insSalary', 'Mức lương đóng BHXH', 'money'],
   ['allowTaxable', 'Phụ cấp chịu thuế / tháng', 'money'], ['allowFree', 'Phụ cấp không chịu thuế / tháng', 'money'],
@@ -127,15 +129,16 @@ export function EmployeeForm({ employee, busy, onSave }: {
           disabled={busy} onChange={day => change(key, day)} />
       : <TextField key={key} label={label} value={fields[key]} required={key === 'name'}
           onChange={value => change(key, value)} busy={busy} kind={key === 'email' ? 'email' : key === 'taxCode' ? 'integer' : 'text'} />)}
-    {([['contract', 'Loại hợp đồng', contracts], ['status', 'Tình trạng', employeeStatuses]] as const).map(([key, label, items]) =>
-      <View key={key} style={styles.stack}>
-        <FieldLabel style={styles.label} required>{label}</FieldLabel>
-        <View style={styles.choices}>{items.map(item =>
-          <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: item === fields[key] }}
-            disabled={busy} onPress={() => change(key, item)} style={[styles.choice, item === fields[key] && styles.selected]}>
-            <Text style={styles.label}>{item}</Text>
-          </Pressable>)}</View>
-      </View>)}
+    <Dropdown label="Loại hợp đồng" required value={fields.contract} choices={contractChoices}
+      disabled={busy} onChange={value => change('contract', value)} />
+    <View style={styles.stack}>
+      <FieldLabel style={styles.label} required>Tình trạng</FieldLabel>
+      <View style={styles.choices}>{employeeStatuses.map(item =>
+        <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: item === fields.status }}
+          disabled={busy} onPress={() => change('status', item)} style={[styles.choice, item === fields.status && styles.selected]}>
+          <Text style={styles.label}>{item}</Text>
+        </Pressable>)}</View>
+    </View>
     {employeeNumbers.map(([key, label, kind]) => <TextField key={key} label={label} value={numbers[key]} busy={busy}
       kind={kind} onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}

@@ -201,8 +201,11 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
             disabled={busy} style={{ flex: 1 }} onChange={value => setMonth(value + '-' + monthNumber)} />
         </View>
         {!!displayRows.length && <>
+          <Text style={styles.cardTitle}>
+            <Text style={styles.metadataLabel}>Tổng thực nhận: </Text>
+            <Text style={{ color: colors.accent, fontSize: 24, fontWeight: '800' }}>{total('net')}</Text>
+          </Text>
           <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng thu nhập: </Text>{total('gross')}</Text>
-          <Text style={styles.cardTitle}><Text style={styles.metadataLabel}>Tổng thực lĩnh: </Text>{total('net')}</Text>
           <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng chi phí: </Text>{total('companyCost')}</Text>
         </>}
         {hasDraft && <>

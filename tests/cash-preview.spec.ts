@@ -144,6 +144,8 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(reviewer, 'Mở menu').click();
     await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
     await entry(reviewer).click();
+    await expect(reviewer.getByRole('dialog', { name: 'Chi tiết khoản thu chi' })).toBeVisible();
+    await expect(reviewer.getByText('PHÊ DUYỆT', { exact: true })).toBeAttached();
     await expect(button(reviewer, 'Sửa khoản này')).toHaveCount(0);
     await button(reviewer, 'Xem bien-nhan.png').click();
     await expect(reviewer.getByRole('img', { name: 'bien-nhan.png' })).toBeVisible();
