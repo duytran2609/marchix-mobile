@@ -76,6 +76,19 @@ export function watchTask(id: string, onTask: (task: Task | null) => void, onErr
   }, onError);
 }
 
+function compareTasks(left: Task, right: Task) {
+  return Number(editableStatus(right.status)) - Number(editableStatus(left.status)) ||
+    (left.due || '9999').localeCompare(right.due || '9999') ||
+    left.title.localeCompare(right.title, 'vi');
+}
+
+export function watchTeamTasks(onTasks: (tasks: Task[]) => void, onError: () => void) {
+  return onSnapshot(collection(db, 'tasks'), { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.fromCache) return;
+    onTasks(snapshot.docs.map(row => ({ ...row.data(), id: row.id } as Task)).sort(compareTasks));
+  }, onError);
+}
+
 export function watchTasks(email: string, onTasks: (tasks: Task[], complete: boolean) => void, onError: () => void, onSentError: () => void) {
   const tasks = collection(db, 'tasks');
   let received: Task[] | undefined;
@@ -87,10 +100,7 @@ export function watchTasks(email: string, onTasks: (tasks: Task[], complete: boo
     if (!received) return;
     const combined = new Map(sent.map(task => [task.id, task]));
     for (const task of received) combined.set(task.id, task);
-    onTasks(Array.from(combined.values()).sort((left, right) =>
-      Number(editableStatus(right.status)) - Number(editableStatus(left.status)) ||
-      (left.due || '9999').localeCompare(right.due || '9999') ||
-      left.title.localeCompare(right.title, 'vi')), receivedReady && sentReady);
+    onTasks(Array.from(combined.values()).sort(compareTasks), receivedReady && sentReady);
   }
 
   const stopReceived = onSnapshot(query(tasks, where('assigneeEmail', '==', email)), { includeMetadataChanges: true }, snapshot => {

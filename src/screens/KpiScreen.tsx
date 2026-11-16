@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
@@ -73,11 +74,13 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
         {'Tính theo hạn công việc trong tháng. Xong đúng hạn được đủ điểm, xong trễ được nửa điểm, quá hạn chưa xong được 0 điểm. Việc chưa tới hạn hoặc thiếu giờ xong chưa được tính.\n\nTrọng số theo ưu tiên: Cao 3, Trung bình 2, Thấp 1. Hệ số đánh giá: Xuất sắc và Tốt 100%, Khá 90%, Trung bình 75%, Kém 50%.\n\nXếp loại A từ 90%, B từ 75%, C từ 60%, D dưới 60%.'}
       </Text>}
     </View>
-    {rows.length ? rows.map(row => {
-      const legacy = row.email.startsWith('ten:');
-      const label = legacy ? row.email.slice(4) : names.get(row.email) || row.email.split('@')[0];
-      return <KpiCard key={row.email} row={row} label={label} legacy={legacy} />;
-    }) : <View style={ui.panel}>
+    {rows.length ? <PaginatedList items={rows} resetKey={JSON.stringify([month, project])}>
+      {pageItems => pageItems.map(row => {
+        const legacy = row.email.startsWith('ten:');
+        const label = legacy ? row.email.slice(4) : names.get(row.email) || row.email.split('@')[0];
+        return <KpiCard key={row.email} row={row} label={label} legacy={legacy} />;
+      })}
+    </PaginatedList> : <View style={ui.panel}>
       <Text style={ui.body}>Chưa có việc nào có hạn trong tháng này.</Text>
     </View>}
     {isAdmin && rows.some(row => row.email.startsWith('ten:')) && <View style={ui.panel}>

@@ -55,8 +55,11 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await admin.getByRole('button', { name: 'Sửa hồ sơ Nhân viên lương demo' }).click();
     await admin.getByLabel('Chức danh').fill('Kiểm thử lương');
     await admin.getByRole('button', { name: 'Lưu hồ sơ' }).click();
-    await expect(admin.getByText('Chức danh: Kiểm thử lương', { exact: true })).toBeVisible();
-    await expect(admin.getByText('Loại hợp đồng: Thử việc', { exact: true })).toBeVisible();
+    const employeeRow = admin.getByRole('table').getByRole('row').filter({
+      has: admin.getByRole('button', { name: 'Sửa hồ sơ Nhân viên lương demo' }),
+    });
+    await expect(employeeRow.getByRole('cell', { name: 'Kiểm thử lương', exact: true })).toBeVisible();
+    await expect(employeeRow.getByRole('cell', { name: 'Thử việc', exact: true })).toBeVisible();
     await admin.getByRole('button', { name: 'Bảng lương', exact: true }).click();
     await expect(admin.getByText(/^Tổng thu nhập:/)).toBeVisible();
     const [year, monthNumber] = month.split('-');
@@ -67,15 +70,26 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await admin.getByRole('button', { name: 'Chọn năm: ' + year }).click();
     const nextYear = String(Number(year) + 1);
     await admin.getByRole('radio', { name: nextYear, exact: true }).click();
+    const exportExcel = admin.getByRole('button', { name: 'Xuất Excel', exact: true });
+    await expect(exportExcel).toBeEnabled();
+    const unsavedDownloadPromise = admin.waitForEvent('download');
+    await exportExcel.click();
+    const unsavedDownload = await unsavedDownloadPromise;
+    expect(unsavedDownload.suggestedFilename()).toBe('Bang-luong-' + nextYear + '-' + otherMonth + '.xlsx');
+    const unsavedBook = read(await readFile((await unsavedDownload.path())!), { type: 'buffer' });
+    const unsavedRows = utils.sheet_to_json<(string | number)[]>(unsavedBook.Sheets[unsavedBook.SheetNames[0]], { header: 1 });
+    expect(unsavedRows).toContainEqual([
+      'Nhân viên lương demo', expect.any(String), expect.any(Number), expect.any(Number),
+      expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number),
+      expect.any(Number), expect.any(Number), expect.any(Number), 'Nháp',
+    ]);
     await admin.getByRole('button', { name: 'Chọn năm: ' + nextYear }).click();
     await admin.getByRole('radio', { name: year, exact: true }).click();
     await admin.getByRole('button', { name: 'Chọn tháng: Tháng ' + otherMonth }).click();
     await admin.getByRole('radio', { name: 'Tháng ' + monthNumber, exact: true }).click();
     await expect(admin.getByRole('table').getByRole('columnheader')).toHaveText(columns);
 
-    await admin.getByRole('button', { name: 'Lấy ngày công từ Chấm công' }).click();
-    await admin.getByRole('button', { name: 'Xác nhận', exact: true }).click();
-    await expect(admin.getByText('Đã cập nhật 1 dòng.')).toBeVisible();
+    await expect(admin.getByRole('button', { name: 'Lấy ngày công từ Chấm công' })).toHaveCount(0);
     await admin.getByRole('button', { name: 'Xem dòng lương Nhân viên lương demo' }).click();
     await admin.getByLabel('Ngày công thực tế').fill('13');
     await admin.getByLabel('Ngày công chuẩn').fill('26');
@@ -87,7 +101,7 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     const requestPayment = admin.getByRole('button', { name: 'Tạo đề nghị chi lương', exact: true });
     await expect(requestPayment).toBeDisabled();
     const draftDownload = admin.waitForEvent('download');
-    await admin.getByRole('button', { name: 'Xuất bảng lương', exact: true }).click();
+    await exportExcel.click();
     const draftBook = read(await readFile((await (await draftDownload).path())!), { type: 'buffer' });
     expect(utils.sheet_to_json(draftBook.Sheets[draftBook.SheetNames[0]], { header: 1 })).toContainEqual([
       'Nhân viên lương demo', '13 / 26', 5000000, 500000, 5500000, 0, 0, 200000, 5300000, 0, 5500000, 'Nháp',
@@ -116,7 +130,7 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await expect(requestPayment).toBeEnabled();
 
     const downloadPromise = admin.waitForEvent('download');
-    await admin.getByRole('button', { name: 'Xuất bảng lương', exact: true }).click();
+    await exportExcel.click();
     const download = await downloadPromise;
     const book = read(await readFile((await download.path())!), { type: 'buffer' });
     const values = utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1 });

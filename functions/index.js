@@ -2,8 +2,9 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { HttpsError, onCall } = require('firebase-functions/v2/https');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { createHash, randomUUID } = require('node:crypto');
+const { publishWorkflowNotifications, writeTaskNotification } = require('./workflowNotifications');
 
 const projectId = 'demo-marchix-mobile';
 const openStatuses = ['Chưa làm', 'Đang làm', 'Vướng'];
@@ -16,6 +17,15 @@ const workDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh'
 const maxFileBytes = 5 * 1024 * 1024;
 const maxCopiedBytes = 8 * 1024 * 1024;
 const fileChunkBytes = 900 * 1024;
+
+for (const [name, collection] of Object.entries({
+  notifyRequestWorkflow: 'requests',
+  notifyCashWorkflow: 'cash',
+  notifyPayrollWorkflow: 'payroll',
+})) {
+  exports[name] = onDocumentWritten({ document: collection + '/{id}', region: 'asia-southeast1', retry: true },
+    event => publishWorkflowNotifications(getFirestore(app), collection, event));
+}
 
 function isMemberEmail(value) {
   return typeof value === 'string' && value.length <= 254 && /^[^\s/@]+@[^\s/@]+$/.test(value);
@@ -354,6 +364,8 @@ exports.createMobileTask = onCall(async request => {
         comments: message || files.length ? [{ by: email, at: createdAt, text: message, files }] : [],
         spawned: false, doneAt: '', createdAt, updatedAt: createdAt, updatedBy: email,
       });
+      writeTaskNotification(transaction, db, { from: email, to: assigneeEmail, taskId: ref.id,
+        title: 'Bạn được giao việc mới', body: fields.title, createdAt });
       return { id: ref.id, assignee };
     });
     const result = { ...assignments[0], assignments };
@@ -454,7 +466,11 @@ exports.updateMobileTask = onCall(async request => {
       });
       Object.assign(change, { assigneeEmail, approverEmail: nextApprover, status, checklist: items,
         progress: items.length ? checklistProgress(items) : progress });
-      if (assigneeEmail !== task.assigneeEmail) change.assignee = memberName(byEmail.get(assigneeEmail));
+      if (assigneeEmail !== task.assigneeEmail) {
+        change.assignee = memberName(byEmail.get(assigneeEmail));
+        writeTaskNotification(transaction, db, { from: email, to: assigneeEmail, taskId: ref.id,
+          title: 'Bạn được giao việc mới', body: change.title, createdAt: updatedAt });
+      }
     }
     transaction.update(ref, change);
     return { ok: true };
@@ -600,7 +616,7 @@ exports.reportTaskCompletion = onCall(request => {
   }
   const text = note.trim();
   return editAssignedTask(request, async context => {
-    const { task, transaction, db, email, now } = context;
+    const { task, id, transaction, db, email, now } = context;
     if (task.status === 'Chờ duyệt' || (task.status === 'Xong' && task.progress === 100 && task.doneAt)) return;
     if (!openStatuses.includes(task.status)) {
       throw new HttpsError('failed-precondition', 'Công việc này hiện không thể báo hoàn thành.');
@@ -617,7 +633,15 @@ exports.reportTaskCompletion = onCall(request => {
       throw new HttpsError('failed-precondition', 'Hãy ghi kết quả thực hiện trước khi báo hoàn thành.');
     }
     const requiresReview = settings.get('requireReview') !== false;
+    const recipient = requiresReview ? task.approverEmail || task.assignedBy : task.assignedBy;
+    const profile = isMemberEmail(recipient) && recipient !== email
+      ? await transaction.get(db.collection('members').doc(recipient)) : undefined;
     const spawned = !requiresReview && await createNextOccurrence(context);
+    if (profile && activeMember(profile) && (!requiresReview || !task.approverEmail || canReviewTasks(profile))) {
+      writeTaskNotification(transaction, db, { from: email, to: recipient, taskId: id,
+        title: requiresReview ? 'Có việc chờ duyệt' : 'Công việc đã hoàn thành',
+        body: task.title, createdAt: now });
+    }
     return {
       status: requiresReview ? 'Chờ duyệt' : 'Xong',
       progress: 100,
@@ -676,12 +700,15 @@ exports.reviewTaskCompletion = onCall(request => {
     ? task.approverEmail === access.email && canReviewTasks(member)
     : task.assignedBy === access.email;
   return editTask(access, getTaskId(request.data?.taskId), canReview, async context => {
-    const { task, email, now } = context;
+    const { task, id, transaction, db, email, now } = context;
     if (task.status !== 'Chờ duyệt' || (task.doneAt || task.updatedAt || '') !== submission) {
       throw new HttpsError('failed-precondition', 'Lượt gửi duyệt này đã thay đổi. Hãy mở lại công việc.');
     }
+    const spawned = decision === 'approve' && await createNextOccurrence(context);
+    writeTaskNotification(transaction, db, { from: email, to: task.assigneeEmail, taskId: id,
+      title: decision === 'approve' ? 'Công việc đã được duyệt' : 'Công việc cần làm lại',
+      body: task.title, createdAt: now });
     if (decision === 'approve') {
-      const spawned = await createNextOccurrence(context);
       return {
         status: 'Xong', progress: 100, doneAt: task.doneAt || now,
         rating, reviewNote, reviewedBy: email, reviewedAt: now,

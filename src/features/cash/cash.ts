@@ -22,6 +22,7 @@ export type CashType = 'thu' | 'chi';
 export type CashFields = {
   type: CashType; amount: number; date: string; dueDate: string; projectId: string;
   note: string; category: string; method: string; partyType: string; partyName: string; invoiceRef: string;
+  budgetCode?: string; budgetFlow?: string;
 };
 export type Cash = CashFields & {
   id: string; status?: string; approval?: string; createdBy: string; createdAt?: string; updatedAt?: string;
@@ -79,7 +80,8 @@ export function watchCashApprovers(onData: (rows: { id: string; name: string }[]
   }, onError);
 }
 
-export async function createCash(fields: CashFields, approverEmail: string, email: string, attachments: PreparedCashFiles = []) {
+export async function createCash(fields: CashFields, approverEmail: string, email: string, attachments: PreparedCashFiles = [],
+  projectExpense?: { expenseProfile: string }) {
   const now = new Date().toISOString();
   const ref = doc(collection(db, 'cash'));
   const batch = writeBatch(db);
@@ -87,6 +89,7 @@ export async function createCash(fields: CashFields, approverEmail: string, emai
   batch.set(ref, {
     ...fields, approverEmail, ref: '', status: 'Chờ duyệt',
     createdBy: email, updatedBy: email, createdAt: now, updatedAt: now,
+    ...(projectExpense && { projectLinkLocked: true, expenseProfile: projectExpense.expenseProfile }),
     ...(files.length ? { files } : {}),
   });
   await batch.commit();

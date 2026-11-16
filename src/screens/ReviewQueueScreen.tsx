@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -131,20 +132,22 @@ export function ReviewQueueScreen({
             </View>
             {!rows && !error ? <ActivityIndicator accessibilityLabel={`Đang tải: ${title}`} color={colors.accent} /> : null}
             {rows?.length === 0 && !error ? <Text style={screenStyles.muted}>Không có công việc.</Text> : null}
-            {rows?.map(task => (
-              <Pressable key={task.id} accessibilityRole="button"
-                accessibilityLabel={`${key === 'mine' && taskAssignmentEnabled ? 'Duyệt' : 'Xem'} công việc: ${task.title}`}
-                style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]}
-                onPress={() => { setSelected({ task, group: key }); onScrollTop(); }}>
-                <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text></ClickableCardHeader>
-                <ApprovalMetadata fields={[
-                  { label: 'Người giao việc', person: personName(task.assignedBy), value: 'Chưa rõ' },
-                  { label: 'Người thực hiện', person: personName(task.assigneeEmail, task.assignee), value: 'Chưa chỉ định' },
-                  { label: 'Hạn chót', value: task.due ? formatTaskDate(task.due) : 'Chưa đặt' },
-                  { label: 'Mức độ ưu tiên', value: <TaskPriority priority={task.priority} /> },
-                ]} />
-              </Pressable>
-            ))}
+            <PaginatedList items={rows ?? []}>
+              {pageItems => pageItems.map(task => (
+                <Pressable key={task.id} accessibilityRole="button"
+                  accessibilityLabel={`${key === 'mine' && taskAssignmentEnabled ? 'Duyệt' : 'Xem'} công việc: ${task.title}`}
+                  style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]}
+                  onPress={() => { setSelected({ task, group: key }); onScrollTop(); }}>
+                  <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text></ClickableCardHeader>
+                  <ApprovalMetadata fields={[
+                    { label: 'Người giao việc', person: personName(task.assignedBy), value: 'Chưa rõ' },
+                    { label: 'Người thực hiện', person: personName(task.assigneeEmail, task.assignee), value: 'Chưa chỉ định' },
+                    { label: 'Hạn chót', value: task.due ? formatTaskDate(task.due) : 'Chưa đặt' },
+                    { label: 'Mức độ ưu tiên', value: <TaskPriority priority={task.priority} /> },
+                  ]} />
+                </Pressable>
+              ))}
+            </PaginatedList>
           </View>
         );
       })}
@@ -231,14 +234,16 @@ function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpe
         <Text accessibilityRole="alert" style={screenStyles.error}>Không tải được danh sách.</Text>
         <Button label={`Thử tải lại: ${title}`} secondary onPress={onRetry} />
       </> : rows.length === 0 ? <Text style={screenStyles.muted}>Không có hồ sơ.</Text>
-      : rows.map(row => {
-        const item = describe(row);
-        return <Pressable key={row.id} accessibilityRole="button" accessibilityLabel={`Mở hồ sơ: ${item.title}`}
-          style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]} onPress={() => onOpen(row.id)}>
-          <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{item.title}</Text></ClickableCardHeader>
-          <ApprovalMetadata fields={item.fields} />
-        </Pressable>;
-      })}
+      : <PaginatedList items={rows}>
+        {pageItems => pageItems.map(row => {
+          const item = describe(row);
+          return <Pressable key={row.id} accessibilityRole="button" accessibilityLabel={`Mở hồ sơ: ${item.title}`}
+            style={({ pressed }) => [styles.card, pressed && screenStyles.dimmed]} onPress={() => onOpen(row.id)}>
+            <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{item.title}</Text></ClickableCardHeader>
+            <ApprovalMetadata fields={item.fields} />
+          </Pressable>;
+        })}
+      </PaginatedList>}
   </View>;
 }
 

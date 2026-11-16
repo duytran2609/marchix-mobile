@@ -241,6 +241,21 @@ service cloud.firestore {
 
     // Attachments use the web's files/{id}/chunks/{index} layout. Each file is tied to a cash record.
     match /files/{fileId} {
+      function projectFile(meta) {
+        return meta.get('scopeType', '') == 'projects' && projectPart(meta.scopeId)
+          && meta.parent == 'projects/' + meta.scopeId;
+      }
+      function readableProjectFile(meta) {
+        return projectFile(meta) && projectDiscussionAccess(meta.scopeId);
+      }
+      function validProjectFile(meta) {
+        let entry = getAfter(/databases/$(database)/documents/projects/$(meta.scopeId)/library/$(fileId)).data;
+        return readableProjectFile(meta) && projectFileData(meta)
+          && entry.name == meta.name && entry.type == meta.type && entry.size == meta.size
+          && entry.createdBy == email() && entry.createdAt == request.time;
+      }
+      allow get: if readableProjectFile(resource.data);
+      allow create: if projectFile(request.resource.data) && validProjectFile(request.resource.data);
       function cashPath(scopeId) {
         return /databases/$(database)/documents/cash/$(scopeId);
       }
@@ -321,6 +336,15 @@ service cloud.firestore {
             && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
             && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
         }
+        function validProjectChunk(data) {
+          let meta = getAfter(filePath()).data;
+          return !exists(filePath()) && readableProjectFile(meta) && meta.by == email()
+            && data.keys().hasOnly(['i', 'data']) && data.i is int && chunkId.matches('^[0-5]$')
+            && int(chunkId) == data.i && data.i < meta.chunks && data.data is bytes
+            && data.data.size() == (data.i == meta.chunks - 1 ? meta.size - data.i * 921600 : 921600);
+        }
+        allow read: if readableProjectFile(get(filePath()).data);
+        allow create: if validProjectChunk(request.resource.data);
         allow read: if activeMember() && readableCashChunk();
         allow create: if activeMember() && validCashChunk(request.resource.data);
         allow read: if activeMember() && readableRecordAttachment(get(filePath()).data);
@@ -371,6 +395,16 @@ service cloud.firestore {
           && shortText(data.partyType) && shortText(data.partyName)
           && data.invoiceRef is string && data.invoiceRef.size() <= 150;
       }
+      function validNewProjectExpense(data) {
+        return !data.keys().hasAny(['budgetCode', 'budgetFlow', 'expenseProfile', 'projectLinkLocked'])
+          || (data.projectId != '' && !data.projectId.matches('.*/.*')
+            && exists(/databases/$(database)/documents/projects/$(data.projectId))
+            && data.budgetCode is string && data.budgetCode.matches('^([A-Z0-9][A-Z0-9._-]{0,79})?$')
+            && ((data.type == 'chi' && data.projectLinkLocked == true && data.budgetFlow == 'out'
+                && data.expenseProfile in ['project', 'fnb'])
+              || (data.type == 'thu' && !data.keys().hasAny(['expenseProfile', 'projectLinkLocked'])
+                && data.budgetFlow in ['depositReturn', 'expenseRefund'] && data.budgetCode != '' && data.category == 'Thu khác')));
+      }
       function eligibleApprover(account, creator) {
         return account is string && account.size() <= 250
           && account.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$') && account != creator
@@ -410,7 +444,9 @@ service cloud.firestore {
               && after.type == before.type && validCashDraft(after)
               && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['files'])
                 || (after.files is list && validCashFiles(before.get('files', []), after.files, after.updatedAt)))
-              && (!before.get('projectLinkLocked', false) || after.projectId == before.projectId))
+              && (!(before.get('projectLinkLocked', false) || before.get('budgetFlow', '') in ['depositReturn', 'expenseRefund'])
+                || after.projectId == before.projectId)
+              && (!(before.get('budgetFlow', '') in ['depositReturn', 'expenseRefund']) || after.category == 'Thu khác'))
             || (attendanceAdmin() && after.status == before.status && onlyCashChanges(['approverEmail'])
               && eligibleApprover(after.approverEmail, before.createdBy))
             || (before.get('approverEmail', '') == email() && before.createdBy != email()
@@ -461,8 +497,9 @@ service cloud.firestore {
       allow read: if activeMember() && canReadCash(resource.data);
       allow create: if activeMember() && !id.matches('tu_.+') && (
         (!id.matches('^(cd|luong|bhxh|kpcd|tncn)_.*') && request.resource.data.keys().hasOnly(cashFields().concat(['approverEmail', 'ref', 'status',
-          'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'files']))
+          'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'files', 'budgetCode', 'budgetFlow', 'expenseProfile', 'projectLinkLocked']))
           && validCashDraft(request.resource.data) && request.resource.data.createdBy == email()
+          && validNewProjectExpense(request.resource.data)
           && request.resource.data.get('files', []) is list
           && validCashFiles([], request.resource.data.get('files', []), request.resource.data.updatedAt)
           && request.resource.data.createdAt == request.resource.data.updatedAt && request.resource.data.ref == ''
@@ -667,6 +704,30 @@ service cloud.firestore {
       allow create, update: if ownsNotes() && validNote(request.resource.data);
     }
 
+    function projectPart(value) {
+      return value is string && value.size() <= 120 && value.matches('^[^/]+$') && !(value in ['.', '..']);
+    }
+    function projectDiscussionAccess(projectId) {
+      let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return activeMember() && project != null
+        && (attendanceAdmin() || project.get('ownerEmail', '') == email() || email() in project.get('collaborators', []));
+    }
+    function projectDiscussionManager(projectId) {
+      return projectDiscussionAccess(projectId)
+        && (attendanceAdmin() || get(/databases/$(database)/documents/projects/$(projectId)).data.get('ownerEmail', '') == email());
+    }
+    function projectFileData(meta) {
+      return meta.keys().hasOnly(['name','type','size','chunks','parent','scopeType','scopeId','by','at','sha256'])
+        && meta.by == email() && isoDate(meta.at)
+        && meta.name is string && meta.name.size() > 0 && meta.name.size() <= 255
+        && meta.type is string && meta.type.size() <= 120 && meta.type.matches('^[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+$')
+        && meta.size is int && meta.size > 0 && meta.size <= 5242880
+        && meta.chunks is int && meta.chunks >= 1 && meta.chunks <= 6
+        && meta.size > (meta.chunks - 1) * 921600 && meta.size <= meta.chunks * 921600
+        && meta.sha256 is string && meta.sha256.matches('^[0-9a-f]{64}$');
+    }
+
+    // Collaboration shares project-scoped metadata and private files with the web workspace.
     // Project profile mirrors the web's flat fields. Financial records use separate collections.
     match /projects/{id} {
       function activeMember() {
@@ -708,6 +769,141 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(profileFields());
       allow update: if projectAdmin() && validProject(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(profileFields());
+      allow update: if projectAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators'])
+        && request.resource.data.collaborators is list && request.resource.data.collaborators.size() <= 50;
+
+      function projectFolderPath(path) {
+        return boundedText(path, 500) && path.matches('^[^/]+(/[^/]+)*$')
+          && !path.matches('(^|.*/)\\.{1,2}(/.*|$)');
+      }
+      function linkedProjectFile(file) {
+        let entry = getAfter(/databases/$(database)/documents/projects/$(id)/library/$(file.id)).data;
+        return projectPart(file.id) && file == {'id': file.id, 'name': entry.name, 'type': entry.type, 'size': entry.size}
+          && entry.createdBy == email() && entry.createdAt == request.time && entry.folderPath == 'Trao đổi';
+      }
+      function projectPostFiles(files) {
+        return files is list && files.size() <= 5
+          && (files.size() < 1 || linkedProjectFile(files[0]))
+          && (files.size() < 2 || linkedProjectFile(files[1]))
+          && (files.size() < 3 || linkedProjectFile(files[2]))
+          && (files.size() < 4 || linkedProjectFile(files[3]))
+          && (files.size() < 5 || linkedProjectFile(files[4]));
+      }
+      function projectPostText(value, max) {
+        return boundedText(value, max) && value.matches('(?s).*[^\\s].*');
+      }
+
+      match /folders/{folderId} {
+        allow read: if projectDiscussionAccess(id);
+        allow create: if projectDiscussionAccess(id) && folderId.matches('^[a-f0-9]{20}$')
+          && request.resource.data.keys().hasOnly(['path', 'createdBy', 'createdAt'])
+          && projectFolderPath(request.resource.data.path)
+          && request.resource.data.createdBy == email() && request.resource.data.createdAt == request.time;
+      }
+      match /library/{fileId} {
+        function validLibraryEntry(data) {
+          let meta = getAfter(/databases/$(database)/documents/files/$(fileId)).data;
+          return !exists(/databases/$(database)/documents/files/$(fileId))
+            && data.keys().hasOnly(['name', 'type', 'size', 'folderPath', 'createdBy', 'createdAt', 'updatedAt'])
+            && meta.parent == 'projects/' + id && meta.scopeType == 'projects' && meta.scopeId == id
+            && data.name == meta.name && data.type == meta.type && data.size == meta.size
+            && data.createdBy == email() && data.createdAt == request.time;
+        }
+        allow read: if projectDiscussionAccess(id);
+        allow create: if projectDiscussionAccess(id) && validLibraryEntry(request.resource.data)
+          && projectFolderPath(request.resource.data.folderPath) && request.resource.data.updatedAt == request.time;
+        allow update: if projectDiscussionAccess(id) && (projectAdmin() || resource.data.createdBy == email())
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['folderPath', 'updatedAt'])
+          && projectFolderPath(request.resource.data.folderPath) && request.resource.data.updatedAt == request.time;
+      }
+      match /posts/{postId} {
+        function validPost(data) {
+          return data.keys().hasOnly(['title', 'body', 'kind', 'taskId', 'mentions', 'files', 'status', 'pinned',
+              'conclusion', 'createdBy', 'createdAt', 'updatedAt'])
+            && projectPostText(data.title, 200) && projectPostText(data.body, 10000)
+            && data.kind in ['Cập nhật', 'Hỏi đáp', 'Báo vướng', 'Xin quyết định']
+            && (data.taskId == '' || (projectPart(data.taskId)
+              && get(/databases/$(database)/documents/tasks/$(data.taskId)).data.projectId == id))
+            && data.mentions is list && data.mentions.size() <= 50 && projectPostFiles(data.files)
+            && data.pinned == false && data.status == 'open' && data.conclusion == ''
+            && data.createdBy == email() && data.createdAt == request.time && data.updatedAt == request.time;
+        }
+        function validPostUpdate(data) {
+          let fields = data.diff(resource.data).affectedKeys();
+          return data.updatedAt == request.time &&
+            ((projectDiscussionManager(id) && fields.hasOnly(['pinned', 'updatedAt']) && data.pinned is bool)
+              || ((projectDiscussionManager(id) || resource.data.createdBy == email())
+                && fields.hasOnly(['status', 'conclusion', 'updatedAt'])
+                && ((data.status == 'resolved' && projectPostText(data.conclusion, 5000))
+                  || (data.status == 'open' && data.conclusion == resource.data.conclusion))));
+        }
+        allow read: if projectDiscussionAccess(id);
+        allow create: if projectDiscussionAccess(id) && validPost(request.resource.data);
+        allow update: if projectDiscussionAccess(id) && validPostUpdate(request.resource.data);
+
+        match /comments/{commentId} {
+          function validComment(data) {
+            return data.keys().hasOnly(['body', 'replyTo', 'files', 'createdBy', 'createdAt'])
+              && projectPostText(data.body, 5000) && projectPostFiles(data.files)
+              && data.createdBy == email() && data.createdAt == request.time
+              && (data.replyTo == '' || (projectPart(data.replyTo) &&
+                exists(/databases/$(database)/documents/projects/$(id)/posts/$(postId)/comments/$(data.replyTo))));
+          }
+          allow read: if projectDiscussionAccess(id);
+          allow create: if projectDiscussionAccess(id)
+            && exists(/databases/$(database)/documents/projects/$(id)/posts/$(postId))
+            && validComment(request.resource.data);
+        }
+        match /reactions/{actor} {
+          allow get, delete: if projectDiscussionAccess(id) && actor == email();
+          allow create: if projectDiscussionAccess(id) && actor == email()
+            && exists(/databases/$(database)/documents/projects/$(id)/posts/$(postId))
+            && request.resource.data.keys().hasOnly(['by', 'at'])
+            && request.resource.data.by == email() && request.resource.data.at == request.time;
+        }
+      }
+
+      function ownFinanceWrite(data) {
+        return projectAdmin() && exists(/databases/$(database)/documents/projects/$(id))
+          && data.by == email() && data.at == request.time
+          && data.revision is int && data.revision > 0 && data.revision <= 9007199254740991
+          && data.lines is list && data.lines.size() <= 30;
+      }
+
+      function optionalFinanceMoney(value) {
+        return value == null || (value is int && value >= 0 && value <= 1000000000000);
+      }
+
+      // The web and mobile clients share one mutable draft and immutable approved snapshots.
+      match /finance/draft {
+        function validDraft(data) {
+          return ownFinanceWrite(data)
+            && data.keys().hasOnly(['revision', 'by', 'at', 'lines', 'opening', 'reserve', 'price',
+              'variable', 'fixed', 'days', 'guests', 'start', 'weeks'])
+            && optionalFinanceMoney(data.opening) && optionalFinanceMoney(data.reserve)
+            && optionalFinanceMoney(data.price) && optionalFinanceMoney(data.variable) && optionalFinanceMoney(data.fixed)
+            && (data.days == null || (data.days is int && data.days >= 1 && data.days <= 31))
+            && (data.guests == null || (data.guests is int && data.guests >= 0 && data.guests <= 100000))
+            && projectDate(data.start) && data.weeks is list && data.weeks.size() == 13;
+        }
+        allow get: if projectAdmin();
+        allow create: if validDraft(request.resource.data) && request.resource.data.revision == 1;
+        allow update: if validDraft(request.resource.data)
+          && request.resource.data.revision == resource.data.revision + 1;
+      }
+
+      match /budgetVersions/{version} {
+        function validVersion(data) {
+          let draft = get(/databases/$(database)/documents/projects/$(id)/finance/draft).data;
+          return ownFinanceWrite(data) && data.keys().hasOnly(['revision', 'by', 'at', 'lines', 'reason'])
+            && version == string(data.revision) && data.revision == draft.revision
+            && data.lines == draft.lines && data.lines.size() > 0
+            && boundedText(data.reason, 1000) && data.reason.size() > 0;
+        }
+        allow read: if projectAdmin();
+        allow create: if validVersion(request.resource.data);
+      }
     }
 
     // Shared web inbox. Trusted senders supply to, from, title, body, link and createdAt.
@@ -941,10 +1137,26 @@ service cloud.firestore {
         return verified() && resource.data.to == email()
           && get(/databases/$(database)/documents/members/$(email())).data.get('enabled', true) != false;
       }
+      function validProjectMention(data) {
+        let project = get(/databases/$(database)/documents/projects/$(data.projectId)).data;
+        let recipient = get(/databases/$(database)/documents/members/$(data.to)).data;
+        let post = get(/databases/$(database)/documents/projects/$(data.projectId)/posts/$(data.postId)).data;
+        return data.keys().hasOnly(['kind', 'projectId', 'postId', 'to', 'from', 'title', 'body',
+            'link', 'createdAt', 'read', 'emailed'])
+          && projectPart(data.projectId) && projectPart(data.postId) && projectPart(data.to)
+          && projectDiscussionAccess(data.projectId) && recipient.get('enabled', true) != false
+          && (recipient.get('role', '') == 'admin' || data.to == project.get('ownerEmail', '')
+            || data.to in project.get('collaborators', []))
+          && data.from == email() && post.createdBy == email() && data.to != email() && data.to in post.mentions
+          && data.title == 'Bạn được nhắc trong dự án' && data.body == 'Mở mục Trao đổi & tài liệu để xem nội dung.'
+          && data.link == '#du-an' && isoDate(data.createdAt) && data.read == false && data.emailed == false;
+      }
 
       allow get, list: if isRecipient();
       allow create: if activeMember() && request.resource.data.kind == 'record'
         && recordNotification(request.resource.data, id);
+      allow create: if activeMember() && request.resource.data.kind == 'projectMention'
+        && validProjectMention(request.resource.data);
       allow create: if attendanceAdmin()
         && request.resource.data.keys().hasOnly(['to', 'from', 'title', 'body', 'link', 'createdAt', 'read', 'emailed'])
         && request.resource.data.to is string

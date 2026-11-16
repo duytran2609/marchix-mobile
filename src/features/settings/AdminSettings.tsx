@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../components/PaginatedList';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
@@ -7,7 +8,6 @@ import { Dropdown } from '../../components/Dropdown';
 import { Button } from '../../components/Button';
 import { FieldLabel } from '../../components/FieldLabel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../../components/Toast';
@@ -17,10 +17,10 @@ import { budgetFields, grants, memberFields, payrollFields, readFields, recurrin
 import type { AdminSettingsTab, Field, FieldValue, FieldValues } from './adminSettingsFields';
 import { loadProjectChoices, loadSettings, protectedOwner, removeRecurring, saveMember, saveRecurring, saveSettings } from './adminSettingsStore';
 import type { SettingsRow } from './adminSettingsStore';
+import { RecurringExpenseTable } from './RecurringExpenseTable';
 
 const documentFields = { work: workFields, budget: budgetFields, payroll: payrollFields };
 const emptyRow: SettingsRow = { id: '', data: {} };
-const formatMoney = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 const clockChoices = (count: number) => Array.from({ length: count }, (_, index) => {
   const value = String(index).padStart(2, '0');
   return { value, label: value };
@@ -289,42 +289,31 @@ export function AdminSettings({ tab, email, onScrollTop }: {
   return (
     <View style={ui.stack}>
       <Button label={`+ ${addTitle}`} onPress={() => setEdit(emptyRow)} />
-      {tab === 'recurring' && <Text style={[ui.cardTitle, fieldStyles.total,
-        { color: colors.accent, backgroundColor: colors.accentSoft }]}>
-        Tổng chi phí cố định tháng: {formatMoney.format(rows.reduce((sum, row) =>
-          sum + (row.data.active === false ? 0 : Number(row.data.amount) || 0), 0))}
-      </Text>}
       {!rows.length && <Text style={ui.muted}>{tab === 'members' ? 'Chưa có tài khoản.' : 'Chưa có khoản chi cố định.'}</Text>}
-      {rows.map(row => {
-        const name = String(row.data.name || row.id);
-        const isMember = tab === 'members';
-        const photoURL = [row.data.photoURL, row.data.avatarUrl, row.data.avatarURL]
-          .find((url): url is string => typeof url === 'string' && /^https:\/\//i.test(url));
-        return (
-          <View key={row.id} style={ui.detailRow}>
-            <Pressable accessibilityRole="button" style={[fieldStyles.memberDetails, isMember && fieldStyles.memberRow]}
-              onPress={() => setEdit(row)}>
-              {isMember && <MemberAvatar name={name} photoURL={photoURL} />}
-              <View style={fieldStyles.memberDetails}>
-                <ClickableCardHeader><Text style={ui.label}>{name}</Text></ClickableCardHeader>
-                {isMember ? <View style={fieldStyles.metadata}>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Email: </Text>{String(row.data.email || row.id)}</Text>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
-                </View> : <View style={[fieldStyles.metadata, fieldStyles.recurringDetails]}>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Số tiền / tháng: </Text>{formatMoney.format(Number(row.data.amount) || 0)}</Text>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Ngày chi: </Text>{String(row.data.day || 1)}</Text>
-                  <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.active === false ? 'Tạm dừng' : 'Đang áp dụng'}</Text>
-                </View>}
-              </View>
-            </Pressable>
-            {!isMember && <View style={fieldStyles.deleteRecurring}>
-              <DeleteIconButton label={`Xóa khoản chi ${name}`}
-                onPress={() => { setRemoveError(''); setRemoveTarget(row); }} />
-            </View>}
-          </View>
-        );
-      })}
+      {tab === 'recurring' ? <RecurringExpenseTable rows={rows} onEdit={setEdit}
+        onRemove={row => { setRemoveError(''); setRemoveTarget(row); }} /> : <PaginatedList items={rows}>
+        {pageItems => pageItems.map(row => {
+          const name = String(row.data.name || row.id);
+          const photoURL = [row.data.photoURL, row.data.avatarUrl, row.data.avatarURL]
+            .find((url): url is string => typeof url === 'string' && /^https:\/\//i.test(url));
+          return (
+            <View key={row.id} style={ui.detailRow}>
+              <Pressable accessibilityRole="button" style={[fieldStyles.memberDetails, fieldStyles.memberRow]}
+                onPress={() => setEdit(row)}>
+                <MemberAvatar name={name} photoURL={photoURL} />
+                <View style={fieldStyles.memberDetails}>
+                  <ClickableCardHeader><Text style={ui.label}>{name}</Text></ClickableCardHeader>
+                  <View style={fieldStyles.metadata}>
+                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Email: </Text>{String(row.data.email || row.id)}</Text>
+                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
+                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+          );
+        })}
+      </PaginatedList>}
       {editor}
       {removeTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelRemove}>
         <ConfirmDialog label="Xác nhận xóa khoản chi cố định" title="Xóa khoản chi cố định?"
@@ -346,11 +335,8 @@ const fieldStyles = StyleSheet.create({
   permissions: { gap: 8 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberDetails: { flex: 1, minWidth: 0, gap: 5 },
-  recurringDetails: { paddingRight: 48 },
-  deleteRecurring: { position: 'absolute', right: 0, bottom: 0 },
   metadata: { gap: 5 },
   metaLabel: { fontWeight: '700' },
-  total: { padding: 12, borderRadius: 10 },
 });
 
 const popup = StyleSheet.create({

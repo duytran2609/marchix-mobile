@@ -156,7 +156,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             onPress={() => void downloadAttendance()} />
         </View>
       </View>
-      {isAdmin && <CompanyAttendanceTable rows={companyRows} onEdit={setEdit} />}
+      {isAdmin && <CompanyAttendanceTable month={selectedMonth} rows={companyRows} onEdit={setEdit} />}
       {detail && <>
         <View style={styles.metrics}>
           <Metric label="Công thực tế" value={String(detail.summary.work)} inlineDetail={' / ' + detail.summary.standard + ' công chuẩn'} />
@@ -167,7 +167,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut}</Text></Text>
           </View>
         </View>
-        <PersonalAttendanceTable days={personalDays} dailyNotes={dailyNotes} />
+        <PersonalAttendanceTable month={selectedMonth} days={personalDays} dailyNotes={dailyNotes} />
       </>}
     </View>
     {isAdmin && edit && <AdjustmentEditor target={edit} email={email} onClose={() => setEdit(null)} />}

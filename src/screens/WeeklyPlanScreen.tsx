@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ClickableCardHeader } from '../components/CardChevron';
@@ -214,16 +215,18 @@ function TeamPlans({ plans }: { plans: WeekPlans | null }) {
       }} />
     </> : !team ? <ActivityIndicator accessibilityLabel="Đang tải đội nhóm" color={colors.accent} /> :
       plans && (team.length === 0 ? <Text style={ui.muted}>Chưa có thành viên đang hoạt động.</Text> :
-        team.map(member => {
-          const plan = plans.get(member.email);
-          return <View key={member.email} style={ui.detailRow}>
-            <View style={styles.memberHeader}>
-              <Text style={[ui.label, styles.memberName]}>{member.name}</Text>
-              <Text style={[ui.badge, plan ? styles.savedTag : styles.unsavedTag]}>{plan ? 'Đã lưu' : 'Chưa lưu'}</Text>
-            </View>
-            {plan && <Text style={ui.body}>{planContent(plan)}</Text>}
-          </View>;
-        }))}
+        <PaginatedList items={team}>
+          {pageItems => pageItems.map(member => {
+            const plan = plans.get(member.email);
+            return <View key={member.email} style={ui.detailRow}>
+              <View style={styles.memberHeader}>
+                <Text style={[ui.label, styles.memberName]}>{member.name}</Text>
+                <Text style={[ui.badge, plan ? styles.savedTag : styles.unsavedTag]}>{plan ? 'Đã lưu' : 'Chưa lưu'}</Text>
+              </View>
+              {plan && <Text style={ui.body}>{planContent(plan)}</Text>}
+            </View>;
+          })}
+        </PaginatedList>)}
   </View>;
 }
 

@@ -11,7 +11,7 @@ export const projectTextFields = {
 };
 type ProjectTextField = keyof typeof projectTextFields;
 export type ProjectProfile = Record<ProjectTextField, string> & { status: string; budget: number };
-export type Project = ProjectProfile & { id: string };
+export type Project = ProjectProfile & { id: string; expenseProfile?: string; collaborators?: string[] };
 
 export function watchProjects(onProjects: (projects: Project[]) => void, onError: () => void) {
   return onSnapshot(collection(db, 'projects'), { includeMetadataChanges: true }, snapshot => {

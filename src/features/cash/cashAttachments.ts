@@ -41,7 +41,7 @@ export function writeCashFiles(writer: FileWriter, cash: DocumentReference, file
   return writeScopedFiles(writer, cash, 'cash', files, by, at);
 }
 
-export function writeScopedFiles(writer: FileWriter, parent: DocumentReference, scopeType: 'cash' | 'correspondence',
+export function writeScopedFiles(writer: FileWriter, parent: DocumentReference, scopeType: 'cash' | 'correspondence' | 'projects',
   files: PreparedCashFiles, by: string, at: string) {
   return files.map(({ file, bytes, sha256 }) => {
     const ref = doc(db, 'files', file.id);

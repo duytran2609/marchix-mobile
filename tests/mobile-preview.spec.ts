@@ -521,7 +521,7 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(overview).toContainText('Rủi ro / cần quyết định: Xác nhận luồng đăng nhập trên thiết bị thật.');
   await expect(overview).toContainText('Mô tả ngắn: Dữ liệu thử nghiệm.');
   const tabs = profile.getByRole('tablist').getByRole('tab');
-  await expect(tabs).toHaveCount(3);
+  await expect(tabs).toHaveCount(4);
   const positions = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
   expect(new Set(positions).size).toBe(1);
   await expect(page.getByRole('button', { name: '+ Thêm dự án' })).toHaveCount(0);
@@ -935,6 +935,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await page.getByRole('button', { name: '+ Thêm khoản chi' }).click();
     const expensePopup = page.getByRole('dialog', { name: 'Thêm khoản chi', exact: true });
     await expensePopup.getByRole('textbox', { name: 'Tên khoản chi' }).fill(expenseName);
+    await expensePopup.getByRole('textbox', { name: 'Tên đối tượng' }).fill('Nhà cung cấp kiểm thử');
     await expensePopup.getByRole('textbox', { name: 'Số tiền / tháng' }).fill('85000');
     await expensePopup.getByRole('button', { name: 'Lưu cài đặt' }).click();
     await expect(expensePopup).toBeHidden();
@@ -943,7 +944,15 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const { documents: recurring } = await (await fetch(`${base}/recurring`, { headers })).json();
     recurringId = recurring.find((item: { fields: { name: { stringValue: string } } }) =>
       item.fields.name.stringValue === expenseName).name.split('/').at(-1);
-    const total = page.getByText(/^Tổng chi phí cố định tháng:/);
+    const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
+    const expenseRow = expenseTable.getByRole('row').filter({ has: deleteExpense });
+    await expect(expenseRow.getByRole('cell', { name: 'Nhà cung cấp kiểm thử' })).toBeVisible();
+    await expect(expenseRow.getByRole('cell', { name: 'Đang áp dụng' })).toBeVisible();
+    await expenseRow.getByRole('button', { name: `Sửa khoản chi ${expenseName}` }).click();
+    const editExpense = page.getByRole('dialog', { name: 'Chỉnh sửa khoản chi cố định' });
+    await expect(editExpense.getByRole('textbox', { name: 'Tên khoản chi' })).toHaveValue(expenseName);
+    await editExpense.getByRole('button', { name: 'Hủy', exact: true }).click();
+    const total = expenseTable.getByRole('row').filter({ hasText: 'Tổng chi phí cố định / tháng' });
     const totalBeforeDelete = await total.textContent();
     await deleteExpense.click();
     const confirm = page.getByRole('alertdialog', { name: 'Xác nhận xóa khoản chi cố định' });
@@ -1052,6 +1061,15 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
   }
 });
 
+test('Quản trị viên xem và mở được công việc của thành viên khác', async ({ page }) => {
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+  await openTasks(page);
+  const title = 'Việc riêng của đồng nghiệp';
+  await page.getByRole('button', { name: `Mở công việc: ${title}` }).click();
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+});
+
 test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết', async ({ page }) => {
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
@@ -1106,6 +1124,21 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await expect(search).toHaveValue('');
   await expect(status).toHaveAccessibleName('Trạng thái: Tất cả');
   await expect(assignee).toHaveAccessibleName('Người thực hiện: Tất cả');
+
+  await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
+  const category = page.getByRole('button', { name: /^Hạng mục:/ });
+  const projectCard = page.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại' });
+  await category.click();
+  await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
+  await expect(projectCard).toBeVisible();
+  await expect(card).toHaveCount(0);
+  await category.click();
+  await page.getByRole('radio', { name: 'Chung toàn công ty', exact: true }).click();
+  await expect(card).toBeVisible();
+  await expect(projectCard).toHaveCount(0);
+  await page.getByRole('button', { name: 'Xóa bộ lọc' }).click();
+  await expect(category).toHaveAccessibleName('Hạng mục: Tất cả');
+  await expect(projectCard).toBeVisible();
 });
 
 test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm ứng', async ({ context, page }) => {

@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { ReactNode } from 'react';
@@ -86,7 +87,6 @@ export function OverviewScreen({
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
   const [showDebt, setShowDebt] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const [visibleEntries, setVisibleEntries] = useState(8);
   const useOverviewTasks = isAdmin || pilotMode;
 
   useEffect(() => {
@@ -223,17 +223,16 @@ export function OverviewScreen({
     <PageHeader title="Tổng quan" />
     {isAdmin && <View style={screen.choices}>
       <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
-        onPress={() => { setShowDecisions(value => !value); setVisibleEntries(8); }} />
+        onPress={() => setShowDecisions(value => !value)} />
     </View>}
     {unavailable && <Button secondary label="Tải lại dữ liệu" onPress={reload} />}
     {isAdmin && showDecisions && <View style={screen.panel}>
       <Text accessibilityRole="header" style={screen.cardTitle}>Việc cần quyết định</Text>
       <Dropdown label="Loại việc" value={decisionFilter} choices={decisionFilters}
-        onChange={value => { setDecisionFilter(value); setVisibleEntries(8); }} />
+        onChange={setDecisionFilter} />
       {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
-      {entries.slice(0, visibleEntries).map(row)}
+      <PaginatedList items={entries} resetKey={decisionFilter}>{pageItems => pageItems.map(row)}</PaginatedList>
       {!entries.length && !incomplete && <Text style={screen.muted}>Không có mục cần xử lý.</Text>}
-      {entries.length > visibleEntries && <Button secondary label="Xem thêm" onPress={() => setVisibleEntries(value => value + 8)} />}
     </View>}
     <View style={styles.grid}>
       {canReadCash && card('Dòng tiền thực tế', state(cash, <>

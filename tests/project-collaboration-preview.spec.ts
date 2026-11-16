@@ -1,0 +1,51 @@
+import { expect, test } from '@playwright/test';
+
+const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
+
+test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mục dự án', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Mở menu' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Dự án', exact: true }).click();
+  await page.getByRole('button', { name: /^Chọn dự án:/ }).click();
+  await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trao đổi & tài liệu', exact: true }).click();
+  const workspace = page.getByRole('region', { name: 'Trao đổi & tài liệu', exact: true });
+  await workspace.getByRole('button', { name: '+ Đăng trao đổi / báo vướng' }).click();
+  const composer = page.getByRole('dialog', { name: 'Đăng trao đổi / báo vướng' });
+  await composer.getByRole('textbox', { name: 'Tiêu đề trao đổi' }).fill('Rà soát hồ sơ demo');
+  await composer.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(composer).toBeHidden();
+  await workspace.getByRole('button', { name: '+ Đăng trao đổi / báo vướng' }).click();
+  await expect(composer.getByRole('textbox', { name: 'Tiêu đề trao đổi' })).toHaveValue('Rà soát hồ sơ demo');
+  await composer.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Tệp kiểm thử của dự án.');
+  const chooser = page.waitForEvent('filechooser');
+  await composer.getByRole('button', { name: 'Đính kèm ảnh / tài liệu vào bài' }).click();
+  await (await chooser).setFiles({ name: 'hoso-demo.txt', mimeType: 'text/plain', buffer: Buffer.from('Dữ liệu kiểm thử.') });
+  await expect(composer.getByRole('button', { name: 'Bỏ hoso-demo.txt' })).toBeVisible();
+  await composer.getByRole('button', { name: 'Đăng trao đổi', exact: true }).click();
+  await expect(composer).toBeHidden();
+  await expect(workspace.getByRole('heading', { name: 'Rà soát hồ sơ demo' })).toBeVisible();
+  await workspace.getByRole('button', { name: 'Ghim bài', exact: true }).first().click();
+  await expect(workspace.getByText('Đã ghim · Cập nhật', { exact: true })).toBeVisible();
+  await workspace.getByRole('button', { name: 'Bình luận', exact: true }).first().click();
+  await workspace.getByRole('textbox', { name: 'Nội dung bình luận' }).fill('Đã xem hồ sơ.');
+  await workspace.getByRole('button', { name: 'Gửi bình luận' }).click();
+  await expect(workspace.getByText('Đã xem hồ sơ.', { exact: true })).toBeVisible();
+
+  await workspace.getByRole('button', { name: 'Ảnh, tệp & thư mục', exact: true }).click();
+  await workspace.getByRole('textbox', { name: 'Tên thư mục mới' }).fill('Nghiệm thu demo');
+  await workspace.getByRole('button', { name: '+ Tạo thư mục' }).click();
+  await expect(workspace.getByText('Đã tạo thư mục.')).toBeVisible();
+  await workspace.getByRole('button', { name: /^Thư mục:/ }).click();
+  await page.getByRole('radio', { name: 'Tất cả tệp', exact: true }).click();
+  await workspace.getByRole('button', { name: /^Chuyển thư mục · hoso-demo\.txt:/ }).click();
+  await page.getByRole('radio', { name: 'Nghiệm thu demo', exact: true }).click();
+  await expect(workspace.getByText('Đã chuyển tệp.')).toBeVisible();
+  await workspace.getByRole('button', { name: /^hoso-demo\.txt ·/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'hoso-demo.txt' })).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Lưu tệp', exact: true }).click();
+  expect((await download).suggestedFilename()).toBe('hoso-demo.txt');
+});

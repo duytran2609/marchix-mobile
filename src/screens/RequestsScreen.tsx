@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
@@ -57,8 +58,9 @@ function RequestStatus({ status }: { status: string }) {
 const requestDeleteMessage = (row: StaffRequest) =>
   `Đơn “${row.type}” tạo ngày ${displayDate(row.createdAt)} sẽ bị xóa vĩnh viễn.`;
 
-export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialRequestId, onBackToReview, ...access }:
-  RequestAccess & RequestTasks & { name: string; initialRequestId?: string; onBackToReview?: () => void }) {
+export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialRequestId, onBackToReview,
+  backLabel = 'Về Phê duyệt', ...access }:
+  RequestAccess & RequestTasks & { name: string; initialRequestId?: string; onBackToReview?: () => void; backLabel?: string }) {
   const { email, isAdmin, canReviewRequests } = access;
   const shared = useScreenStyles();
   const styles = useStyles();
@@ -112,7 +114,7 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
 
   return <>
     <PageHeader title="Đơn từ">
-      {onBackToReview ? <Button label="Về Phê duyệt" secondary onPress={onBackToReview} />
+      {onBackToReview ? <Button label={backLabel} secondary onPress={onBackToReview} />
         : <Button label="+ Tạo đơn" onPress={() => setSelected('new')} />}
     </PageHeader>
     {(!initialRequestId || !selected) && <View style={shared.panel}>
@@ -136,22 +138,24 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
     </View>}
     {!initialRequestId && !error && rows !== null && <View style={shared.stack}>
       {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
-      {rows.map(row => {
-        const canDelete = canActOnRequest(row, 'delete', access);
-        return <View key={row.id} style={shared.panel}>
-          <Pressable testID={`request-${row.id}`} accessibilityRole="button"
-            onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, canDelete && styles.deletable, pressed && shared.dimmed]}>
-            <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
-              <Text style={shared.cardTitle}>{row.type}</Text>
-            </ClickableCardHeader>
-            <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
-          </Pressable>
-          {canDelete && <View style={styles.deleteRequest}>
-            <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
-              onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />
-          </View>}
-        </View>;
-      })}
+      <PaginatedList items={rows}>
+        {pageItems => pageItems.map(row => {
+          const canDelete = canActOnRequest(row, 'delete', access);
+          return <View key={row.id} style={shared.panel}>
+            <Pressable testID={`request-${row.id}`} accessibilityRole="button"
+              onPress={() => setSelected(row.id)} style={({ pressed }) => [styles.requestCard, canDelete && styles.deletable, pressed && shared.dimmed]}>
+              <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
+                <Text style={shared.cardTitle}>{row.type}</Text>
+              </ClickableCardHeader>
+              <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
+            </Pressable>
+            {canDelete && <View style={styles.deleteRequest}>
+              <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
+                onPress={() => { setDeleteError(''); setDeleteTarget(row); }} />
+            </View>}
+          </View>;
+        })}
+      </PaginatedList>
     </View>}
     {deleteTarget && <Modal visible transparent animationType="fade" onRequestClose={cancelDelete}>
       <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?" message={requestDeleteMessage(deleteTarget)}

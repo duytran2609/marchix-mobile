@@ -1,0 +1,44 @@
+import { expect, test } from '@playwright/test';
+
+const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
+
+test('Chốt dự toán dự án và lập đề nghị chi theo mã khoản', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Mở menu' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Dự án', exact: true }).click();
+  await page.getByRole('button', { name: /^Chọn dự án:/ }).click();
+  await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
+  await page.getByRole('tab', { name: 'Tài chính', exact: true }).click();
+  const finance = page.getByRole('region', { name: 'Tài chính', exact: true });
+  await finance.getByRole('button', { name: '+ Thuê / trả trước / cọc' }).click();
+  const rent = page.getByRole('dialog', { name: 'Thuê / trả trước / cọc' });
+  await expect(rent.getByRole('textbox', { name: 'Tiền thuê mỗi tháng (đ)' })).toBeVisible();
+  await rent.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(rent).toBeHidden();
+  await finance.getByRole('button', { name: '+ Khoản dự toán' }).click();
+  const budget = page.getByRole('dialog', { name: 'Lập khoản dự toán' });
+  await budget.getByRole('textbox', { name: 'Mua / chi gì?' }).fill('Thiết bị demo');
+  await budget.getByRole('button', { name: /^Hạng mục:/ }).click();
+  await page.getByRole('radio', { name: 'Thiết bị dự án', exact: true }).click();
+  await budget.getByRole('textbox', { name: 'Số tiền tổng (đ)' }).fill('100000');
+  await budget.getByRole('button', { name: 'Ghi lại dự toán' }).click();
+  await expect(budget).toBeHidden();
+  await expect(finance.getByText('Đã ghi khoản dự toán.')).toBeVisible();
+  await finance.getByRole('button', { name: /^Chốt (dự toán|điều chỉnh)$/ }).click();
+  const reason = finance.getByRole('textbox', { name: 'Lý do điều chỉnh' });
+  if (await reason.isVisible()) await reason.fill('Bổ sung thiết bị demo');
+  await finance.getByRole('button', { name: 'Xác nhận chốt dự toán' }).click();
+  await expect(finance.getByText('Đã chốt dự toán.')).toBeVisible();
+  const newLine = finance.getByRole('button', { name: /^Đề nghị chi · DT/ }).last();
+  const code = (await newLine.innerText()).split(' · ')[1];
+  await newLine.click();
+  await expect(page.getByRole('heading', { name: 'Đề nghị chi dự án' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Mã khoản dự toán' })).toHaveValue(code);
+  await expect(page.getByRole('textbox', { name: 'Nội dung' })).toHaveValue('Thiết bị demo');
+  await page.getByRole('button', { name: 'Gửi khoản chi' }).click();
+  await page.getByRole('button', { name: 'Về tài chính dự án' }).click();
+  await expect(finance.getByText('Thiết bị demo', { exact: true }).last()).toBeVisible();
+  await expect(finance.getByText(new RegExp('^Chờ duyệt · .* · ' + code + '$'))).toBeVisible();
+});

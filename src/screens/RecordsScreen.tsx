@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -159,23 +160,25 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
             {!filtered.length && <Text style={styles.muted}>{current.length
               ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'}</Text>}
           </View>
-          {filtered.map(row => (
-            <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
-              style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
-              <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
-              <Text style={styles.muted}>{recordNumber(row)}</Text>
-              <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
-              <Text style={styles.muted}>
-                <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
-                {row.partner || '—'}
-              </Text>
-              <Text style={styles.muted}>
-                <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
-                {assignee(row)}
-              </Text>
-              <Text style={styles.badge}>{recordStates[row.status]}</Text>
-            </Pressable>
-          ))}
+          <PaginatedList items={filtered} resetKey={JSON.stringify([book, term, status, kind, late, watching, actionOnly])}>
+            {pageItems => pageItems.map(row => (
+              <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
+                style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
+                <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
+                <Text style={styles.muted}>{recordNumber(row)}</Text>
+                <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
+                  {row.partner || '—'}
+                </Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
+                  {assignee(row)}
+                </Text>
+                <Text style={styles.badge}>{recordStates[row.status]}</Text>
+              </Pressable>
+            ))}
+          </PaginatedList>
         </>
       )}
       {!form?.existing && editor}
@@ -273,16 +276,18 @@ function RecordHistory({ rows, names, onSelect }: {
     {loading && <Text style={styles.muted}>Đang tải lịch sử…</Text>}
     {error && <Text accessibilityRole="alert" style={styles.error}>Không tải được lịch sử của một số hồ sơ.</Text>}
     {!loading && !error && !entries.length && <Text style={styles.muted}>Chưa có lịch sử xử lý.</Text>}
-    {entries.map(({ row, event }) => (
-      <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
-        onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
-        <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
-        <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
-        <Text style={styles.label}>{recordStates[event.to]}</Text>
-        <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
-        {!!event.note && <Text style={styles.body}>{event.note}</Text>}
-      </Pressable>
-    ))}
+    <PaginatedList items={entries}>
+      {pageItems => pageItems.map(({ row, event }) => (
+        <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
+          onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
+          <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
+          <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
+          <Text style={styles.label}>{recordStates[event.to]}</Text>
+          <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
+          {!!event.note && <Text style={styles.body}>{event.note}</Text>}
+        </Pressable>
+      ))}
+    </PaginatedList>
   </View>;
 }
 

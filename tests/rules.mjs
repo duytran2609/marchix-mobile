@@ -41,6 +41,79 @@ try {
   const outsiderDb = await connect('outsider@example.test', 'marchix-mobile-outsider');
   const anonymousDb = await connect(null, 'marchix-mobile-anonymous');
   const adminDb = await connect('quantri@example.test', 'marchix-mobile-demo-admin');
+  const financeDraft = client => doc(client, 'projects', 'marchix-mobile-demo', 'finance', 'draft');
+  const financeVersion = client => doc(client, 'projects', 'marchix-mobile-demo', 'budgetVersions', '1');
+  const projectFinancePlan = {
+    revision: 1, by: 'quantri@example.test', at: serverTimestamp(), start: '2026-11-10',
+    lines: [{ code: 'DT01', name: 'Kiểm thử', category: 'Kiểm thử, nghiệm thu', nature: 'Chi phí',
+      quantity: 1, unitLabel: 'khoản', unit: 100000, fees: 0, taxMode: 'Đã gồm thuế GTGT', quote: '' }],
+    opening: null, reserve: null, price: null, variable: null, fixed: null, days: null, guests: null,
+    weeks: Array.from({ length: 13 }, () => ({ in: null, out: null })),
+  };
+  await denied(setDoc(financeDraft(db), { ...projectFinancePlan, by: staff }));
+  await denied(getDocFromServer(financeDraft(anonymousDb)));
+  await setDoc(financeDraft(adminDb), projectFinancePlan);
+  await denied(getDocFromServer(financeDraft(db)));
+  await denied(updateDoc(financeDraft(adminDb), { revision: 3, at: serverTimestamp() }));
+  const approved = { revision: 1, by: projectFinancePlan.by, at: serverTimestamp(),
+    reason: 'Chốt ban đầu', lines: projectFinancePlan.lines };
+  await denied(setDoc(financeVersion(adminDb), { ...approved, lines: [{ ...projectFinancePlan.lines[0], unit: 1 }] }));
+  await setDoc(financeVersion(adminDb), approved);
+  await denied(updateDoc(financeVersion(adminDb), { reason: 'Ghi đè' }));
+  await denied(getDocFromServer(financeVersion(db)));
+  await updateDoc(financeDraft(adminDb), {
+    lines: [{ ...projectFinancePlan.lines[0], unit: 200000 }], revision: 2, at: serverTimestamp(),
+  });
+  assert.equal((await getDocFromServer(financeVersion(adminDb))).data().lines[0].unit, 100000);
+  const projectId = 'rules-collaboration-project';
+  const collaborationProject = client => doc(client, 'projects', projectId);
+  const collaborationFixture = await getDocFromServer(doc(adminDb, 'projects', 'marchix-mobile-demo'));
+  await setDoc(collaborationProject(adminDb), { ...collaborationFixture.data(), name: 'ZZ · Dự án kiểm thử quyền trao đổi' });
+  const post = client => doc(client, 'projects', projectId, 'posts', 'rules-demo-post');
+  const postData = { title: 'Báo vướng', body: 'Nội dung kiểm thử', kind: 'Báo vướng', taskId: '', mentions: [reviewer],
+    files: [], status: 'open', pinned: false, conclusion: '', createdBy: staff,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  await denied(getDocFromServer(post(anonymousDb)));
+  await denied(setDoc(post(db), postData));
+  await denied(updateDoc(collaborationProject(db), { collaborators: [staff] }));
+  await updateDoc(collaborationProject(adminDb), { collaborators: [staff] });
+  await setDoc(post(db), postData);
+  const mention = {
+    kind: 'projectMention', projectId, postId: post(db).id, to: reviewer, from: staff, title: 'Bạn được nhắc trong dự án',
+    body: 'Mở mục Trao đổi & tài liệu để xem nội dung.', link: '#du-an', createdAt: new Date().toISOString(), read: false, emailed: false,
+  };
+  await setDoc(doc(db, 'notifications', 'rules-project-mention'), mention);
+  assert((await getDocFromServer(doc(reviewerDb, 'notifications', 'rules-project-mention'))).exists());
+  await denied(setDoc(doc(db, 'notifications', 'rules-invalid-project-mention'), { ...mention, to: colleague }));
+  assert.equal((await getDocFromServer(post(reviewerDb))).data().body, postData.body);
+  await denied(getDocsFromServer(collection(otherDb, 'projects', projectId, 'posts')));
+  await denied(updateDoc(post(db), { pinned: true, updatedAt: serverTimestamp() }));
+  await updateDoc(post(reviewerDb), { pinned: true, updatedAt: serverTimestamp() });
+  await updateDoc(post(db), { status: 'resolved', conclusion: 'Đã xử lý', updatedAt: serverTimestamp() });
+  const projectFileBatch = writeBatch(db);
+  const projectFiles = Array.from({ length: 5 }, (_, index) => {
+    const id = 'rules-project-file-' + index;
+    const data = Buffer.from('Tệp dự án ' + index);
+    const file = { id, name: id + '.txt', type: 'text/plain', size: data.length };
+    const { id: fileId, ...metadata } = file;
+    projectFileBatch.set(doc(db, 'files', fileId), { ...metadata, chunks: 1, parent: 'projects/' + projectId,
+      scopeType: 'projects', scopeId: projectId, by: staff, at: new Date().toISOString(),
+      sha256: createHash('sha256').update(data).digest('hex') });
+    projectFileBatch.set(doc(db, 'files', fileId, 'chunks', '0'), { i: 0, data: Bytes.fromUint8Array(data) });
+    projectFileBatch.set(doc(db, 'projects', projectId, 'library', fileId), {
+      ...metadata, folderPath: 'Trao đổi', createdBy: staff, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+    return file;
+  });
+  projectFileBatch.set(doc(db, 'projects', projectId, 'posts', 'rules-demo-file-post'), { ...postData, files: projectFiles });
+  await projectFileBatch.commit();
+  const projectChunk = client => doc(client, 'files', projectFiles[0].id, 'chunks', '0');
+  assert((await getDocFromServer(projectChunk(reviewerDb))).exists());
+  await denied(getDocFromServer(projectChunk(otherDb)));
+  await updateDoc(collaborationProject(adminDb), { collaborators: [] });
+  await denied(getDocFromServer(post(db)));
+  await denied(getDocFromServer(projectChunk(db)));
+  console.log('PASS: quyền trao đổi và tệp dự án, giới hạn lô tệp và thu hồi quyền.');
   const correspondence = collection(db, 'correspondence');
   const visibleRecords = await getDocsFromServer(query(correspondence,
     or(where('assigneeEmail', '==', staff), where('watchers', 'array-contains', staff))));

@@ -50,7 +50,9 @@ export async function saveAttachmentBytes(file: { bytes: Uint8Array; name: strin
   }
 }
 
-function Preview({ file, onClose }: { file: OpenCashFile; onClose: () => void }) {
+export function AttachmentPreview({ file, onClose, projectFile = false }: {
+  file: OpenCashFile; onClose: () => void; projectFile?: boolean;
+}) {
   const styles = useScreenStyles();
   const { colors } = useTheme();
   const [saving, setSaving] = useState(false);
@@ -64,8 +66,8 @@ function Preview({ file, onClose }: { file: OpenCashFile; onClose: () => void })
     if (saving) return;
     setSaving(true);
     setSaveError('');
-    try { await saveAttachmentBytes(file); }
-    catch { setSaveError('Không lưu được chứng từ. Vui lòng thử lại.'); }
+    try { await saveAttachmentBytes(file, projectFile ? 'Lưu tệp dự án' : undefined); }
+    catch { setSaveError(projectFile ? 'Không lưu được tệp. Vui lòng thử lại.' : 'Không lưu được chứng từ. Vui lòng thử lại.'); }
     finally { setSaving(false); }
   }
 
@@ -73,15 +75,16 @@ function Preview({ file, onClose }: { file: OpenCashFile; onClose: () => void })
     <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
       <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
       {previewError || file.kind === 'file'
-        ? <Text style={styles.muted}>{previewError ? 'Không hiển thị được chứng từ.' : 'Định dạng này cần ứng dụng phù hợp để mở.'}</Text>
+        ? <Text style={styles.muted}>{previewError ? (projectFile ? 'Không hiển thị được tệp.' : 'Không hiển thị được chứng từ.')
+          : 'Định dạng này cần ứng dụng phù hợp để mở.'}</Text>
         : file.kind === 'image'
           ? <Image accessibilityLabel={file.name} source={{ uri: imageUri }} resizeMode="contain"
             onError={failPreview} style={{ flex: 1, width: '100%' }} />
           : <CashPdf bytes={file.bytes} name={file.name} onError={failPreview} />}
       {!!saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
       <View style={styles.choices}>
-        <Button label="Đóng chứng từ" secondary onPress={onClose} disabled={saving} />
-        <Button label={saving ? 'Đang lưu…' : 'Lưu chứng từ'} onPress={() => void save()} disabled={saving} />
+        <Button label={projectFile ? 'Đóng tệp' : 'Đóng chứng từ'} secondary onPress={onClose} disabled={saving} />
+        <Button label={saving ? 'Đang lưu…' : projectFile ? 'Lưu tệp' : 'Lưu chứng từ'} onPress={() => void save()} disabled={saving} />
       </View>
     </SafeAreaView>
   </Modal>;
@@ -125,6 +128,6 @@ export function CashProofs({ cashId, files }: { cashId: string; files: CashAttac
         secondary onPress={() => void open(file)} disabled={!!opening} />
     </View>)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {preview && <Preview file={preview} onClose={() => setPreview(undefined)} />}
+    {preview && <AttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
 }

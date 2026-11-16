@@ -89,8 +89,9 @@ function choices<T extends string>(values: readonly T[]) {
   return values.map(value => ({ value, label: value }));
 }
 
-export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
+export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
   email: string; task?: Task; onClose: () => void; onSaved: (assignees: string[]) => void;
+  initial?: { title: string; note: string; projectId: string };
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -104,7 +105,7 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
   const [projects, setProjects] = useState<AssignmentProject[]>([]);
   const [directoryError, setDirectoryError] = useState('');
   const [reload, setReload] = useState(0);
-  const [title, setTitle] = useState(task?.title ?? '');
+  const [title, setTitle] = useState(task?.title ?? initial?.title ?? '');
   const [assignees, setAssignees] = useState(task?.assigneeEmail ? [task.assigneeEmail] : []);
   const [watchers, setWatchers] = useState(task?.watchers ?? []);
   const [approver, setApprover] = useState<string | undefined>(task?.approverEmail ?? (emulatorMode && !task ? undefined : ''));
@@ -117,11 +118,11 @@ export function TaskAssignmentForm({ email, task, onClose, onSaved }: {
     priority: taskPriorities.find(value => value === task?.priority) ?? initialOptions.priority,
     status: task && editableStatus(task.status) ? task.status : initialOptions.status,
     repeat: taskRepeatOptions.find(value => value === task?.repeat) ?? initialOptions.repeat,
-    projectId: task?.projectId ?? initialOptions.projectId,
+    projectId: task?.projectId ?? initial?.projectId ?? initialOptions.projectId,
     milestone: task?.milestone === true,
   }));
   const [progressText, setProgressText] = useState(String(task?.progress ?? 0));
-  const [note, setNote] = useState(task?.note ?? '');
+  const [note, setNote] = useState(task?.note ?? initial?.note ?? '');
   const [message, setMessage] = useState(assignment?.text ?? '');
   const [items, setItems] = useState(() => (task?.checklist ?? []).map((item, index) => ({
     t: item.t || item.text || '', weight: String(checklistWeight(item.weight)), done: item.done === true,
