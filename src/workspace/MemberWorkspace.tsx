@@ -58,6 +58,10 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       return;
     }
     if (note.link === '#du-an' && note.title === 'Bạn được nhắc trong dự án') {
+      if (!note.projectId) {
+        showToast('Thông báo cũ chưa có mã dự án. Vui lòng chọn dự án cần xem trong mục Dự án.', 'error');
+        return;
+      }
       setShowAssignment(false);
       setRoute({ screen: 'du-an', projectId: note.projectId, section: 'library' });
       return;

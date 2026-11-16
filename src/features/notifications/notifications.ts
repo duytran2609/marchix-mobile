@@ -1,6 +1,7 @@
 import { collection, doc, getDocFromServer, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
+import { notificationProjectId } from './projectMention';
 import type { Task } from '../tasks/tasks';
 
 export type WorkspaceNotification = {
@@ -51,8 +52,7 @@ function readNotification(row: QueryDocumentSnapshot<DocumentData>): WorkspaceNo
     read: data.read === true,
     taskId: typeof data.taskId === 'string' && /^[^/\s]+$/.test(data.taskId) && !/^\.{1,2}$/.test(data.taskId)
       ? data.taskId : undefined,
-    projectId: data.kind === 'projectMention' && typeof data.projectId === 'string' &&
-      /^[^/\s]+$/.test(data.projectId) && !/^\.{1,2}$/.test(data.projectId) ? data.projectId : undefined,
+    projectId: notificationProjectId(data, row.id),
   };
 }
 

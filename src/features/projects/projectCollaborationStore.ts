@@ -3,6 +3,7 @@ import { collection, doc, getDocFromServer, limit, onSnapshot, orderBy, query, r
 import type { Query, Timestamp, WriteBatch } from 'firebase/firestore';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { pilotProjectMentionId } from '../notifications/projectMention';
 import { db, pilotMode } from '../../services/firebase/firebase';
 import { hasPdfHeader, prepareCashFiles, readScopedFileBytes, writeScopedFiles } from '../cash/cashAttachments';
 import type { OpenCashFile } from '../cash/cashAttachments';
@@ -86,12 +87,18 @@ export async function publishProjectPost(projectId: string, email: string, input
   batch.set(ref, { title, body, kind: input.kind, taskId: input.taskId, mentions, files,
     status: 'open', pinned: false, conclusion: '', createdBy: email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   await batch.commit();
-  const results = await Promise.allSettled(mentions.map(to => setDoc(doc(collection(db, 'notifications')), {
-    to, from: email, title: 'Bạn được nhắc trong dự án',
-    body: 'Mở mục Trao đổi & tài liệu để xem nội dung.', link: '#du-an',
-    ...(pilotMode ? {} : { kind: 'projectMention', projectId, postId: ref.id }),
-    createdAt: new Date().toISOString(), read: false, emailed: false,
-  })));
+  const results = await Promise.allSettled(mentions.map(async to => {
+    const notification = doc(collection(db, 'notifications'));
+    const target = pilotMode
+      ? doc(db, 'notifications', pilotProjectMentionId(projectId, notification.id))
+      : notification;
+    await setDoc(target, {
+      to, from: email, title: 'Bạn được nhắc trong dự án',
+      body: 'Mở mục Trao đổi & tài liệu để xem nội dung.', link: '#du-an',
+      ...(pilotMode ? {} : { kind: 'projectMention', projectId, postId: ref.id }),
+      createdAt: new Date().toISOString(), read: false, emailed: false,
+    });
+  }));
   return results.filter(result => result.status === 'rejected').length;
 }
 

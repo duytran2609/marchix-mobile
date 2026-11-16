@@ -49,6 +49,7 @@
     "test:rules": "node tests/rules.mjs",
     "test:workflow": "node tests/workflow.mjs",
     "test:preview": "playwright test",
-    "test:local": "node tools/firebase-cli/node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only auth,firestore,functions --project demo-marchix-mobile \"npm run seed && npm run test:rules && npm run test:workflow && npm run test:preview\""
+    "test:local": "node tools/firebase-cli/node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only auth,firestore,functions --project demo-marchix-mobile \"npm run test:unit && npm run seed && npm run test:rules && npm run test:workflow && npm run test:preview\"",
+    "test:unit": "node --test tests/*.test.cjs"
   }
 }
