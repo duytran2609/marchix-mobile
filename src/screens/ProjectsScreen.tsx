@@ -46,7 +46,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
     });
   }, [email, isAdmin, pilotRetry]);
 
-  const project = projects?.find(item => item.id === route.projectId) ?? projects?.[0];
+  const project = route.projectId ? projects?.find(item => item.id === route.projectId) : projects?.[0];
   const section = route.section ?? 'overview';
   const visibleTasks = pilotMode ? pilotTasks : tasks;
   const taskError = pilotMode ? pilotError : tasksError;
@@ -77,6 +77,9 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
             navigate({ projectId, section: section === 'finance' || section === 'library' ? section : undefined });
           }} />}
     </View>
+    {projects && route.projectId && !project && !projectError && <Text accessibilityRole="alert" style={styles.error}>
+      Không tìm thấy dự án từ thông báo hoặc bạn không còn quyền xem. Vui lòng chọn dự án khác.
+    </Text>}
     {project && <>
       <View role="region" accessibilityLabel="Thông tin dự án" style={styles.panel}>
         <View style={local.projectTitleRow}>

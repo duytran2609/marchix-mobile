@@ -84,6 +84,15 @@ try {
   };
   await setDoc(doc(db, 'notifications', 'rules-project-mention'), mention);
   assert((await getDocFromServer(doc(reviewerDb, 'notifications', 'rules-project-mention'))).exists());
+  // Versioned Pilot document IDs must not alter recipient permissions.
+  // This uses emulator structured fields; deployed legacy Pilot rules are separate.
+  const pilotMentionId = `project-mention.v1.${encodeURIComponent(projectId)}.AbCdEf1234567890GhIj`;
+  await setDoc(doc(db, 'notifications', pilotMentionId), mention);
+  assert((await getDocFromServer(doc(reviewerDb, 'notifications', pilotMentionId))).exists());
+  await denied(getDocFromServer(doc(otherDb, 'notifications', pilotMentionId)));
+  await denied(updateDoc(doc(otherDb, 'notifications', pilotMentionId), { read: true }));
+  await updateDoc(doc(reviewerDb, 'notifications', pilotMentionId), { read: true });
+
   await denied(setDoc(doc(db, 'notifications', 'rules-invalid-project-mention'), { ...mention, to: colleague }));
   assert.equal((await getDocFromServer(post(reviewerDb))).data().body, postData.body);
   await denied(getDocsFromServer(collection(otherDb, 'projects', projectId, 'posts')));

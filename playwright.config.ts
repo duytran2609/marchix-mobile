@@ -5,6 +5,7 @@ const port = new URL(previewUrl).port || '8081';
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: '**/*.spec.ts', // Node component/unit tests run separately via test:unit.
   workers: 1,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

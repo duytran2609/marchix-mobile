@@ -46,18 +46,35 @@ export function BudgetLineEditor({ line, categories, onSave, onCancel, onRemove,
     <FinanceInput label={label} value={data[key]} onChange={set(key)} inputMode={inputMode} maxLength={maxLength} />;
   const date = (key: 'quoteDate' | 'payDate' | 'refundDue' | 'reviewDate', label: string) =>
     <DateCalendarField label={label} value={data[key]} onChange={set(key)} clearLabel="Bỏ ngày" disabled={busy} />;
-  function save() {
-    const base = { ...line, name: data.name.trim(), category: data.category, nature: data.nature, quote: data.quote.trim() };
-    const amount = parseVndInput(data.total);
-    if (!advanced && line && lineTotal(line) === amount) return onSave({ ...line, ...base });
-    if (!advanced) return onSave({ ...base, quantity: 1, unitLabel: 'khoản', unit: amount, fees: 0,
-      vatMethod: 'rate', vatRate: null, vat: null, taxMode: 'Đã gồm thuế GTGT',
-      reviewUnit: null, reviewDate: '', reviewSource: '', remainingEstimate: null });
+  function detailedLine() {
     const { total, ...details } = data;
-    onSave({ ...base, ...details, name: base.name, quote: base.quote, unitLabel: data.unitLabel.trim(),
+    return { ...line, ...details, code: line?.code ?? '', name: data.name.trim(), quote: data.quote.trim(), unitLabel: data.unitLabel.trim(),
       quantity: optionalNumber(data.quantity), unit: parseVndInput(data.unit), fees: parseVndInput(data.fees),
       vat: parseVndInput(data.vat), vatRate: optionalNumber(data.vatRate), allocationMonths: optionalNumber(data.allocationMonths),
-      reviewUnit: parseVndInput(data.reviewUnit), remainingEstimate: parseVndInput(data.remainingEstimate) });
+      reviewUnit: parseVndInput(data.reviewUnit), remainingEstimate: parseVndInput(data.remainingEstimate) };
+  }
+  function simpleDetails() {
+    // A changed lump sum replaces the cost breakdown, just as a simple-mode save does.
+    return { quantity: '1', unitLabel: 'khoản', unit: data.total, fees: '0',
+      vatMethod: 'rate', vatRate: '', vat: '', taxMode: 'Đã gồm thuế GTGT',
+      reviewUnit: '', reviewDate: '', reviewSource: '', remainingEstimate: '' };
+  }
+  function toggleMode() {
+    if (advanced) {
+      setData(current => ({ ...current, total: formatVndInput(lineTotal(detailedLine())) }));
+    } else if (parseVndInput(data.total) !== lineTotal(detailedLine())) {
+      setData(current => ({ ...current, ...simpleDetails() }));
+    }
+    setAdvanced(value => !value);
+  }
+  function save() {
+    const details = detailedLine();
+    const amount = parseVndInput(data.total);
+    // Keep the current detailed draft, not the original line, when its total is unchanged.
+    if (advanced || amount === lineTotal(details)) return onSave(details);
+    onSave({ ...details, quantity: 1, unitLabel: 'khoản', unit: amount, fees: 0,
+      vatMethod: 'rate', vatRate: null, vat: null, taxMode: 'Đã gồm thuế GTGT',
+      reviewUnit: null, reviewDate: '', reviewSource: '', remainingEstimate: null });
   }
   return <View style={styles.stack}>
     {input('name', 'Mua / chi gì?')}
@@ -66,7 +83,7 @@ export function BudgetLineEditor({ line, categories, onSave, onCancel, onRemove,
     {!advanced && input('total', 'Số tiền tổng (đ)', 'numeric', 20)}
     <Text style={styles.muted}>Để trống khi chưa xác định. Nhập 0 khi xác nhận không phát sinh.</Text>
     <Button label={advanced ? 'Nhập số tiền tổng' : 'Nhập chi tiết VAT, báo giá và dự báo'} secondary
-      onPress={() => setAdvanced(value => !value)} disabled={busy} />
+      onPress={toggleMode} disabled={busy} />
     {advanced && <>
       {input('quantity', 'Số lượng', 'decimal', 12)}
       {input('unitLabel', 'Đơn vị tính', undefined, 80)}
