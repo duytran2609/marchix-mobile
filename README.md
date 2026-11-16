@@ -76,6 +76,8 @@ APK nằm tại `android/app/build/outputs/apk/release/app-release.apk`.
 
 ## Kiểm thử
 
+GitHub Actions chạy **Mobile CI** khi mở hoặc cập nhật pull request vào `main`, khi push lên `main`, hoặc khi chạy thủ công từ tab **Actions**. Pipeline kiểm tra TypeScript, chạy Firestore Rules, Cloud Functions và Playwright trên Firebase Emulator với dữ liệu giả, rồi build bản web Expo. Khi test lỗi, tải báo cáo và trace từ artifact `mobile-ci-diagnostics`. Khi push lên `main` và tất cả kiểm tra đạt, tải bản web từ `marchix-mobile-web-preview`. Pipeline không phát hành APK/iOS hay deploy production.
+
 Dừng các tiến trình demo trên trước khi chạy kiểm thử tự động vì bộ kiểm thử khởi động emulator và Expo trên cùng cổng.
 
 ```powershell

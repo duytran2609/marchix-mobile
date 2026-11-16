@@ -1,7 +1,7 @@
 import { devices, expect, test, type Page } from '@playwright/test';
 import { todayInVietnam } from '../src/features/tasks/taskDates';
 
-test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
+test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium', actionTimeout: 10_000 });
 
 test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', async ({ page, browser, request }) => {
   test.setTimeout(120_000);
@@ -24,6 +24,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
       createdBy: staff, approverEmail: 'nguoigiao@example.test', approvedBy: 'nguoigiao@example.test' }],
   ] as const;
   const source = await browser.newPage({ ...devices['iPhone 13'] });
+  source.setDefaultTimeout(10_000);
   const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
   const numberFrom = (text: string) => Number(text.replace(/\D/g, ''));
   const button = (target: Page, name: string | RegExp) => target.getByRole('button', { name, exact: typeof name === 'string' });
@@ -65,7 +66,9 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await expect(button(page, new RegExp(task))).toHaveCount(0);
     await expect(projectRow).toContainText('65%');
     await navigate(source, 'Dự án');
-    await button(source, project).click();
+    await button(source, /^Chọn dự án:/).click();
+    await source.getByRole('radiogroup', { name: 'Chọn dự án' })
+      .getByRole('radio', { name: project, exact: true }).click();
     await expect(source.getByText('Tiến độ việc tôi được xem', { exact: true }).locator('..')).toContainText('65%');
     const renamedProject = `Dự án đã cập nhật ${id}`;
     const projectEdit = await request.patch(`${base}/projects/${id}?updateMask.fieldPaths=name`, {
@@ -76,23 +79,28 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await expect(source.getByRole('heading', { name: renamedProject, exact: true })).toBeVisible();
 
     await navigate(source, 'Thu chi');
-    const cashTotal = source.getByText('Đã chi', { exact: true }).locator('..').and(source.locator('div'));
+    const cashRow = button(source, new RegExp(cash));
+    await expect(cashRow).toBeVisible();
+    const cashTotal = source.getByText('Đã chi', { exact: true }).locator('..')
+      .filter({ hasText: /^Đã chi\s*[\d.]+\s*₫$/ });
     await expect(cashTotal).toBeVisible();
     const spentBefore = numberFrom(await cashTotal.innerText());
     const payable = page.getByText('Phải chi', { exact: true }).locator('..');
     await expect(payable).toBeVisible();
     const dueBefore = numberFrom(await payable.innerText());
     expect(dueBefore).toBeGreaterThanOrEqual(amount);
-    await button(source, new RegExp(cash)).click();
-    await expect(source.getByText('Chờ chi', { exact: true })).toBeVisible();
+    await cashRow.click();
+    const cashDialog = source.getByRole('dialog');
+    await expect(cashDialog.getByText('Chờ chi', { exact: true })).toBeVisible();
     await source.getByRole('textbox', { name: 'Mã chứng từ hoặc tham chiếu giao dịch' }).fill(id);
     await button(source, 'Xác nhận đã chi').click();
     await button(source, 'Xác nhận giao dịch đã hoàn tất').click();
-    await expect(source.getByText('Đã chi', { exact: true })).toBeVisible();
+    await expect(cashDialog.getByText('Đã chi', { exact: true })).toBeVisible();
     const expectedSpent = money.format(spentBefore + amount);
+    await button(page, `Tháng ${Number(day.slice(5, 7))}/${day.slice(0, 4)}`).click();
     await expect(page.getByText(`Đã chi ${expectedSpent}`, { exact: true })).toBeVisible();
     await expect(payable.getByText(money.format(dueBefore - amount), { exact: true })).toBeVisible();
-    await button(source, 'Về sổ thu chi').click();
+    await button(source, 'Đóng chi tiết khoản thu chi').click();
     await expect(cashTotal).toContainText(expectedSpent);
   } finally {
     await Promise.all([source.close(), ...fixtures.map(([path]) => request.delete(`${base}/${path}`, { headers }))]);
