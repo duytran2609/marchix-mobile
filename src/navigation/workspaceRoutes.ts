@@ -1,11 +1,13 @@
 import type { NotificationTaskTarget } from '../features/notifications/notifications';
 
+import type { ProjectExpenseSeed } from '../features/projects/financeStore';
+
 type TaskSelection = NotificationTaskTarget | { id: string; direct: true };
 
 export type ProjectRoute = {
   screen: 'du-an';
   projectId?: string;
-  section?: 'overview' | 'work' | 'finance';
+  section?: 'overview' | 'work' | 'finance' | 'library';
   kanban?: boolean;
 };
 
@@ -16,9 +18,9 @@ export type WorkspaceRoute =
   | { screen: 'ke-hoach-tuan' }
   | { screen: 'kpi' }
   | { screen: 'cham-cong' }
-  | { screen: 'don-tu' }
-  | { screen: 'thu-chi' }
-  | { screen: 'luong' }
+  | { screen: 'don-tu'; requestId?: string; fromNotification?: true; fromPayrollMonth?: string }
+  | { screen: 'thu-chi'; cashId?: string; fromProject?: string; fromNotification?: true; projectExpense?: ProjectExpenseSeed }
+  | { screen: 'luong'; month?: string }
   | { screen: 'cai-dat' }
   | { screen: 'van-thu'; recordId?: string }
   | ProjectRoute
@@ -43,4 +45,14 @@ export type WorkspaceTab = typeof workspaceTabs[number]['id'];
 
 export function workspaceTabForLink(link: string): WorkspaceTab {
   return workspaceTabs.find(tab => `#${tab.id}` === link)?.id ?? 'tong-quan';
+}
+
+export function workflowRouteForLink(link: string): WorkspaceRoute | undefined {
+  const match = /^#(don-tu|thu-chi|luong)\/([^/\s]+)$/.exec(link);
+  if (!match) return undefined;
+  const [, screen, id] = match;
+  if (id.length > 1500 || id === '.' || id === '..') return undefined;
+  if (screen === 'don-tu') return { screen, requestId: id, fromNotification: true };
+  if (screen === 'thu-chi') return { screen, cashId: id, fromNotification: true };
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(id)) return { screen: 'luong', month: id };
 }

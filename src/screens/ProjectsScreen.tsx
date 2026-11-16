@@ -4,7 +4,9 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { ProjectEditor } from '../features/projects/ProjectEditor';
+import type { ProjectExpenseSeed } from '../features/projects/financeStore';
 import { ProjectFinance } from '../features/projects/ProjectFinance';
+import { ProjectCollaboration } from '../features/projects/ProjectCollaboration';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
 import type { Project } from '../features/projects/projects';
 import { initialTaskBoardOptions, TaskBoard } from '../features/tasks/TaskBoard';
@@ -16,13 +18,14 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
 const sections = [
-  ['overview', 'Tổng quan'], ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'],
+  ['overview', 'Tổng quan'], ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'], ['library', 'Trao đổi & tài liệu'],
 ] as const;
 
-export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, email, name, isAdmin, canReadCash,
+export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, onProjectExpense, onProjectCash, email, name, isAdmin, canReadCash,
   tasks, tasksError, onRetryTasks }: {
   route: ProjectRoute; onNavigate: (route: ProjectRoute) => void; onOpenTask: (task: Task) => void;
   onDragChange: (dragging: boolean) => void; email: string; name: string; isAdmin: boolean;
+  onProjectExpense: (seed: ProjectExpenseSeed) => void; onProjectCash: (projectId: string, cashId: string) => void;
   canReadCash: boolean; tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void;
 }) {
   const styles = useScreenStyles();
@@ -71,7 +74,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
           onChange={projectId => {
             if (projectId === project?.id) return;
             setBoard({ ...initialTaskBoardOptions, view: 'kanban' });
-            navigate({ projectId });
+            navigate({ projectId, section: section === 'finance' || section === 'library' ? section : undefined });
           }} />}
     </View>
     {project && <>
@@ -98,7 +101,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
           {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
             accessibilityState={{ selected: section === id }}
             onPress={() => navigate({ projectId: project.id, section: id })}
-            style={[local.tab, id === 'work' && local.workTab, section === id && { backgroundColor: colors.paper }]}>
+            style={[local.tab, (id === 'work' || id === 'library') && local.detailTab, section === id && { backgroundColor: colors.paper }]}>
             <Text style={[local.tabLabel, { color: colors.muted }, section === id && { color: colors.accent, fontWeight: '800' }]}>
               {label}
             </Text>
@@ -107,7 +110,10 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, em
       </View>
       <View role="region" accessibilityLabel={sections.find(([id]) => id === section)?.[1]} style={styles.panel}>
         {section === 'finance' ? <ProjectFinance key={`${project.id}-${canReadCash}`} project={project}
-          canReadCash={canReadCash} isAdmin={isAdmin} /> : <>
+          canReadCash={canReadCash} isAdmin={isAdmin} email={email}
+          onExpense={onProjectExpense} onCash={id => onProjectCash(project.id, id)} />
+          : section === 'library' ? <ProjectCollaboration key={project.id} project={project} email={email} isAdmin={isAdmin}
+            tasks={projectTasks ?? []} onOpenTask={onOpenTask} /> : <>
           {section === 'overview' && <View style={local.metadata}>
             <Detail label="Mục tiêu / kết quả bàn giao" value={project.goal} />
             <Detail label="Giai đoạn hiện tại" value={project.phase} />
@@ -173,7 +179,7 @@ const local = StyleSheet.create({
   tabs: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10 },
   tab: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 8,
     justifyContent: 'center' },
-  workTab: { flex: 1.65 },
+  detailTab: { flex: 1.45 },
   tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   metadata: { gap: 4 },
   metaLabel: { fontWeight: '700' },

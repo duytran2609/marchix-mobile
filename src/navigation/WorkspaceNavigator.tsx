@@ -77,13 +77,26 @@ export function WorkspaceNavigator({
     email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
     canReviewRequests={canReviewRequests} personalTasks={tasksComplete ? tasks : null}
     tasksError={error || sentError} onRetryTasks={retryTasks} onNavigate={setRoute} />;
-  if (route.screen === 'luong') return <PayrollScreen key={email + '-' + isAdmin} email={email} isAdmin={isAdmin} />;
+  if (route.screen === 'luong') return <PayrollScreen key={JSON.stringify([email, isAdmin, route.month])}
+    email={email} isAdmin={isAdmin} initialMonth={route.month}
+    onOpenAdvance={(requestId, month) => { setRoute({ screen: 'don-tu', requestId, fromPayrollMonth: month }); onScrollTop(); }} />;
   if (route.screen === 'cham-cong') return <AttendanceScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
-  if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests])}
+  if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests, route.requestId])}
     email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
+    initialRequestId={route.requestId}
+    onBackToReview={route.fromPayrollMonth ? () => {
+      setRoute({ screen: 'luong', month: route.fromPayrollMonth });
+      onScrollTop();
+    } : route.fromNotification ? () => setRoute({ screen: 'don-tu' }) : route.requestId ? openReviewQueue : undefined}
     tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />;
-  if (route.screen === 'thu-chi') return <CashScreen key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash])}
-    access={{ email, isAdmin, canReadCash, canReviewCash }} />;
+  if (route.screen === 'thu-chi') return <CashScreen key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, route.cashId, route.projectExpense])}
+    access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.cashId} projectExpense={route.projectExpense}
+    onBackToReview={route.fromProject ? () => {
+      setRoute({ screen: 'du-an', projectId: route.fromProject, section: 'finance' });
+      onScrollTop();
+    }
+      : route.fromNotification ? () => setRoute({ screen: 'thu-chi' }) : route.cashId ? openReviewQueue : undefined}
+    backLabel={route.fromProject ? 'Về tài chính dự án' : route.fromNotification ? 'Về sổ thu chi' : undefined} />;
   if (route.screen === 'kpi') return <KpiScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
   if (route.screen === 'ke-hoach-tuan') return <WeeklyPlanScreen key={`${email}-${isAdmin}`}
     email={email} name={name} isAdmin={isAdmin} tasks={tasksComplete ? tasks : null}
@@ -117,6 +130,14 @@ export function WorkspaceNavigator({
     onNavigate={next => setRoute(current => current === route ? next : current)}
     email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} tasks={tasksComplete ? tasks : null}
     tasksError={error || sentError} onRetryTasks={retryTasks} onDragChange={onDragChange}
+    onProjectExpense={projectExpense => {
+      setRoute({ screen: 'thu-chi', projectExpense, fromProject: projectExpense.projectId });
+      onScrollTop();
+    }}
+    onProjectCash={(projectId, cashId) => {
+      setRoute({ screen: 'thu-chi', cashId, fromProject: projectId });
+      onScrollTop();
+    }}
     onOpenTask={task => setRoute({ screen: 'cong-viec', taskPopupId: task.id })} />;
   if (selected) {
     const backTo = route.screen === 'task-detail' ? route.backTo : undefined;
@@ -134,9 +155,12 @@ export function WorkspaceNavigator({
   }
 
   return <>
-    <TasksScreen email={email} name={name} tasks={tasks} error={error} sentError={sentError} reminderWindow={reminders.value}
+    <TasksScreen key={String(isAdmin)} email={email} name={name} isAdmin={isAdmin}
+      tasks={tasks} error={error} sentError={sentError} reminderWindow={reminders.value}
       onRetry={retryTasks} options={options} onOptionsChange={setOptions}
-      onOpenTask={task => setRoute({ screen: 'task-detail', task: { id: task.id } })}
+      onOpenTask={task => setRoute({
+        screen: 'task-detail', task: isAdmin ? { id: task.id, direct: true } : { id: task.id },
+      })}
       showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={onDragChange} />
     {route.screen === 'cong-viec' && route.taskPopupId && <TaskDetailPopup key={route.taskPopupId}
       id={route.taskPopupId} email={email} name={name} onClose={() => setRoute({ screen: 'cong-viec' })} />}

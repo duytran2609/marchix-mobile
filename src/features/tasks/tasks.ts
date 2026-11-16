@@ -17,16 +17,22 @@ export type AttachmentUpload = Pick<TaskAttachment, 'name' | 'type'> & { base64:
 export type AssignmentProject = { id: string; name: string };
 export const taskPriorities = ['Cao', 'Trung bình', 'Thấp'] as const;
 export const taskRepeatOptions = ['Không lặp', 'Hằng tuần', 'Hằng tháng'] as const;
+export const taskCompletionModes = [
+  { value: 'report', label: 'Chỉ báo cáo kết quả' },
+  { value: 'review', label: 'Cần nghiệm thu' },
+] as const;
 export type AssignmentOptions = {
   priority: typeof taskPriorities[number];
   status: EditableStatus;
   repeat: typeof taskRepeatOptions[number];
   projectId: string;
   milestone: boolean;
+  requireReview?: boolean;
 };
 
 type ChecklistItem = { t?: string; text?: string; done: boolean; weight?: number };
-type TaskComment = { by: string; at: string; text: string; files?: TaskAttachment[]; kind?: 'assignment' };
+export type TaskReplyTarget = { index: number; by: string; at: string };
+type TaskComment = { by: string; at: string; text: string; files?: TaskAttachment[]; kind?: 'assignment'; replyTo?: TaskReplyTarget };
 
 export type Task = {
   id: string;
@@ -43,12 +49,15 @@ export type Task = {
   assignedBy?: string;
   projectId?: string;
   repeat?: string;
+  recurrenceOn?: string;
   watchers?: string[];
   approverEmail?: string;
+  requireReview?: boolean;
   milestone?: boolean;
   createdAt?: string;
   doneAt?: string;
   reviewedAt?: string;
+  remindedAt?: string;
   updatedAt?: string;
   checklist?: ChecklistItem[];
   comments?: TaskComment[];
@@ -60,9 +69,19 @@ export function editableStatus(status: string): status is EditableStatus {
   return editableStatuses.some(value => value === status);
 }
 
+export const remindTask = httpsCallable<{
+  taskId: string; assigneeEmail: string; previousReminder: string | null;
+}>(taskFunctions, 'remindMobileTask');
+
 export function getAssignmentComment(task: Task) {
   return task.assignedBy ? task.comments?.find(comment => comment.by === task.assignedBy &&
     (comment.kind === 'assignment' || (task.createdAt && comment.at === task.createdAt))) : undefined;
+}
+
+export function findTaskReplyIndex(comments: readonly TaskComment[], target: TaskReplyTarget) {
+  const matches = (comment?: TaskComment) => comment?.by === target.by && comment?.at === target.at;
+  if (matches(comments[target.index])) return target.index;
+  return comments.findIndex(matches);
 }
 
 export function parseTaskProgress(text: string) {
@@ -78,6 +97,19 @@ export function watchTask(id: string, onTask: (task: Task | null) => void, onErr
   }, onError);
 }
 
+function compareTasks(left: Task, right: Task) {
+  return Number(editableStatus(right.status)) - Number(editableStatus(left.status)) ||
+    (left.due || '9999').localeCompare(right.due || '9999') ||
+    left.title.localeCompare(right.title, 'vi');
+}
+
+export function watchTeamTasks(onTasks: (tasks: Task[]) => void, onError: () => void) {
+  return onSnapshot(collection(db, 'tasks'), { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.fromCache) return;
+    onTasks(snapshot.docs.map(row => ({ ...row.data(), id: row.id } as Task)).sort(compareTasks));
+  }, onError);
+}
+
 export function watchTasks(email: string, onTasks: (tasks: Task[], complete: boolean) => void, onError: () => void, onSentError: () => void) {
   const tasks = collection(db, 'tasks');
   let received: Task[] | undefined;
@@ -89,10 +121,7 @@ export function watchTasks(email: string, onTasks: (tasks: Task[], complete: boo
     if (!received) return;
     const combined = new Map(sent.map(task => [task.id, task]));
     for (const task of received) combined.set(task.id, task);
-    onTasks(Array.from(combined.values()).sort((left, right) =>
-      Number(editableStatus(right.status)) - Number(editableStatus(left.status)) ||
-      (left.due || '9999').localeCompare(right.due || '9999') ||
-      left.title.localeCompare(right.title, 'vi')), receivedReady && sentReady);
+    onTasks(Array.from(combined.values()).sort(compareTasks), receivedReady && sentReady);
   }
 
   const stopReceived = onSnapshot(query(tasks, where('assigneeEmail', '==', email)), { includeMetadataChanges: true }, snapshot => {
@@ -210,7 +239,7 @@ export async function saveProgress(task: Task, email: string, status: EditableSt
   });
 }
 
-export async function addTaskComment(taskId: string, email: string, message: string) {
+export async function addTaskComment(taskId: string, email: string, message: string, replyTo?: TaskReplyTarget) {
   if (pilotMode && !taskAssignmentEnabled) throw new Error('Bản pilot chỉ xem công việc.');
   const text = message.trim();
   if (!text || text.length > commentMaxLength) {
@@ -222,11 +251,18 @@ export async function addTaskComment(taskId: string, email: string, message: str
   await runTransaction(db, async transaction => {
     const snapshot = await transaction.get(ref);
     const task = snapshot.data() as Task | undefined;
-    if (!task || task.assigneeEmail !== email) {
+    if (!task || (task.assigneeEmail !== email && (!replyTo || task.assignedBy !== email))) {
       throw new Error('Bạn không còn quyền gửi trao đổi cho công việc này.');
     }
     if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
-    transaction.update(ref, { comments: [...(task.comments ?? []), comment] });
+    const comments = task.comments ?? [];
+    if (!replyTo) {
+      transaction.update(ref, { comments: [...comments, comment] });
+      return;
+    }
+    const index = findTaskReplyIndex(comments, replyTo);
+    if (index < 0) throw new Error('Trao đổi gốc không còn tồn tại.');
+    transaction.update(ref, { comments: [...comments, { ...comment, replyTo: { ...replyTo, index } }] });
   });
 }
 

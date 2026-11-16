@@ -53,7 +53,9 @@ Firebase Auth Emulator cấp phiên từ ID token Google mô phỏng. Functions 
 
 Bản **Quản lý Marchix Pilot 0.5.3** dùng Firebase Quản lý Marchix qua Internet. Cài APK trong `artifacts/`, rồi đăng nhập bằng tài khoản Google đã được cấp quyền trên bản web. Có thể cài đè lên Pilot 0.5.1 hoặc 0.5.2 nếu dùng cùng chứng thư ký.
 
-Bản Pilot này bật giao việc, cập nhật tiến độ và checklist, trao đổi, tệp đính kèm, báo hoàn thành, trả lại và duyệt theo quyền Firestore hiện hành. Với việc cần duyệt, người giao chọn người duyệt có quyền trước khi nhân viên báo hoàn thành. Pilot ghi trực tiếp theo cùng quy tắc với bản web; không cần triển khai Cloud Functions. Việc lặp tự sinh kỳ tiếp theo khi người duyệt cũng là người giao việc.
+Bản Pilot này bật giao việc, cập nhật tiến độ và checklist, trao đổi, tệp đính kèm, báo hoàn thành, trả lại và duyệt theo quyền Firestore hiện hành. Với việc cần duyệt, người giao chọn người duyệt có quyền trước khi nhân viên báo hoàn thành. Pilot ghi trực tiếp theo cùng quy tắc với bản web.
+
+Bản mobile cập nhật dùng Cloud Function `scheduleRecurringTasks` để tạo kỳ mới lúc 00:05 giờ Việt Nam, tính từ ngày giao việc gốc. Hằng tuần lặp mỗi 7 ngày. Hằng tháng lặp cùng ngày hoặc ngày cuối tháng nếu tháng đó ngắn hơn. Trước khi phát hành Pilot, triển khai function vào dự án Firebase của Pilot và xác nhận Firestore Rules của Pilot cho phép lưu trường `repeatSchedule` khi giao việc lặp.
 
 ### Dùng bản Demo với Firebase Emulator
 

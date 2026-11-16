@@ -11,6 +11,7 @@ export type WorkspaceNotification = {
   createdAt: string;
   read: boolean;
   taskId?: string;
+  projectId?: string;
 };
 
 export type NotificationTaskTarget = { id: string } | { title: string; assignment?: true };
@@ -50,6 +51,8 @@ function readNotification(row: QueryDocumentSnapshot<DocumentData>): WorkspaceNo
     read: data.read === true,
     taskId: typeof data.taskId === 'string' && /^[^/\s]+$/.test(data.taskId) && !/^\.{1,2}$/.test(data.taskId)
       ? data.taskId : undefined,
+    projectId: data.kind === 'projectMention' && typeof data.projectId === 'string' &&
+      /^[^/\s]+$/.test(data.projectId) && !/^\.{1,2}$/.test(data.projectId) ? data.projectId : undefined,
   };
 }
 

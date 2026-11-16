@@ -4,9 +4,9 @@ import { attendanceId, attendanceMonth, defaultSchedule, monthDays } from '../at
 import type { Attendance, AttendanceRequest } from '../attendance/attendance';
 import { todayInVietnam } from '../tasks/taskDates';
 import { amount, calculatePay, defaultRates, emptyEmployee, locked, payrollExpenses, validMonth } from './payroll';
-import type { Employee, EmployeeFields, PayInputs, Payslip, Rates } from './payroll';
+import type { Employee, EmployeeFields, PayInputs, PayrollAdvance, Payslip, Rates } from './payroll';
 
-type PayrollRequest = AttendanceRequest & { month?: string; createdAt?: string; amount?: number };
+type PayrollRequest = AttendanceRequest & { id: string; month?: string; createdAt?: string; amount?: number; reason?: string };
 export type PayrollData = { slips: Payslip[]; employees: Employee[]; rates: Rates; requests: PayrollRequest[] };
 
 export function watchPayroll(email: string, admin: boolean, receive: (data: PayrollData) => void, fail: () => void) {
@@ -49,7 +49,7 @@ export function watchPayroll(email: string, admin: boolean, receive: (data: Payr
       firstRates = false;
     }, fail));
     stops.push(onSnapshot(query(collection(db, 'requests'), where('status', '==', 'Đã duyệt')), snapshot => {
-      data.requests = snapshot.docs.map(item => item.data() as PayrollRequest);
+      data.requests = snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as PayrollRequest);
       publish(firstRequest);
       firstRequest = false;
     }, fail));
@@ -57,11 +57,13 @@ export function watchPayroll(email: string, admin: boolean, receive: (data: Payr
   return () => stops.forEach(stop => stop());
 }
 
-export function approvedAdvance(requests: PayrollRequest[], email: string, month: string) {
-  if (!email) return 0;
-  return requests.filter(request => request.type === 'Tạm ứng lương' && request.createdBy === email &&
+export function approvedAdvanceRequests(requests: PayrollRequest[], email: string, month: string): PayrollAdvance[] {
+  if (!email) return [];
+  return requests.filter(request => request.type === 'Tạm ứng lương' && request.status === 'Đã duyệt' &&
+    request.createdBy === email && amount(request.amount) > 0 &&
     (request.month || (typeof request.createdAt === 'string' ? request.createdAt.slice(0, 7) : undefined)) === month)
-    .reduce((sum, request) => sum + amount(request.amount), 0);
+    .map(request => ({ requestId: request.id, amount: amount(request.amount),
+      reason: typeof request.reason === 'string' ? request.reason : '' }));
 }
 
 export async function saveEmployee(email: string, fields: EmployeeFields, id?: string) {
@@ -100,12 +102,16 @@ export async function writePayroll(email: string, month: string, employees: Empl
           if (action === 'save') throw new Error('Dòng lương đã được chốt.');
           return;
         }
+        const advances = approvedAdvanceRequests(data.requests, employee.email, month);
         const pay = calculatePay(employee, { ...previous, ...inputByEmployee.get(employee.id) }, month,
-          data.rates, approvedAdvance(data.requests, employee.email, month));
+          data.rates, advances.reduce((sum, entry) => sum + entry.amount, 0));
         transaction.set(snapshot.ref, {
           ...pay, month, empId: employee.id, name: employee.name, email: employee.email,
           status: action === 'lock' ? 'Đã chốt' : 'Nháp', updatedAt: now, updatedBy: email,
-          ...(action === 'lock' && { lockedAt: now, lockedBy: email, employeeConfirmedAt: deleteField() }),
+          ...(action === 'lock' && {
+            lockedAt: now, lockedBy: email, employeeConfirmedAt: deleteField(),
+            advanceDetails: advances.length ? { lockedAt: now, requests: advances } : deleteField(),
+          }),
         }, { merge: true });
       }
       count++;

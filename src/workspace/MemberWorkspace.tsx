@@ -9,7 +9,7 @@ import type { WorkspaceNotification } from '../features/notifications/notificati
 import { useWorkspacePush } from '../features/notifications/workspacePush';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
-import { workspaceTabForLink } from '../navigation/workspaceRoutes';
+import { workflowRouteForLink, workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
 import { auth } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
@@ -45,10 +45,21 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
 
   function openNote(note: WorkspaceNotification) {
     setMenuOpen(false);
+    const workflow = workflowRouteForLink(note.link);
+    if (workflow) {
+      setShowAssignment(false);
+      setRoute(workflow);
+      return;
+    }
     const recordId = /^#van-thu\/([A-Za-z0-9-]+)$/.exec(note.link)?.[1];
     if (recordId) {
       setShowAssignment(false);
       setRoute({ screen: 'van-thu', recordId });
+      return;
+    }
+    if (note.link === '#du-an' && note.title === 'Bạn được nhắc trong dự án') {
+      setShowAssignment(false);
+      setRoute({ screen: 'du-an', projectId: note.projectId, section: 'library' });
       return;
     }
     const task = notificationTaskTarget(note);

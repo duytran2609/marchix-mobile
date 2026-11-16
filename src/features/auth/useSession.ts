@@ -13,11 +13,19 @@ export type Session =
 
 export function useSession() {
   const [session, setSession] = useState<Session>({ kind: 'loading' });
+  const [showLoginReminder, setShowLoginReminder] = useState(false);
   useEffect(() => {
     if (configError) return;
     let stopMembership: (() => void) | undefined;
+    let previousUid: string | null | undefined;
     const stopAuth = onAuthStateChanged(auth, user => {
       stopMembership?.();
+      const uid = user?.uid ?? null;
+      // The first auth notification can restore a persisted session.
+      if (uid !== previousUid) {
+        setShowLoginReminder(previousUid !== undefined && uid !== null);
+        previousUid = uid;
+      }
       if (!user) {
         setSession({ kind: 'signed-out' });
       } else if (!user.email || !user.emailVerified) {
@@ -40,5 +48,5 @@ export function useSession() {
     });
     return () => { stopAuth(); stopMembership?.(); };
   }, []);
-  return session;
+  return { session, showLoginReminder, dismissLoginReminder: () => setShowLoginReminder(false) };
 }

@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +10,7 @@ import { PageHeader } from '../components/PageHeader';
 import { SearchInput } from '../components/SearchInput';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { useToast } from '../components/Toast';
-import { bookStatuses, recordActions, recordBooks, recordIsLate, recordIsOpen, recordKinds,
+import { bookStatuses, recordActions, recordBooks, recordKinds,
   recordNumber, recordSortTime, recordStates, recordSystemCode, watchRecords } from '../features/records/records';
 import type { Correspondence, RecordBook, RecordStatus } from '../features/records/records';
 import { RecordForm } from '../features/records/RecordForm';
@@ -59,9 +60,6 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   const [term, setTerm] = useState('');
   const [status, setStatus] = useState('');
   const [kind, setKind] = useState('');
-  const [late, setLate] = useState(false);
-  const [watching, setWatching] = useState(false);
-  const [actionOnly, setActionOnly] = useState(false);
   const [form, setForm] = useState<{ direction: RecordBook; existing?: Correspondence;
     action?: { status: RecordStatus; label: string } }>();
   const today = todayInVietnam();
@@ -78,17 +76,14 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
     () => setNames(new Map())), [email]);
 
   const current = rows?.filter(row => row.direction === book) ?? [];
-  const follows = (row: Correspondence) => row.watchers?.includes(email) ?? false;
   const actions = (row: Correspondence) => recordActions(row, email, isAdmin);
-  const overdue = (row: Correspondence) => recordIsLate(row, today);
   const assignee = (row: Correspondence) => row.assigneeEmail
     ? names.get(row.assigneeEmail) || row.assigneeEmail : 'Chưa giao';
-  const filtered = searchByName(current.filter(row => (!watching || follows(row)) &&
-    (!actionOnly || actions(row).length) && (!late || overdue(row)) &&
+  const filtered = searchByName(current.filter(row =>
     (!kind || kind === (row.kind || 'letter')) && (!status || status === row.status)), term,
   row => [recordNumber(row), recordSystemCode(row, today), row.externalNumber, row.subject,
     row.partner, assignee(row), row.assigneeEmail].filter(Boolean).join(' '));
-  filtered.sort((a, b) => recordSortTime(b, watching) - recordSortTime(a, watching));
+  filtered.sort((a, b) => recordSortTime(b, false) - recordSortTime(a, false));
 
   function closeRecord() {
     setPreview(undefined);
@@ -120,24 +115,8 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
         <View style={styles.panel}>
           <SegmentedButtons label="Sổ văn thư" value={tab} choices={tabChoices}
             onChange={value => { setTab(value); setStatus(''); }} />
-          {tab !== 'history' && <>
-            {isAdmin && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
-              onPress={() => setForm({ direction: book })} />}
-            {rows && <>
-              <View style={styles.choices}>
-                <Text style={styles.badge}>{current.filter(recordIsOpen).length} đang mở</Text>
-                <Text style={styles.badge}>{current.filter(overdue).length} quá hạn</Text>
-                <Text style={styles.badge}>{current.filter(row => row.status === 'archived').length} đã lưu</Text>
-              </View>
-              <View style={styles.choices}>
-                <Button label={`Đang theo dõi (${current.filter(follows).length})`} secondary
-                  selected={watching} onPress={() => setWatching(value => !value)} />
-                <Button label={`Cần tôi xử lý (${current.filter(row => actions(row).length).length})`} secondary
-                  selected={actionOnly} onPress={() => setActionOnly(value => !value)} />
-                <Button label="Chỉ quá hạn" secondary selected={late} onPress={() => setLate(value => !value)} />
-              </View>
-            </>}
-          </>}
+          {tab !== 'history' && isAdmin && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
+            onPress={() => setForm({ direction: book })} />}
         </View>
         {error ? <View style={styles.panel}>
           <Text accessibilityRole="alert" style={styles.error}>Không tải được sổ văn thư.</Text>
@@ -160,7 +139,8 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
               {!filtered.length && <Text style={styles.muted}>{current.length
                 ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'}</Text>}
             </View>
-            {filtered.map(row => (
+            <PaginatedList items={filtered} resetKey={JSON.stringify([book, term, status, kind])}>
+            {pageItems => pageItems.map(row => (
               <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
                 style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
                 <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
@@ -177,6 +157,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                 <Text style={styles.badge}>{recordStates[row.status]}</Text>
               </Pressable>
             ))}
+            </PaginatedList>
           </>
         )}
         {!form?.existing && editor}
@@ -275,16 +256,18 @@ function RecordHistory({ rows, names, onSelect }: {
     {loading && <Text style={styles.muted}>Đang tải lịch sử…</Text>}
     {error && <Text accessibilityRole="alert" style={styles.error}>Không tải được lịch sử của một số hồ sơ.</Text>}
     {!loading && !error && !entries.length && <Text style={styles.muted}>Chưa có lịch sử xử lý.</Text>}
-    {entries.map(({ row, event }) => (
-      <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
-        onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
-        <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
-        <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
-        <Text style={styles.label}>{recordStates[event.to]}</Text>
-        <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
-        {!!event.note && <Text style={styles.body}>{event.note}</Text>}
-      </Pressable>
-    ))}
+    <PaginatedList items={entries}>
+      {pageItems => pageItems.map(({ row, event }) => (
+        <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
+          onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
+          <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
+          <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
+          <Text style={styles.label}>{recordStates[event.to]}</Text>
+          <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
+          {!!event.note && <Text style={styles.body}>{event.note}</Text>}
+        </Pressable>
+      ))}
+    </PaginatedList>
   </View>;
 }
 

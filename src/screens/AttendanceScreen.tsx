@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, Sc
 import { PageHeader } from '../components/PageHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
+import { TimeFields } from '../components/TimeFields';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -156,7 +157,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             onPress={() => void downloadAttendance()} />
         </View>
       </View>
-      {isAdmin && <CompanyAttendanceTable rows={companyRows} onEdit={setEdit} />}
+      {isAdmin && <CompanyAttendanceTable month={selectedMonth} rows={companyRows} onEdit={setEdit} />}
       {detail && <>
         <View style={styles.metrics}>
           <Metric label="Công thực tế" value={String(detail.summary.work)} inlineDetail={' / ' + detail.summary.standard + ' công chuẩn'} />
@@ -167,7 +168,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut}</Text></Text>
           </View>
         </View>
-        <PersonalAttendanceTable days={personalDays} dailyNotes={dailyNotes} />
+        <PersonalAttendanceTable month={selectedMonth} days={personalDays} dailyNotes={dailyNotes} />
       </>}
     </View>
     {isAdmin && edit && <AdjustmentEditor target={edit} email={email} onClose={() => setEdit(null)} />}
@@ -261,29 +262,14 @@ function Metric({ label, value, detail, inlineDetail, alertDetail }: {
   </View>;
 }
 
-const timeOptions = (count: number) => Array.from({ length: count }, (_, index) => {
-  const value = String(index).padStart(2, '0');
-  return { value, label: value };
-});
-const hourOptions = [{ value: '', label: 'Chọn giờ' }, ...timeOptions(24)];
-const minuteOptions = timeOptions(60);
-
 function AdjustmentTimeField({ label, value, disabled, onChange }: {
   label: string; value: string; disabled: boolean; onChange: (value: string) => void;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
-  const [hour = '', minute = ''] = value.split(':');
   return <View style={styles.scheduleDetails}>
     <Text style={ui.label}>{label}</Text>
-    <View style={styles.timeFields}>
-      <Dropdown label={label + ' · Giờ'} hideLabel value={hour} choices={hourOptions}
-        style={styles.timeField} disabled={disabled}
-        onChange={nextHour => onChange(nextHour ? nextHour + ':' + (minute || '00') : '')} />
-      <Dropdown label={label + ' · Phút'} hideLabel value={minute} choices={minuteOptions}
-        fallbackLabel="Chọn phút" style={styles.timeField} disabled={disabled || !hour}
-        onChange={nextMinute => onChange(hour + ':' + nextMinute)} />
-    </View>
+    <TimeFields label={label} value={value} disabled={disabled} onChange={onChange} />
   </View>;
 }
 
@@ -425,6 +411,4 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   editorCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   editorPanel: { width: '100%', maxWidth: 520, flexShrink: 1 },
   editorScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
-  timeFields: { flexDirection: 'row', gap: 8 },
-  timeField: { flex: 1, minWidth: 0 },
 }));

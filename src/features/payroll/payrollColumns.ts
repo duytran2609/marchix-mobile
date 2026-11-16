@@ -7,6 +7,8 @@ function recorded(value: number | undefined) {
   return value == null || !Number.isFinite(Number(value)) ? undefined : Number(value);
 }
 
+export const payrollDeductions = { label: 'Tạm ứng + khấu trừ', get: (pay: PayAmounts) => amount(pay.advance) + amount(pay.deduction) };
+
 export const payrollMetrics = [
   { label: 'Lương theo công', get: (pay: PayAmounts) => recorded(pay.salary) },
   { label: 'Phụ cấp + thưởng', get: (pay: PayAmounts) => {
@@ -17,7 +19,7 @@ export const payrollMetrics = [
   { label: 'Tổng thu nhập', get: (pay: PayAmounts) => recorded(pay.gross) },
   { label: 'BH người LĐ', get: (pay: PayAmounts) => recorded(pay.insEmp) },
   { label: 'Thuế TNCN', get: (pay: PayAmounts) => recorded(pay.pit) },
-  { label: 'Tạm ứng + khấu trừ', get: (pay: PayAmounts) => amount(pay.advance) + amount(pay.deduction) },
+  payrollDeductions,
   { label: 'Thực lĩnh', get: (pay: PayAmounts) => recorded(pay.net) },
   { label: 'BH + KPCĐ công ty', get: (pay: PayAmounts) => {
     const insurance = recorded(pay.insCo);

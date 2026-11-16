@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -17,6 +18,8 @@ import type { Cash, CashAccess, CashAction, CashType } from '../features/cash/ca
 import { exportCash } from '../features/cash/exportCash';
 import { cashFileLimit, cashFileList, prepareCashFiles } from '../features/cash/cashAttachments';
 import { CashProofs } from '../features/cash/CashProofs';
+import type { ProjectExpenseSeed } from '../features/projects/financeStore';
+import { projectExpenseCategories } from '../features/projects/projectExpenseCategories';
 import { watchProjects, type Project } from '../features/projects/projects';
 import { formatFileSize, pickTaskAttachments, type PickedAttachment } from '../features/tasks/taskAttachments';
 import { DateCalendarField } from '../features/tasks/CalendarDialog';
@@ -59,8 +62,9 @@ function Field({ label, value, onChange, limit = 250, numeric = false, placehold
   </View>;
 }
 
-function CashForm({ type, row, projects, ledger, approvers, access, operationLock, inPopup, onBack, onSaved }: {
+function CashForm({ type, row, seed, projects, ledger, approvers, access, operationLock, inPopup, onBack, onSaved }: {
   type: CashType; row?: Cash; projects: Project[]; ledger: Cash[] | null; approvers: Option[]; access: CashAccess;
+  seed?: ProjectExpenseSeed;
   operationLock?: { current: boolean };
   inPopup?: boolean;
   onBack: () => void; onSaved: (id: string, date: string) => void;
@@ -68,12 +72,16 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
   const styles = useScreenStyles();
   const local = useLocalStyles();
   const [values, setValues] = useState(() => ({
-    date: row?.date || todayInVietnam(), amount: row ? String(row.amount) : '', dueDate: row?.dueDate || '',
-    projectId: row?.projectId || '', note: row?.note || '', category: row?.category || '',
-    method: row?.method || 'Chuyển khoản', partyType: row?.partyType || 'Khác',
-    partyName: row?.partyName || '', invoiceRef: row?.invoiceRef || '', approver: '',
+    date: row?.date || todayInVietnam(), amount: row ? String(row.amount) : seed?.amount ? String(seed.amount) : '', dueDate: row?.dueDate || '',
+    projectId: row?.projectId || seed?.projectId || '', note: row?.note || seed?.name || '', category: row?.category || seed?.category || '',
+    method: row?.method || 'Chuyển khoản', partyType: row?.partyType || (seed ? 'Nhà cung cấp' : 'Khác'),
+    partyName: row?.partyName || '', invoiceRef: row?.invoiceRef || '', approver: '', budgetCode: seed?.code || '',
   }));
-  const [group, setGroup] = useState(() => Object.entries(categories[type]).find(([, list]) => list.includes(values.category))?.[0] || '');
+  const expenseProfile = seed?.expenseProfile ?? projects.find(project => project.id === values.projectId)?.expenseProfile;
+  const categoryGroups: Record<string, string[]> = type === 'chi' && (seed || row?.projectLinkLocked)
+    ? projectExpenseCategories(expenseProfile, row?.category || seed?.category) : categories[type];
+  const refund = seed?.refund || (row?.budgetFlow === 'depositReturn' || row?.budgetFlow === 'expenseRefund' ? row.budgetFlow : undefined);
+  const [group, setGroup] = useState(() => Object.entries(categoryGroups).find(([, list]) => list.includes(values.category))?.[0] || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<PickedAttachment[]>([]);
@@ -88,7 +96,6 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
     const state = cashStatus(item);
     return state === 'Đã chi' || (state === 'Chờ chi' && verifiedCash(item)) ? total + (Number(item.amount) || 0) : total;
   }, 0) : 0;
-  const categoryGroups: Record<string, string[]> = categories[type];
   async function pick() {
     if (lock.current) return;
     lock.current = true;
@@ -114,14 +121,20 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
     if (!validDate(values.date) || (values.dueDate && !validDate(values.dueDate))) return setError('Chọn ngày hợp lệ.');
     if (!values.note.trim() || !values.category) return setError('Nhập nội dung và chọn hạng mục.');
     if (type === 'chi' && values.method !== 'Chuyển khoản') return setError('Khoản chi phải dùng chuyển khoản.');
-    const { approver, ...draft } = values;
-    const fields = { ...draft, type, amount, note: draft.note.trim(), partyName: draft.partyName.trim(), invoiceRef: draft.invoiceRef.trim() };
+    const { approver, budgetCode, ...draft } = values;
+    const code = budgetCode.trim().toUpperCase();
+    if (code && !/^[A-Z0-9][A-Z0-9._-]{0,79}$/.test(code)) return setError('Mã khoản dự toán không hợp lệ.');
+    if (seed?.refund && !code) return setError('Khoản hoàn cần mã khoản dự toán gốc.');
+    const fields = { ...draft, type, amount, note: draft.note.trim(), partyName: draft.partyName.trim(), invoiceRef: draft.invoiceRef.trim(),
+      ...(seed && { budgetCode: code, budgetFlow: seed.refund ?? 'out' }),
+      ...(seed?.refund && { category: 'Thu khác' }) };
     lock.current = true;
     setBusy(true);
     try {
       const attachments = await prepareCashFiles(picked);
       if (row) await changeCash(row, 'edit', access, '', fields, attachments);
-      onSaved(row?.id ?? await createCash(fields, approver, access.email, attachments), fields.date);
+      onSaved(row?.id ?? await createCash(fields, approver, access.email, attachments,
+        seed && !seed.refund ? { expenseProfile: expenseProfile === 'fnb' ? 'fnb' : 'project' } : undefined), fields.date);
     } catch (cause) {
       setError(writeError(cause));
     } finally {
@@ -130,7 +143,7 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
     }
   }
   const projectPicker = <Picker label="Dự án" value={values.projectId} choices={[blank('Không gắn dự án'), ...projects]}
-    onChange={set('projectId')} disabled={row?.projectLinkLocked} style={type === 'thu' ? local.half : undefined} />;
+    onChange={set('projectId')} disabled={!!seed || !!refund || row?.projectLinkLocked} style={type === 'thu' ? local.half : undefined} />;
   const fields = <>
       <Text style={styles.muted}>{row ? 'Chỉ sửa được khi khoản còn chờ duyệt.'
         : 'Khoản mới sẽ ở trạng thái Chờ duyệt.'}</Text>
@@ -145,10 +158,11 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
           onChange={value => { setGroup(value); set('category')(''); }} />}
         <Picker required label="Hạng mục" value={values.category}
           choices={options(type === 'thu' ? categories.thu.Thu : categoryGroups[group] || [])} style={local.half}
-          placeholder={type === 'thu' ? 'Chọn hạng mục' : undefined} onChange={set('category')} disabled={type === 'chi' && !group} />
+          placeholder={type === 'thu' ? 'Chọn hạng mục' : undefined} onChange={set('category')} disabled={!!refund || (type === 'chi' && !group)} />
         {type === 'thu' && projectPicker}
       </View>
       {type === 'chi' && projectPicker}
+      {seed && <Field label="Mã khoản dự toán" value={values.budgetCode} onChange={set('budgetCode')} limit={80} />}
       {type === 'chi' && access.canReadCash && ledger && cap > 0 && committed + amount > cap &&
         <Text style={styles.error}>Khoản này sẽ vượt trần vốn dự án ({vnd.format(cap)}) nếu được duyệt.</Text>}
       <View style={local.pair}>
@@ -193,7 +207,9 @@ function CashForm({ type, row, projects, ledger, approvers, access, operationLoc
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={local.formKeyboard}>
         <View style={[styles.panel, local.formPanel]}>
           <View style={local.formHeader}>
-            <Text accessibilityRole="header" style={styles.heading}>Tạo đề nghị {type}</Text>
+            <Text accessibilityRole="header" style={styles.heading}>{seed
+              ? refund ? 'Đề nghị thu hoàn dự án' : 'Đề nghị chi dự án'
+              : 'Tạo đề nghị ' + type}</Text>
             <PopupCloseButton label="Đóng đề nghị" onPress={close} disabled={busy || picking} />
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={local.formBody}>
@@ -300,9 +316,9 @@ function CashDetail({ row, access, approvers, project, operationLock, onEdit }: 
   </View>;
 }
 
-const pageSize = 25;
-export function CashScreen({ access, initialCashId, onBackToReview }: {
-  access: CashAccess; initialCashId?: string; onBackToReview?: () => void;
+export function CashScreen({ access, initialCashId, projectExpense, onBackToReview, backLabel = 'Về Phê duyệt' }: {
+  access: CashAccess; initialCashId?: string; projectExpense?: ProjectExpenseSeed; onBackToReview?: () => void;
+  backLabel?: string;
 }) {
   const styles = useScreenStyles();
   const local = useLocalStyles();
@@ -319,10 +335,10 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const [project, setProject] = useState('');
-  const [limit, setLimit] = useState(pageSize);
   const [selected, setSelected] = useState(initialCashId ?? '');
   const [awaiting, setAwaiting] = useState('');
-  const [editor, setEditor] = useState<{ type: CashType; row?: Cash }>();
+  const [editor, setEditor] = useState<{ type: CashType; row?: Cash; seed?: ProjectExpenseSeed } | undefined>(
+    () => projectExpense ? { type: projectExpense.refund ? 'thu' : 'chi', seed: projectExpense } : undefined);
   const detailLock = useRef(false);
   const [exporting, setExporting] = useState(false);
   const { email, isAdmin, canReadCash, canReviewCash } = access;
@@ -357,14 +373,17 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
   }
   const editRow = editor?.row && selectedRow && canAct('edit', selectedRow, access) ? editor.row : undefined;
   function renderForm(kind: CashType, row?: Cash) {
-    return <CashForm type={kind} row={row} access={access} projects={projects} ledger={rows}
+    return <CashForm type={kind} row={row} seed={row ? undefined : editor?.seed} access={access} projects={projects} ledger={rows}
       approvers={approvers.filter(option => option.id !== email)}
       operationLock={row ? detailLock : undefined}
       inPopup={!!row}
-      onBack={() => setEditor(undefined)}
+      onBack={() => {
+        if (!row && projectExpense && onBackToReview) return onBackToReview();
+        setEditor(undefined);
+      }}
       onSaved={(id, date) => {
         if (!row) {
-          setAwaiting(id); setMonth(date.slice(0, 7)); setType(''); setStatus(''); setProject(''); setLimit(pageSize);
+          setAwaiting(id); setMonth(date.slice(0, 7)); setType(''); setStatus(''); setProject('');
         }
         setSelected(id); setEditor(undefined); toast('Đã lưu khoản thu chi.', 'success');
       }} />;
@@ -381,6 +400,7 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
       </> : !rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
         : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
     </View>;
+  if (projectExpense && editor && !editor.row) return renderForm(editor.type);
   return <>
     {!onBackToReview && <View style={styles.stack}>
       <PageHeader title="Thu chi" />
@@ -404,9 +424,9 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
             <Text accessibilityRole="header" style={styles.cardTitle}>Tổng quan</Text>
             <View style={local.pair}>
               <Picker label="Tháng" value={month} choices={[blank('Tất cả các tháng'), ...months]} style={local.half} highlightSelection
-                onChange={value => { setMonth(value); setLimit(pageSize); }} />
+                onChange={setMonth} />
               <Picker label="Dự án" value={project} choices={[blank('Tất cả dự án'), ...projects]} style={local.half} highlightSelection
-                onChange={value => { setProject(value); setLimit(pageSize); }} />
+                onChange={setProject} />
             </View>
             <View style={local.metrics}>
               {([
@@ -429,14 +449,15 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
             </View>
             <View style={local.pair}>
               <Picker label="Loại" value={type} choices={[blank('Thu và chi'), { id: 'thu', name: 'Chỉ khoản thu' }, { id: 'chi', name: 'Chỉ khoản chi' }]}
-                onChange={value => { setType(value); setLimit(pageSize); }} style={local.half} highlightSelection />
+                onChange={setType} style={local.half} highlightSelection />
               <Picker label="Trạng thái" value={status} choices={[blank('Mọi trạng thái'), ...options(cashStatuses)]}
-                onChange={value => { setStatus(value); setLimit(pageSize); }} style={local.half} highlightSelection />
+                onChange={setStatus} style={local.half} highlightSelection />
             </View>
             {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
               secondary onPress={() => void download()} disabled={exporting || !base.length} />}
             {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
-            {visible.slice(0, limit).map(row => <Pressable key={row.id} accessibilityRole="button"
+            <PaginatedList items={visible} initialSize={25} resetKey={JSON.stringify([month, project, type, status])}>
+            {pageItems => pageItems.map(row => <Pressable key={row.id} accessibilityRole="button"
               onPress={() => setSelected(row.id)}
               style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
               <ClickableCardHeader><Text style={styles.badge}>{cashStatus(row)}</Text></ClickableCardHeader>
@@ -451,7 +472,7 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
               ))}
               {row.projectId ? <Text style={local.entryTag}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
             </Pressable>)}
-            {visible.length > limit && <Button label="Xem thêm" secondary onPress={() => setLimit(n => n + pageSize)} />}
+            </PaginatedList>
           </View>
           <View style={styles.panel}>
             <Text accessibilityRole="header" style={styles.cardTitle}>Đã chi theo hạng mục</Text>
@@ -472,7 +493,7 @@ export function CashScreen({ access, initialCashId, onBackToReview }: {
               style={[local.formPanel, local.detailPopup]}>
               <View style={[local.formHeader, local.detailHeader]}>
                 <Text style={styles.cardTitle}>Chi tiết khoản thu chi</Text>
-                <PopupCloseButton label={onBackToReview ? "Về Phê duyệt" : "Đóng chi tiết khoản thu chi"} onPress={back} />
+                <PopupCloseButton label={onBackToReview ? backLabel : "Đóng chi tiết khoản thu chi"} onPress={back} />
               </View>
               <ScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
                 {onBackToReview && lookupError && <View style={styles.panel}>

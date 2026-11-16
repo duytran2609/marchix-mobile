@@ -13,6 +13,46 @@ async function openTasks(page: import('@playwright/test').Page) {
   await page.getByRole('dialog').getByRole('button', { name: 'Công việc', exact: true }).click();
 }
 
+test('Người giao trả lời trao đổi và người thực hiện thấy trích dẫn', async ({ page, browser }) => {
+  const sender = await browser.newPage({ ...devices['iPhone 13'] });
+  const task = 'Cập nhật hướng dẫn bàn giao';
+  const original = `Mình đã cập nhật hướng dẫn (${Date.now()}).`;
+  const reply = 'Bạn bổ sung ảnh minh họa nhé.';
+  try {
+    for (const view of [page, sender]) {
+      const reminder = view.getByRole('dialog', { name: /cần chú ý hôm nay/ });
+      await view.addLocatorHandler(reminder, () => reminder.getByRole('button', { name: 'Đã xem' }).click());
+    }
+    await Promise.all([page.goto(previewUrl), sender.goto(previewUrl)]);
+    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await sender.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click();
+    for (const view of [page, sender]) {
+      await openTasks(view);
+      await view.getByRole('button', { name: `Mở công việc: ${task}` }).click();
+      await view.getByRole('button', { name: 'Mô tả', exact: true }).click();
+      await expect(view.getByRole('heading', { name: 'Mô tả / Yêu cầu bàn giao' })).toBeVisible();
+      await expect(view.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeHidden();
+      await view.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
+    }
+    await page.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill(original);
+    await page.getByRole('button', { name: 'Gửi trao đổi' }).click();
+    const respond = sender.getByText(original, { exact: true }).locator('..')
+      .getByRole('button', { name: 'Trả lời trao đổi của Nhân viên demo' });
+    await respond.click();
+    await expect(sender.getByText('Trả lời Nhân viên demo', { exact: true })).toBeVisible();
+    await sender.getByRole('button', { name: 'Hủy trả lời' }).click();
+    await expect(sender.getByRole('button', { name: 'Gửi trả lời' })).toHaveCount(0);
+    await respond.click();
+    await sender.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill(reply);
+    await sender.getByRole('button', { name: 'Gửi trả lời' }).click();
+    await expect(page.getByText(reply, { exact: true })).toBeVisible();
+    await expect(page.getByText('Trả lời Nhân viên demo', { exact: true })).toBeVisible();
+    await expect(page.getByText(original, { exact: true })).toHaveCount(2);
+  } finally {
+    await sender.close();
+  }
+});
+
 test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặc theo dõi', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(previewUrl);
@@ -37,7 +77,6 @@ test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặ
   await page.getByRole('button', { name: 'Về sổ văn thư' }).click();
   await page.getByLabel('Tìm văn bản', { exact: true }).clear();
   await page.getByRole('button', { name: 'Văn bản đi', exact: true }).click();
-  await page.getByRole('button', { name: 'Đang theo dõi (1)', exact: true }).click();
   await expect(page.getByRole('button', { name: /Quyết định phân công phụ trách dự án/ })).toBeVisible();
 });
 
@@ -112,13 +151,18 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await hours.fill('1.25');
     await expect(hours).toHaveValue('1.25');
     const taskTitle = 'Kiểm tra giao diện trên điện thoại';
-    const taskChoice = popup.getByRole('checkbox', { name: taskTitle });
+    await popup.getByRole('button', { name: /^Công việc phụ trách:/ }).click();
+    const taskDropdown = page.getByRole('dialog', { name: 'Công việc phụ trách', exact: true });
+    const taskChoice = taskDropdown.getByRole('checkbox', { name: taskTitle });
     await expect(taskChoice).toHaveText(taskTitle);
     await taskChoice.click();
-    await popup.getByLabel('Tìm công việc phụ trách').fill('cap nhat');
-    await popup.getByRole('checkbox', { name: 'Cập nhật hướng dẫn bàn giao' }).click();
+    await taskDropdown.getByLabel('Tìm công việc phụ trách').fill('cap nhat');
+    await taskDropdown.getByRole('checkbox', { name: 'Cập nhật hướng dẫn bàn giao' }).click();
+    await expect(taskDropdown.getByRole('button', { name: 'Bỏ chọn ' + taskTitle })).toBeVisible();
+    await taskDropdown.getByRole('button', { name: 'Xong' }).click();
     await expect(popup.getByText('Công việc phụ trách · Đã chọn 2')).toBeVisible();
-    await expect(popup.getByRole('button', { name: 'Bỏ chọn ' + taskTitle })).toBeVisible();
+    await expect(popup.getByRole('button', { name: /^Công việc phụ trách:/ }))
+      .toHaveAccessibleName(`Công việc phụ trách: ${taskTitle}, Cập nhật hướng dẫn bàn giao`);
     const overtimeReason = 'Làm thêm kiểm thử ' + Date.now();
     await popup.getByLabel('Lý do làm thêm giờ').fill(overtimeReason);
     await popup.getByRole('button', { name: 'Gửi đơn' }).click();
@@ -131,11 +175,8 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await page.getByTestId(`request-${overtimeId}`).click();
     await expect(page.getByText('Công việc phụ trách · Đã chọn 2')).toBeVisible();
     await expect(page.getByText(/^Người tạo ·/)).toHaveCount(0);
-    await page.getByRole('button', { name: 'Xóa đơn', exact: true }).click();
-    const deletePopup = page.getByRole('alertdialog', { name: 'Xác nhận xóa đơn' });
-    await expect(deletePopup.getByRole('button', { name: 'Hủy' })).toBeFocused();
-    await deletePopup.getByRole('button', { name: 'Hủy' }).click();
-    await expect(deletePopup).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Chi tiết đơn' })
+      .getByRole('button', { name: /^Xóa đơn/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Chi tiết đơn' })).toBeVisible();
     await page.getByRole('button', { name: 'Đóng đơn' }).click();
     await page.getByRole('button', { name: '+ Tạo đơn' }).click();
@@ -530,7 +571,7 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(overview).toContainText('Rủi ro / cần quyết định: Xác nhận luồng đăng nhập trên thiết bị thật.');
   await expect(overview).toContainText('Mô tả ngắn: Dữ liệu thử nghiệm.');
   const tabs = profile.getByRole('tablist').getByRole('tab');
-  await expect(tabs).toHaveCount(3);
+  await expect(tabs).toHaveCount(4);
   const positions = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
   expect(new Set(positions).size).toBe(1);
   await expect(page.getByRole('button', { name: '+ Thêm dự án' })).toHaveCount(0);
@@ -944,6 +985,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await page.getByRole('button', { name: '+ Thêm khoản chi' }).click();
     const expensePopup = page.getByRole('dialog', { name: 'Thêm khoản chi', exact: true });
     await expensePopup.getByRole('textbox', { name: 'Tên khoản chi' }).fill(expenseName);
+    await expensePopup.getByRole('textbox', { name: 'Tên đối tượng' }).fill('Nhà cung cấp kiểm thử');
     await expensePopup.getByRole('textbox', { name: 'Số tiền / tháng' }).fill('85000');
     await expensePopup.getByRole('button', { name: 'Lưu cài đặt' }).click();
     await expect(expensePopup).toBeHidden();
@@ -952,7 +994,15 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const { documents: recurring } = await (await fetch(`${base}/recurring`, { headers })).json();
     recurringId = recurring.find((item: { fields: { name: { stringValue: string } } }) =>
       item.fields.name.stringValue === expenseName).name.split('/').at(-1);
-    const total = page.getByText(/^Tổng chi phí cố định tháng:/);
+    const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
+    const expenseRow = expenseTable.getByRole('row').filter({ has: deleteExpense });
+    await expect(expenseRow.getByRole('cell', { name: 'Nhà cung cấp kiểm thử' })).toBeVisible();
+    await expect(expenseRow.getByRole('cell', { name: 'Đang áp dụng' })).toBeVisible();
+    await expenseRow.getByRole('button', { name: `Sửa khoản chi ${expenseName}` }).click();
+    const editExpense = page.getByRole('dialog', { name: 'Chỉnh sửa khoản chi cố định' });
+    await expect(editExpense.getByRole('textbox', { name: 'Tên khoản chi' })).toHaveValue(expenseName);
+    await editExpense.getByRole('button', { name: 'Hủy', exact: true }).click();
+    const total = expenseTable.getByRole('row').filter({ hasText: 'Tổng chi phí cố định / tháng' });
     const totalBeforeDelete = await total.textContent();
     await deleteExpense.click();
     const confirm = page.getByRole('alertdialog', { name: 'Xác nhận xóa khoản chi cố định' });
@@ -1061,6 +1111,15 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
   }
 });
 
+test('Quản trị viên xem và mở được công việc của thành viên khác', async ({ page }) => {
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+  await openTasks(page);
+  const title = 'Việc riêng của đồng nghiệp';
+  await page.getByRole('button', { name: `Mở công việc: ${title}` }).click();
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+});
+
 test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết', async ({ page }) => {
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
@@ -1115,6 +1174,21 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await expect(search).toHaveValue('');
   await expect(status).toHaveAccessibleName('Trạng thái: Tất cả');
   await expect(assignee).toHaveAccessibleName('Người thực hiện: Tất cả');
+
+  await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
+  const category = page.getByRole('button', { name: /^Hạng mục:/ });
+  const projectCard = page.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại' });
+  await category.click();
+  await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
+  await expect(projectCard).toBeVisible();
+  await expect(card).toHaveCount(0);
+  await category.click();
+  await page.getByRole('radio', { name: 'Chung toàn công ty', exact: true }).click();
+  await expect(card).toBeVisible();
+  await expect(projectCard).toHaveCount(0);
+  await page.getByRole('button', { name: 'Xóa bộ lọc' }).click();
+  await expect(category).toHaveAccessibleName('Hạng mục: Tất cả');
+  await expect(projectCard).toBeVisible();
 });
 
 test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm ứng', async ({ context, page }) => {
@@ -1188,6 +1262,10 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
   let assignmentTime = '';
   try {
     const receiverPage = await receiver.newPage();
+    for (const view of [page, receiverPage]) {
+      const reminder = view.getByRole('dialog', { name: /cần chú ý hôm nay/ });
+      await view.addLocatorHandler(reminder, () => reminder.getByRole('button', { name: 'Đã xem' }).click());
+    }
     await Promise.all([page.goto(previewUrl), receiverPage.goto(previewUrl)]);
     await Promise.all([
       page.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click(),
@@ -1284,7 +1362,20 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await watcherPicker.getByRole('button', { name: 'Xong', exact: true }).click();
     await form.getByRole('textbox', { name: 'Tên việc con' }).fill('Kiểm tra trước khi bàn giao');
     await form.getByRole('button', { name: '+ Thêm việc con' }).click();
-    await form.getByRole('textbox', { name: 'Mô tả / chỗ vướng' }).fill('Mô tả cho cả hai người thực hiện.');
+    const completionMode = form.getByRole('button', { name: /^Chế độ hoàn thành:/ });
+    const approverPicker = form.getByRole('button', { name: /^Người duyệt:/ });
+    await expect(completionMode).toHaveAccessibleName('Chế độ hoàn thành: Cần nghiệm thu');
+    await approverPicker.click();
+    await page.getByRole('dialog', { name: 'Người duyệt', exact: true })
+      .getByRole('checkbox', { name: 'Quản trị demo', exact: true }).click();
+    const completionBackground = await completionMode.evaluate(button => getComputedStyle(button).backgroundColor);
+    await completionMode.click();
+    await page.getByRole('radiogroup', { name: 'Chế độ hoàn thành' })
+      .getByRole('radio', { name: 'Chỉ báo cáo kết quả', exact: true }).click();
+    await expect(completionMode).toHaveAccessibleName('Chế độ hoàn thành: Chỉ báo cáo kết quả');
+    await expect(completionMode).toHaveCSS('background-color', completionBackground);
+    await expect(approverPicker).toHaveAccessibleName('Người duyệt: Quản trị demo');
+    await form.getByRole('textbox', { name: 'Mô tả / Yêu cầu bàn giao' }).fill('Mô tả cho cả hai người thực hiện.');
     await form.getByRole('textbox', { name: 'Lời nhắn khi giao việc' }).fill('Nhắn khi có vướng mắc.');
     const result = page.waitForResponse(response => response.url().endsWith('/createMobileTask') &&
       response.request().method() === 'POST');
@@ -1299,6 +1390,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
       const saved = await fetch(`${documents}/tasks/${id}`, { headers: ownerHeaders });
       expect(saved.ok).toBeTruthy();
       const { fields } = await saved.json();
+      expect(fields.requireReview.booleanValue).toBe(false);
+      expect(fields.approverEmail.stringValue).toBe('quantri@example.test');
       if (fields.assigneeEmail.stringValue === 'nhanvien@example.test') {
         const local = new Date(Date.parse(fields.createdAt.stringValue) + 7 * 60 * 60 * 1000).toISOString();
         assignmentTime = `${local.slice(0, 10).split('-').reverse().join('/')} ${local.slice(11, 16)}`;
@@ -1333,6 +1426,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(page.getByRole('button', { name: 'Lưu tiến độ' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Nội dung trao đổi' })).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     const senderDownloadEvent = page.waitForEvent('download');
     await page.getByRole('button', { name: `Tải tệp ${attachment.name}` }).click();
     const senderDownload = await senderDownloadEvent;
@@ -1370,7 +1464,9 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await receiverPage.getByRole('radio', { name: 'Chưa làm', exact: true }).click();
     await expect(progressBlock.getByText('Chưa làm', { exact: true })).toBeVisible();
     await expect(receiverPage.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).not.toBeChecked();
+    await receiverPage.getByRole('button', { name: 'Mô tả', exact: true }).click();
     await expect(receiverPage.getByText('Mô tả cho cả hai người thực hiện.')).toBeVisible();
+    await receiverPage.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     await expect(receiverPage.getByText('Nhắn khi có vướng mắc.')).toBeVisible();
     await expect(receiverPage.getByText('Lời nhắn khi giao việc', { exact: true })).toBeVisible();
     const discussion = receiverPage.getByRole('heading', { name: 'Trao đổi', exact: true }).locator('../..');
@@ -1397,6 +1493,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     });
     expect(unauthorized.status()).toBe(403);
 
+    await receiverPage.getByRole('button', { name: 'Chung', exact: true }).click();
     const checked = receiverPage.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' });
     const checkRequest = receiverPage.waitForResponse(response => response.url().endsWith('/setTaskChecklistItem') &&
       response.request().method() === 'POST');
@@ -1424,7 +1521,9 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await editTitle.fill(updatedTitle);
     await editForm.getByRole('radio', { name: 'Thấp', exact: true }).click();
     await editForm.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
-    await expect(editForm.getByRole('textbox', { name: 'Mô tả / chỗ vướng' })).toHaveValue('Mô tả cho cả hai người thực hiện.');
+    await expect(editForm.getByRole('button', { name: 'Chế độ hoàn thành: Chỉ báo cáo kết quả' })).toBeVisible();
+    await expect(editForm.getByRole('button', { name: 'Người duyệt: Quản trị demo' })).toBeVisible();
+    await expect(editForm.getByRole('textbox', { name: 'Mô tả / Yêu cầu bàn giao' })).toHaveValue('Mô tả cho cả hai người thực hiện.');
     await editForm.getByRole('textbox', { name: 'Lời nhắn khi giao việc' }).fill('Lời nhắn đã chỉnh sửa.');
     await editForm.getByRole('textbox', { name: 'Tên việc con', exact: true }).fill('Mục mới sau khi sửa');
     await editForm.getByRole('button', { name: 'Thông tin chính', exact: true }).click();
@@ -1443,9 +1542,11 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(metadataValue('Hạn chót', newDeadline)).toBeVisible();
     await expect(metadataValue('Mức độ ưu tiên', 'Thấp')).toBeVisible();
     await expect(metadataValue('Hạng mục', 'Nghiệm thu')).toBeVisible();
+    await receiverPage.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     await expect(receiverPage.getByText('Lời nhắn đã chỉnh sửa.')).toBeVisible();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
     await expect(receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` })).toBeVisible();
+    await receiverPage.getByRole('button', { name: 'Chung', exact: true }).click();
     await expect(checked).toBeChecked();
     await expect(receiverPage.getByRole('checkbox', { name: 'Mục mới sau khi sửa' })).not.toBeChecked();
 

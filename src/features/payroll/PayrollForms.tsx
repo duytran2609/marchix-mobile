@@ -8,14 +8,24 @@ import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
 import { amount, calculatePay, contracts, employeeStatuses, emptyEmployee, locked, money } from './payroll';
-import type { Employee, EmployeeFields, PayAmounts, PayInputs, Payslip, Rates } from './payroll';
-import { payrollMetrics, payrollMoney, payrollWork } from './payrollColumns';
+import type { Employee, EmployeeFields, PayAmounts, PayInputs, PayrollAdvance, Payslip, Rates } from './payroll';
+import { payrollDeductions, payrollMetrics, payrollMoney, payrollWork } from './payrollColumns';
 
-export function PayBreakdown({ pay }: { pay: PayAmounts }) {
+export function PayBreakdown({ pay, advances, onOpenAdvance }: {
+  pay: PayAmounts; advances?: PayrollAdvance[]; onOpenAdvance: (requestId: string) => void;
+}) {
   const styles = useScreenStyles();
   return <View style={styles.stack}>
     <PayMetric label="Công" value={payrollWork(pay)} />
-    {payrollMetrics.map(({ label, get }) => <PayMetric key={label} label={label} value={payrollMoney(get(pay))} />)}
+    {payrollMetrics.map(metric => metric === payrollDeductions ? <View key={metric.label} style={styles.stack}>
+      <PayMetric label="Tạm ứng lương" value={payrollMoney(amount(pay.advance))} />
+      {advances?.map(advance => <Button key={advance.requestId} secondary
+        label={`Xem đơn tạm ứng: ${advance.reason || advance.requestId} · ${money(advance.amount)}`}
+        onPress={() => onOpenAdvance(advance.requestId)} />)}
+      {!advances?.length && amount(pay.advance) > 0 &&
+        <Text style={styles.muted}>Phiếu này chưa lưu chi tiết đơn tạm ứng.</Text>}
+      <PayMetric label="Khấu trừ khác" value={payrollMoney(amount(pay.deduction))} />
+    </View> : <PayMetric key={metric.label} label={metric.label} value={payrollMoney(metric.get(pay))} />)}
   </View>;
 }
 
@@ -146,9 +156,10 @@ export function EmployeeForm({ employee, busy, onSave }: {
   </>;
 }
 
-export function PayEditor({ employee, month, rates, advance, slip, pay, busy, onSave, onReopen }: {
-  employee: Employee; month: string; rates: Rates; advance: number; slip?: Payslip; pay: PayAmounts;
+export function PayEditor({ employee, month, rates, advances, slip, pay, busy, onSave, onReopen, onOpenAdvance }: {
+  employee: Employee; month: string; rates: Rates; advances?: PayrollAdvance[]; slip?: Payslip; pay: PayAmounts;
   busy: boolean; onSave: (input: PayInputs) => void; onReopen: () => void;
+  onOpenAdvance: (requestId: string) => void;
 }) {
   const styles = useScreenStyles();
   const [input, setInput] = useState(() => Object.fromEntries(payFields.map(([key]) => [key, String(amount(pay[key]))])));
@@ -161,15 +172,14 @@ export function PayEditor({ employee, month, rates, advance, slip, pay, busy, on
     && values.workDays <= 31 && values.standardDays > 0 && values.standardDays <= 31
     && [input.bonus, input.deduction].every(value => /^\d*$/.test(value) && Number.isSafeInteger(Number(value)));
   const isLocked = locked(slip);
-  const preview = !isLocked && valid ? calculatePay(employee, values, month, rates, advance) : pay;
+  const preview = !isLocked && valid ? calculatePay(employee, values, month, rates, pay.advance) : pay;
   return <>
     <Text style={styles.badge}>{slip?.status || 'Nháp'}</Text>
     {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
       required={key === 'workDays' || key === 'standardDays'}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
-    <PayBreakdown pay={preview} />
+    <PayBreakdown pay={preview} advances={advances} onOpenAdvance={onOpenAdvance} />
     <Text style={styles.muted}><Text style={styles.metadataLabel}>Thu nhập tính thuế: </Text>{money(preview.taxable)}</Text>
-    <Text style={styles.muted}><Text style={styles.metadataLabel}>Tạm ứng đã duyệt: </Text>{money(preview.advance)}</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
       : <Button label="Lưu dòng lương" disabled={busy} onPress={() => {

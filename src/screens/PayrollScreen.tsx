@@ -1,3 +1,4 @@
+import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
@@ -6,14 +7,14 @@ import { Dropdown } from '../components/Dropdown';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { useToast } from '../components/Toast';
 import { EmployeeForm, PayBreakdown, PayEditor, PayrollModal } from '../features/payroll/PayrollForms';
-import { PayrollTable } from '../features/payroll/PayrollTable';
+import { EmployeeTable, PayrollTable } from '../features/payroll/PayrollTable';
 import { exportPayroll, exportPayslip } from '../features/payroll/exportPayroll';
-import { amount, calculatePay, locked, money, monthLabel } from '../features/payroll/payroll';
+import { amount, calculatePay, locked, money, monthLabel, recordedAdvanceRequests } from '../features/payroll/payroll';
 import type { PayrollRow } from '../features/payroll/payrollColumns';
-import { approvedAdvance, confirmOwnPayslip, createPayrollExpenses, importAttendance, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
+import { approvedAdvanceRequests, confirmOwnPayslip, createPayrollExpenses, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
 import type { Payslip } from '../features/payroll/payroll';
 import type { PayrollData } from '../features/payroll/payrollStore';
-import { formatTaskDate, todayInVietnam } from '../features/tasks/taskDates';
+import { todayInVietnam } from '../features/tasks/taskDates';
 import { useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
@@ -29,7 +30,10 @@ const monthsOfYear = Array.from({ length: 12 }, (_, index) => {
   return { value, label: 'Tháng ' + value };
 });
 
-export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: boolean }) {
+export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
+  email: string; isAdmin: boolean; initialMonth?: string;
+  onOpenAdvance: (requestId: string, month: string) => void;
+}) {
   const styles = useScreenStyles();
   const { colors } = useTheme();
   const showToast = useToast();
@@ -37,9 +41,9 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
   const currentMonth = todayInVietnam().slice(0, 7);
-  const [selectedPeriod, setMonth] = useState<string>();
+  const [selectedPeriod, setMonth] = useState(initialMonth);
   const month = selectedPeriod ?? currentMonth;
-  const [historyMonth, setHistoryMonth] = useState<string>();
+  const [historyMonth, setHistoryMonth] = useState(initialMonth);
   const [section, setSection] = useState<'payroll' | 'employees'>('payroll');
   const [editor, setEditor] = useState<Editor>();
   const [confirmation, setConfirmation] = useState<Confirmation>();
@@ -112,19 +116,22 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
       {!data.slips.length && <View style={styles.panel}><Text style={styles.muted}>Chưa có phiếu lương nào được chốt.</Text></View>}
       {selectedMonth && <Dropdown label="Chọn tháng" value={selectedMonth} onChange={setHistoryMonth}
         choices={months.map(value => ({ value, label: monthLabel(value) }))} />}
-      {data.slips.filter(slip => slip.month === selectedMonth).map(slip => <View key={slip.id} style={styles.panel}>
-        <View style={styles.listHeader}>
-          <Text style={styles.cardTitle}>Tháng {monthLabel(slip.month)}</Text>
-          <Text style={styles.badge}>{slip.status}</Text>
-        </View>
-        <Text style={styles.label}>{slip.name}</Text>
-        <PayBreakdown pay={slip} />
-        {slip.status === 'Đã chốt' && (slip.employeeConfirmedAt
-          ? <Text style={styles.badge}>Bạn đã xác nhận</Text>
-          : <Button label="Xác nhận phiếu lương" disabled={busy} onPress={() => reviewSlip(slip)} />)}
-        <Button label="Xuất phiếu lương" secondary disabled={busy}
-          onPress={() => downloadSlip(slip.month, { name: slip.name, pay: slip, status: slip.status })} />
-      </View>)}
+      <PaginatedList items={data.slips.filter(slip => slip.month === selectedMonth)} resetKey={selectedMonth}>
+        {pageItems => pageItems.map(slip => <View key={slip.id} style={styles.panel}>
+          <View style={styles.listHeader}>
+            <Text style={styles.cardTitle}>Tháng {monthLabel(slip.month)}</Text>
+            <Text style={styles.badge}>{slip.status}</Text>
+          </View>
+          <Text style={styles.label}>{slip.name}</Text>
+          <PayBreakdown pay={slip} advances={recordedAdvanceRequests(slip)}
+            onOpenAdvance={id => onOpenAdvance(id, slip.month)} />
+          {slip.status === 'Đã chốt' && (slip.employeeConfirmedAt
+            ? <Text style={styles.badge}>Bạn đã xác nhận</Text>
+            : <Button label="Xác nhận phiếu lương" disabled={busy} onPress={() => reviewSlip(slip)} />)}
+          <Button label="Xuất phiếu lương" secondary disabled={busy}
+            onPress={() => downloadSlip(slip.month, { name: slip.name, pay: slip, status: slip.status })} />
+        </View>)}
+      </PaginatedList>
       {confirmationDialog}
     </View>;
   }
@@ -135,9 +142,12 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
   const byEmployee = new Map(monthly.map(slip => [slip.empId, slip]));
   const rows = active.map(employee => {
     const slip = byEmployee.get(employee.id);
-    const advance = approvedAdvance(requests, employee.email, month);
-    const pay = slip && locked(slip) ? slip : calculatePay(employee, slip ?? {}, month, rates, advance);
-    return { employee, slip, pay, advance, name: employee.name, status: slip?.status || 'Nháp' };
+    if (slip && locked(slip)) {
+      return { employee, slip, pay: slip, advances: recordedAdvanceRequests(slip), name: employee.name, status: slip.status };
+    }
+    const advances = approvedAdvanceRequests(requests, employee.email, month);
+    const pay = calculatePay(employee, slip ?? {}, month, rates, advances.reduce((sum, entry) => sum + entry.amount, 0));
+    return { employee, slip, pay, advances, name: employee.name, status: 'Nháp' };
   });
   const employee = employees.find(item => item.id === editor?.id);
   const selected = rows.find(row => row.employee.id === editor?.id);
@@ -148,7 +158,6 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
     })),
     ...historical.map(slip => ({ id: slip.id, name: slip.name, pay: slip, status: slip.status })),
   ];
-  const recordedRows = displayRows.filter(row => 'slip' in row ? Boolean(row.slip) : true);
   const unpaid = monthly.filter(slip => slip.status !== 'Đã trả');
   const canRequestPayment = unpaid.length > 0 && unpaid.every(slip => slip.status === 'Đã chốt' && slip.employeeConfirmedAt);
   const total = (key: 'gross' | 'net' | 'companyCost') => money(displayRows.reduce((sum, row) => sum + amount(row.pay[key]), 0));
@@ -168,30 +177,10 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
       onChange={value => { setError(''); setSection(value); }} />
     {section === 'employees' ? <>
       <Button label="+ Thêm nhân sự" onPress={() => { setError(''); setEditor({ kind: 'employee' }); }} />
-      {!employees.length && <View style={styles.panel}><Text style={styles.muted}>Chưa có hồ sơ nhân sự.</Text></View>}
-      {employees.map(item => <View key={item.id} style={styles.panel}>
-        <View style={styles.listHeader}>
-          <Text style={[styles.cardTitle, styles.listHeading]}>{item.name}</Text>
-          <Text style={styles.badge}>{item.status || 'Đang làm'}</Text>
-        </View>
-        <View style={{ gap: 4 }}>
-          {[
-            ['Email', item.email],
-            ['Chức danh', item.position],
-            ['Loại hợp đồng', item.contract],
-            ['Ngày vào làm', item.startDate && formatTaskDate(item.startDate)],
-            ['Mã số thuế cá nhân', item.taxCode],
-            ['Lương thỏa thuận', money(item.salary)],
-            ['Mức lương đóng BHXH', money(item.insSalary)],
-            ['Phụ cấp chịu thuế', money(item.allowTaxable)],
-            ['Phụ cấp miễn thuế', money(item.allowFree)],
-            ['Người phụ thuộc', amount(item.dependents)],
-          ].map(([field, value]) => <Text key={field} style={[styles.muted, { lineHeight: 23 }]}>
-            <Text style={[styles.metadataLabel, { fontSize: 16, fontWeight: '700' }]}>{field}: </Text>{value === '' || value == null ? '—' : value}
-          </Text>)}
-        </View>
-        <Button label={'Sửa hồ sơ ' + item.name} secondary onPress={() => { setError(''); setEditor({ kind: 'employee', id: item.id }); }} />
-      </View>)}
+      {employees.length ? <>
+        <Text style={styles.muted}>Vuốt ngang để xem đủ các cột. Chạm vào họ tên để sửa hồ sơ.</Text>
+        <EmployeeTable employees={employees} onEdit={id => { setError(''); setEditor({ kind: 'employee', id }); }} />
+      </> : <View style={styles.panel}><Text style={styles.muted}>Chưa có hồ sơ nhân sự.</Text></View>}
     </> : <>
       <View style={styles.panel}>
         <View style={styles.listHeader}>
@@ -208,15 +197,7 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
           <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng thu nhập: </Text>{total('gross')}</Text>
           <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng chi phí: </Text>{total('companyCost')}</Text>
         </>}
-        {hasDraft && <>
-          <Button label="Lấy ngày công từ Chấm công" secondary disabled={busy} onPress={() => {
-            setError('');
-            setConfirmation({ title: 'Lấy ngày công', message: 'Cập nhật ngày công cho các dòng nháp kỳ ' + label + ' từ chấm công, nghỉ phép và công tác đã duyệt.',
-              submit: () => void run(async () => {
-                const result = await importAttendance(email, month, active.filter(item => !locked(byEmployee.get(item.id))), data);
-                return 'Đã cập nhật ' + result.count + ' dòng.' + (result.skipped.length ? ' Bỏ qua ' + result.skipped.join(', ') + '.' : '');
-              }) });
-          }} />
+        {hasDraft &&
           <Button label="Chốt bảng lương" disabled={busy} onPress={() => {
             setError('');
             setConfirmation({ title: 'Chốt bảng lương tháng ' + label,
@@ -224,7 +205,7 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
               confirmLabel: 'Xác nhận chốt',
               submit: () => void run(async () => 'Đã chốt ' + await writePayroll(email, month, active, data, 'lock') + ' dòng lương.') });
           }} />
-        </>}
+        }
         <Button label="Tạo đề nghị chi lương" secondary disabled={busy || !canRequestPayment}
           onPress={() => {
             setError('');
@@ -237,15 +218,15 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
         {!!unpaid.length && !canRequestPayment && <Text style={styles.muted}>
           Cần chốt bảng lương và đợi nhân viên xác nhận các phiếu chưa trả.
         </Text>}
-        {!!recordedRows.length && <Button label="Xuất bảng lương" secondary disabled={busy} onPress={() =>
-          void run(async () => {
-            if (await exportPayroll(month, recordedRows)) return 'Đã mở tệp xuất bảng lương.';
-          })} />}
         {!displayRows.length && <Text style={styles.muted}>Chưa có dòng lương trong kỳ này.</Text>}
       </View>
       {!!displayRows.length && <>
         <Text style={styles.muted}>Vuốt ngang để xem đủ các cột. Chạm vào họ tên để mở dòng lương.</Text>
-        <PayrollTable rows={displayRows} />
+        <PayrollTable month={month} rows={displayRows} />
+        <Button label="Xuất Excel" secondary disabled={busy} onPress={() =>
+          void run(async () => {
+            if (await exportPayroll(month, displayRows)) return 'Đã mở tệp xuất bảng lương.';
+          })} />
       </>}
     </>}
     {!!error && !editor && !confirmation && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
@@ -254,7 +235,8 @@ export function PayrollScreen({ email, isAdmin }: { email: string; isAdmin: bool
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {editor.kind === 'employee' ? <EmployeeForm employee={employee} busy={busy} onSave={fields =>
         void run(async () => { await saveEmployee(email, fields, editor.id); return 'Đã lưu hồ sơ nhân sự.'; }, true)} />
-      : selected && <><PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advance={selected.advance}
+      : selected && <><PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advances={selected.advances}
+        onOpenAdvance={id => onOpenAdvance(id, month)}
         slip={selected.slip} busy={busy} onSave={input => void run(async () => {
           await writePayroll(email, month, [selected.employee], data, 'save', new Map([[selected.employee.id, input]]));
           return 'Đã lưu dòng lương.';

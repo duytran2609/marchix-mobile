@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../components/PaginatedList';
 import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ClickableCardHeader } from '../../components/CardChevron';
@@ -12,7 +13,7 @@ import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
 import { searchByName } from '../../utils/search';
 import { listTaskAssignees, taskPriorities, taskStatuses } from './tasks';
-import type { Task, TaskAssignee } from './tasks';
+import type { AssignmentProject, Task, TaskAssignee } from './tasks';
 import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 
@@ -24,8 +25,12 @@ type TaskFilter = typeof taskFilters[number];
 type PriorityFilter = typeof priorityFilters[number];
 type TaskView = 'list' | 'kanban' | 'gantt';
 
-export type TaskBoardOptions = { search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; view: TaskView };
-export const initialTaskBoardOptions: TaskBoardOptions = { search: '', filter: 'Tất cả', assignee: '', priority: '', view: 'list' };
+export type TaskBoardOptions = {
+  search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; project: string | null; view: TaskView;
+};
+export const initialTaskBoardOptions: TaskBoardOptions = {
+  search: '', filter: 'Tất cả', assignee: '', priority: '', project: null, view: 'list',
+};
 
 function isOpenTask(task: Task) {
   return task.status !== 'Xong' && task.status !== 'Chờ duyệt';
@@ -104,15 +109,19 @@ const TaskCard = memo(function TaskCard({
   );
 });
 
-export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onDragChange }: {
+export function TaskBoard({ tasks, member, showTeamTasks = false, projects, options, onOptionsChange, onOpen, onDragChange }: {
   tasks: Task[]; member: { email: string; name: string };
+  showTeamTasks?: boolean;
+  projects?: AssignmentProject[];
   options: TaskBoardOptions; onOptionsChange: (options: TaskBoardOptions) => void;
   onOpen: (task: Task) => void;
   onDragChange: (dragging: boolean) => void;
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { search, filter, priority, view } = options;
+  const { search, filter, priority, project, view } = options;
+  const { width } = useWindowDimensions();
+  const filterField = [styles.filterField, projects && width < 600 && styles.halfFilterField];
   const [directory, setDirectory] = useState<{ email: string; members: Map<string, TaskAssignee> }>();
   const memberEmail = member.email;
   const needsDirectory = taskAssignmentEnabled && tasks.length > 0;
@@ -139,9 +148,13 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
       .sort((a, b) => a.label.localeCompare(b.label, 'vi')),
   ];
   const assignee = assigneeNames.has(options.assignee) ? options.assignee : '';
+  const projectNames = new Map(projects?.map(item => [item.id, item.name]));
+  const projectOptions = Array.from(new Set(tasks.map(task => task.projectId || '').filter(Boolean)), id => ({
+    value: id, label: projectNames.get(id) || id,
+  })).sort((a, b) => a.label.localeCompare(b.label, 'vi'));
   const scopedTasks = tasks.filter(task => (!assignee || assigneeKey(task) === assignee) &&
-    (!priority || (task.priority || 'Chưa đặt') === priority));
-  const { width } = useWindowDimensions();
+    (!priority || (task.priority || 'Chưa đặt') === priority) &&
+    (project === null || (task.projectId || '') === project));
   const today = todayInVietnam();
   const stats = [
     { label: 'Chưa xong', value: scopedTasks.filter(isOpenTask).length, tone: statusTone('Đang làm', colors) },
@@ -203,11 +216,16 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
           placeholderTextColor={colors.muted} style={styles.search} value={search} returnKeyType="search"
           onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <View style={styles.filterRow}>
-          <Dropdown style={styles.filterField} label="Trạng thái" menuLabel="Lọc theo trạng thái" fallbackLabel="Tất cả" value={filter} choices={statusOptions} onChange={selectFilter} />
-          <Dropdown style={styles.filterField} label="Người thực hiện" menuLabel="Lọc theo người thực hiện" fallbackLabel="Tất cả" value={assignee} choices={assigneeOptions} singleLineValue
+          <Dropdown style={filterField} label="Trạng thái" menuLabel="Lọc theo trạng thái" fallbackLabel="Tất cả" value={filter} choices={statusOptions} onChange={selectFilter} />
+          <Dropdown style={filterField} label="Người thực hiện" menuLabel="Lọc theo người thực hiện" fallbackLabel="Tất cả" value={assignee} choices={assigneeOptions} singleLineValue
             onChange={value => onOptionsChange({ ...options, assignee: value })} />
-          <Dropdown style={styles.filterField} label="Mức độ ưu tiên" menuLabel="Lọc theo mức độ ưu tiên" fallbackLabel="Tất cả" value={priority} choices={priorityOptions}
+          <Dropdown style={filterField} label="Mức độ ưu tiên" menuLabel="Lọc theo mức độ ưu tiên" fallbackLabel="Tất cả" value={priority} choices={priorityOptions}
             onChange={value => onOptionsChange({ ...options, priority: value })} />
+          {projects && <Dropdown style={filterField} label="Hạng mục" menuLabel="Lọc theo hạng mục"
+            value={project ?? 0}
+            choices={[{ value: 0, label: 'Tất cả' }, { value: '', label: 'Chung toàn công ty' }, ...projectOptions]}
+            fallbackLabel={project || 'Tất cả'}
+            onChange={value => onOptionsChange({ ...options, project: value === 0 ? null : value })} />}
         </View>
         <SegmentedButtons label="Kiểu xem công việc" value={view}
           choices={[{ value: 'list', label: 'Danh sách' }, { value: 'kanban', label: 'Bảng Kanban' },
@@ -216,15 +234,20 @@ export function TaskBoard({ tasks, member, options, onOptionsChange, onOpen, onD
       </View>
       <View style={styles.results}>
         <Text accessibilityRole="header" style={styles.resultTitle}>{visibleTasks.length} công việc</Text>
-        {search || filter !== 'Tất cả' || assignee || priority ? (
+        {search || filter !== 'Tất cả' || assignee || priority || project !== null ? (
           <Pressable accessibilityRole="button" onPress={() => onOptionsChange({ ...initialTaskBoardOptions, view })}
             style={styles.clearButton}><Text style={styles.activeLabel}>Xóa bộ lọc</Text></Pressable>
         ) : null}
       </View>
       {visibleTasks.length === 0 ? <View style={styles.card}>
-        <Text accessibilityLiveRegion="polite" style={styles.cardTitle}>{showNoMatch ? 'Không có việc phù hợp' : 'Chưa có công việc được giao'}</Text>
-        <Text style={styles.muted}>{showNoMatch ? 'Thử đổi từ khóa hoặc xóa bộ lọc.' : 'Việc mới sẽ xuất hiện ở đây khi được giao cho bạn.'}</Text>
-      </View> : view === 'list' ? visibleTasks.map(task => renderTaskCard(task, onOpen)) : view === 'gantt' ? (
+        <Text accessibilityLiveRegion="polite" style={styles.cardTitle}>
+          {showNoMatch ? 'Không có việc phù hợp' : showTeamTasks ? 'Chưa có công việc' : 'Chưa có công việc được giao'}
+        </Text>
+        {showNoMatch ? <Text style={styles.muted}>Thử đổi từ khóa hoặc xóa bộ lọc.</Text> :
+          !showTeamTasks ? <Text style={styles.muted}>Việc mới sẽ xuất hiện ở đây khi được giao cho bạn.</Text> : null}
+      </View> : view === 'list' ? <PaginatedList items={visibleTasks} resetKey={JSON.stringify(options)}>
+        {pageItems => pageItems.map(task => renderTaskCard(task, onOpen))}
+      </PaginatedList> : view === 'gantt' ? (
         <TaskGantt tasks={visibleTasks} today={today} onOpen={onOpen} />
       ) : (
         <TaskKanban columns={columns} columnWidth={Math.min(290, width * 0.74)} email={member.email}
@@ -246,8 +269,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   activeLabel: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   search: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
     color: colors.ink, fontSize: 16 },
-  filterRow: { flexDirection: 'row', gap: 6 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0 },
+  halfFilterField: { flexBasis: '45%' },
   results: { minHeight: 34, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
   clearButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },

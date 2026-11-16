@@ -65,12 +65,12 @@ if ((staging || pilot) && iosClientId) {
 module.exports = {
   name: pilot ? 'Quản lý Marchix Pilot' : staging ? 'Quản lý Marchix Staging' : 'Quản lý Marchix Demo',
   slug: 'marchix-mobile',
-  version: pilot ? '0.5.9' : '0.4.0',
+  version: pilot ? '0.6.0' : '0.4.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
   android: { package: id, ...(googleServicesFile ? { googleServicesFile } : {}),
-    ...(pilot ? { versionCode: 10, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
+    ...(pilot ? { versionCode: 11, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
   ios: { bundleIdentifier: id, supportsTablet: false },
   web: { favicon: './assets/favicon.png' },
   ...(easProjectId ? { extra: {

@@ -20,10 +20,22 @@ export type PayAmounts = PayInputs & {
   salary: number; gross: number; insEmp: number; insCo: number; kpcd: number;
   taxable: number; pit: number; advance: number; net: number; companyCost: number;
 };
+export type PayrollAdvance = { requestId: string; amount: number; reason: string };
 export type Payslip = PayAmounts & {
   id: string; month: string; empId: string; name: string; email: string; status: string;
   employeeConfirmedAt?: string; lockedAt?: string;
+  advanceDetails?: { lockedAt: string; requests: PayrollAdvance[] };
 };
+
+export function recordedAdvanceRequests(slip: Payslip) {
+  const details = slip.advanceDetails;
+  if (!slip.lockedAt || details?.lockedAt !== slip.lockedAt || !Array.isArray(details.requests)) return undefined;
+  const requests = details.requests;
+  if (!requests.every(row => row && typeof row.requestId === 'string' && row.requestId && !row.requestId.includes('/') &&
+      Number.isSafeInteger(row.amount) && row.amount > 0 && typeof row.reason === 'string') ||
+      requests.reduce((total, row) => total + row.amount, 0) !== slip.advance) return undefined;
+  return requests;
+}
 
 export const monthLabel = (month: string) => month.slice(5) + '/' + month.slice(0, 4);
 export const validMonth = (month: unknown): month is string => typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
