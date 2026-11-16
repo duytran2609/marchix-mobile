@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createThemedStyles } from '../../theme/theme';
 import { canAct, cashStatus, watchCash } from '../cash/cash';
@@ -10,32 +10,9 @@ import { editableStatus, watchTasks, watchTeamTasks } from '../tasks/tasks';
 import type { Task } from '../tasks/tasks';
 
 type ReminderRow = { id: string; text: string; overdue?: boolean };
-type ReminderAccess = CashAccess & { name: string; canReviewRequests: boolean };
-
-export function StartupReminder(access: ReminderAccess) {
-  const [visit, setVisit] = useState(0);
-  const [dismissedVisit, setDismissedVisit] = useState<number>();
-  useEffect(() => {
-    let backgrounded = AppState.currentState === 'background';
-    const subscription = AppState.addEventListener('change', state => {
-      if (state === 'background') backgrounded = true;
-      if (state === 'active' && backgrounded) {
-        backgrounded = false;
-        setVisit(value => value + 1);
-      }
-    });
-    return () => subscription?.remove();
-  }, []);
-
-  if (dismissedVisit === visit) return null;
-  const { email, isAdmin, canReadCash, canReviewCash, canReviewRequests } = access;
-  return <ReminderDialog key={JSON.stringify([visit, email, isAdmin, canReadCash, canReviewCash, canReviewRequests])}
-    {...access} onClose={() => setDismissedVisit(visit)} />;
-}
-
-function ReminderDialog({
+export function StartupReminder({
   name, email, isAdmin, canReadCash, canReviewCash, canReviewRequests, onClose,
-}: ReminderAccess & { onClose: () => void }) {
+}: CashAccess & { name: string; canReviewRequests: boolean; onClose: () => void }) {
   const styles = useStyles();
   const [rows, setRows] = useState<ReminderRow[] | null>(null);
   const loaded = rows !== null;
@@ -97,6 +74,10 @@ function ReminderDialog({
     }, () => { requests = 0; publish(); }) : undefined;
     return () => { stopTasks(); stopCash?.(); stopRequests?.(); };
   }, [email, isAdmin, canReadCash, canReviewCash, canReviewRequests, loaded]);
+
+  useEffect(() => {
+    if (rows?.length === 0) onClose();
+  }, [rows, onClose]);
 
   if (!rows?.length) return null;
   const title = `Chào ${name} — cần chú ý hôm nay`;

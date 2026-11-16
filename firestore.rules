@@ -34,11 +34,21 @@ service cloud.firestore {
 
     function validComment(comment) {
       return comment is map && comment.keys().hasAll(['by', 'at', 'text', 'files'])
-        && comment.keys().hasOnly(['by', 'at', 'text', 'files'])
+        && comment.keys().hasOnly(['by', 'at', 'text', 'files', 'replyTo'])
         && comment.by == email() && isoDate(comment.at)
         && comment.text is string && comment.text.size() <= 1000
         && comment.text.matches('(?s).*[^\\s].*')
         && comment.files == [];
+    }
+
+    // The index validates the target on append. Author and time identify it if the assignment message moves.
+    function validTaskReply(target, comments) {
+      return target is map && target.keys().hasAll(['index', 'by', 'at'])
+        && target.keys().hasOnly(['index', 'by', 'at'])
+        && target.index is int && target.index >= 0 && target.index < comments.size()
+        && target.by is string && target.by.size() > 0 && target.by.size() <= 320
+        && target.at is string && target.at.size() > 0 && target.at.size() <= 64
+        && comments[target.index].by == target.by && comments[target.index].at == target.at;
     }
 
     function appendsComment() {
@@ -47,7 +57,9 @@ service cloud.firestore {
       let count = before.size();
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments'])
         && before is list && after is list && after.size() == count + 1
-        && (count == 0 || after[0:count] == before) && validComment(after[count]);
+        && (count == 0 || after[0:count] == before) && validComment(after[count])
+        && ('replyTo' in after[count] ? validTaskReply(after[count].replyTo, before)
+          : resource.data.assigneeEmail == email());
     }
 
     match /members/{id} {
@@ -546,7 +558,7 @@ service cloud.firestore {
       }
 
       function requestOptionalFields() {
-        return ['trip', 'overtime'];
+        return ['trip', 'overtime', 'leaveTime'];
       }
 
       function validTrip(trip) {
@@ -587,6 +599,18 @@ service cloud.firestore {
         return value is string && (value == '' || value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
       }
 
+      function validLeaveClock(value) {
+        return value is string && value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+      }
+
+      function validLeaveTime(data) {
+        let time = data.leaveTime;
+        return data.type == 'Nghỉ phép' && data.from != '' && data.to != ''
+          && time is map && time.keys().hasOnly(['from', 'to'])
+          && validLeaveClock(time.from) && validLeaveClock(time.to)
+          && (data.from < data.to || time.from < time.to);
+      }
+
       function validRequestContent(data) {
         return data.keys().hasAll(requestContentFields())
           && data.type in ['Nghỉ phép', 'Tạm ứng lương', 'Công tác', 'Làm thêm giờ', 'Đề xuất khác']
@@ -598,6 +622,7 @@ service cloud.firestore {
           && (data.type != 'Tạm ứng lương' || (data.amount > 0 && data.month != ''))
           && (!('trip' in data) || validTrip(data.trip))
           && (!('overtime' in data) || validOvertime(data.overtime))
+          && (!('leaveTime' in data) || validLeaveTime(data))
           && data.reason is string && data.reason.size() <= 2000 && data.reason.matches('(?s).*[^\\s].*');
       }
 
@@ -1196,8 +1221,9 @@ service cloud.firestore {
           || (resource.data.get('checklist', []).size() == 0
             && request.resource.data.progress is int
             && request.resource.data.progress >= 0 && request.resource.data.progress <= 100));
-      allow update: if activeMember() && resource.data.assigneeEmail == email()
-        && resource.data.status != 'Xong' && appendsComment();
+      allow update: if activeMember() && resource.data.status != 'Xong'
+        && (resource.data.assigneeEmail == email() || resource.data.get('assignedBy', '') == email())
+        && appendsComment();
 
       function hasReviewGrant() {
         let profile = get(/databases/$(database)/documents/members/$(email())).data;

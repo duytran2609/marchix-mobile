@@ -8,7 +8,8 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { Dropdown } from '../components/Dropdown';
-import { SearchableChoiceDropdown, SearchableChoiceList } from '../components/SearchableChoiceList';
+import { TimeFields } from '../components/TimeFields';
+import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
@@ -38,14 +39,8 @@ const validDuration = (value: number) => value > 0 && value <= 366 && value % 0.
 const getMemberName = (email: string | undefined, members: Member[]) =>
   members.find(member => member.email === email)?.name || email || 'Chưa chỉ định';
 
-function requestPeriod(row: StaffRequest) {
-  if (row.type === 'Tạm ứng lương') return vnd.format(row.amount || 0);
-  if (row.type === 'Làm thêm giờ' && row.overtime) {
-    return displayDate(row.from) + ' · ' + row.overtime.hours.toLocaleString('vi-VN') + ' giờ';
-  }
-  return [displayDate(row.from) + (row.to && row.to !== row.from ? ' – ' + displayDate(row.to) : ''),
-    row.days ? row.days + ' ngày' : ''].filter(Boolean).join(' · ');
-}
+const displayRequestDate = (date: string, time?: string) =>
+  [time, displayDate(date)].filter(Boolean).join(' ');
 
 function RequestStatus({ status }: { status: string }) {
   const shared = useScreenStyles();
@@ -183,6 +178,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   const [type, setType] = useState(row?.type || requestTypes[0]);
   const [from, setFrom] = useState(row?.from || today);
   const [to, setTo] = useState(row?.to || row?.from || today);
+  const [fromTime, setFromTime] = useState(row?.leaveTime?.from ?? '');
+  const [toTime, setToTime] = useState(row?.leaveTime?.to ?? '');
   const [days, setDays] = useState(() => {
     if (row?.type === 'Đề xuất khác') return String(row.days ?? 1).replace('.', ',');
     const span = rangeDays(row?.from || today, row?.to || row?.from || today);
@@ -203,14 +200,14 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const editable = !row || canActOnRequest(row, 'edit', access);
   const canRoute = !!row && canActOnRequest(row, 'route', access);
   const canDecide = !!row && canActOnRequest(row, 'approve', access);
   const advance = type === 'Tạm ứng lương';
   const trip = type === 'Công tác';
   const overtime = type === 'Làm thêm giờ';
-  const range = type === 'Nghỉ phép' || trip;
+  const leave = type === 'Nghỉ phép';
+  const range = leave || trip;
   const eligibleTasks = (tasks ?? []).filter(item => item.assigneeEmail === access.email);
   const taskChoices = [
     ...eligibleTasks,
@@ -230,6 +227,11 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     if (advance && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Nhập tháng lương theo dạng YYYY-MM.');
     const result: RequestFields = { type, reason: reason.trim(), from, to: overtime ? from : to,
       days: advance || overtime ? 0 : duration, amount: advance ? money : 0, month };
+    if (leave && (fromTime || toTime)) {
+      if (!fromTime || !toTime) throw new Error('Chọn cả giờ bắt đầu và giờ kết thúc nghỉ phép.');
+      if (from === to && fromTime >= toTime) throw new Error('Giờ kết thúc phải sau giờ bắt đầu.');
+      result.leaveTime = { from: fromTime, to: toTime };
+    }
     if (trip) {
       if (!destination.trim()) throw new Error('Nhập địa điểm công tác.');
       result.trip = { destination: destination.trim(), host: host.trim(), estimatedCost: Number(cost) };
@@ -261,7 +263,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     if (range && validDuration(duration)) setTo(shiftDay(from, Math.ceil(duration) - 1));
   }
 
-  async function submit(action: RequestAction) {
+  async function submit(action: Exclude<RequestAction, 'delete'>) {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -277,7 +279,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
       });
       const messages = { edit: row ? 'Đã lưu đơn.' : 'Đã tạo đơn.', route: 'Đã lưu người duyệt.',
         approve: row?.type === 'Tạm ứng lương' ? 'Đã duyệt đơn và tạo đề nghị chi.' : 'Đã duyệt đơn.',
-        reject: 'Đã từ chối đơn.', delete: 'Đã xóa đơn.' };
+        reject: 'Đã từ chối đơn.' };
       toast(messages[action]);
       onClose();
     } catch (cause) {
@@ -302,6 +304,15 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function dateField(field: 'from' | 'to', label: string, value: string) {
+    if (leave) return <View style={styles.field}>
+      <FieldLabel style={shared.label} required>{label}</FieldLabel>
+      <View style={styles.leaveDateRow}>
+        <TimeFields label={label} value={field === 'from' ? fromTime : toTime} compact
+          disabled={busy} onChange={field === 'from' ? setFromTime : setToTime} />
+        <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
+          disabled={busy} style={styles.leaveDate} onChange={day => selectDate(field, day)} />
+      </View>
+    </View>;
     return <View style={styles.dateRow}>
       <FieldLabel style={[shared.label, styles.dateLabel]} required={range || overtime}>{label}</FieldLabel>
       <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
@@ -309,18 +320,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     </View>;
   }
 
-  const cancelDelete = () => {
-    setError('');
-    setConfirmDelete(false);
-  };
+  function detail(label: string, value: string) {
+    return <Text style={shared.body}><Text style={styles.detailLabel}>{label}: </Text>{value}</Text>;
+  }
 
-  return <Modal visible transparent animationType="fade" onRequestClose={() => {
-    if (confirmDelete && !busy) cancelDelete();
-    else if (!busy) onClose();
-  }}>
+  return <Modal visible transparent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
     <SafeAreaView style={styles.modal}>
-      <View role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal={!confirmDelete}
-        aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}
+      <View role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal
         style={[styles.popup, { width: Math.min(560, width - insets.left - insets.right - 32) }]}>
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.popupContent}>
@@ -330,7 +336,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             </View>
             {row && <>
               <RequestStatus status={row.status} />
-              {!!row.decidedBy && <Text style={shared.muted}>Người xử lý · {memberName(row.decidedBy)} · {displayDate(row.decidedAt)}</Text>}
+              {!!row.decidedBy && detail('Người xử lý', `${memberName(row.decidedBy)} · ${displayDate(row.decidedAt)}`)}
             </>}
             {editable ? <>
               <View style={styles.dateRow}>
@@ -360,8 +366,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                   <FieldLabel style={shared.label} required>Công việc phụ trách · Đã chọn {selectedTasks.length}</FieldLabel>
                   {tasksError ? <Button label="Tải lại công việc" secondary disabled={busy} onPress={onRetryTasks} />
                     : tasks === null && <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />}
-                  {(tasks !== null || taskChoices.length > 0) && <SearchableChoiceList
-                    showAvatar={false}
+                  {(tasks !== null || taskChoices.length > 0) && <SearchableChoiceDropdown
+                    title="Công việc phụ trách" placeholder="Chọn công việc" multiple showAvatar={false}
                     label="Tìm công việc phụ trách" items={taskChoices.map(item => ({ id: item.id, name: item.title }))}
                     selected={selectedTasks.map(item => item.id)} disabled={busy} emptyMessage="Không có công việc phù hợp."
                     onToggle={id => {
@@ -390,23 +396,27 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               {input(overtime ? 'Lý do làm thêm giờ' : trip ? 'Mục đích / nội dung công tác' : 'Lý do / nội dung',
                 reason, setReason, { multiline: true, maxLength: 2000, required: true })}
             </> : row && <>
-              <Text style={shared.cardTitle}>{row.type}</Text>
-              <Text style={shared.body}>{row.reason}</Text>
-              <Text style={shared.label}>{requestPeriod(row)}</Text>
-              {advance && !!row.month && <Text style={shared.muted}>Trừ vào lương tháng {displayMonth(row.month)}</Text>}
-              {trip && row.trip && <>
-                <Text style={shared.muted}>Địa điểm công tác · {row.trip.destination}</Text>
-                {!!row.trip.host && <Text style={shared.muted}>Đơn vị làm việc · {row.trip.host}</Text>}
-                {row.trip.estimatedCost > 0 && <Text style={shared.muted}>Chi phí dự kiến · {vnd.format(row.trip.estimatedCost)}</Text>}
+              {detail('Loại đơn', row.type)}
+              {advance ? <>
+                {detail('Số tiền tạm ứng', vnd.format(row.amount || 0))}
+                {!!row.month && detail('Trừ vào lương tháng', displayMonth(row.month))}
+              </> : <>
+                {detail(overtime ? 'Ngày' : 'Từ ngày', displayRequestDate(row.from, row.leaveTime?.from))}
+                {!overtime && !!row.to && detail('Đến ngày', displayRequestDate(row.to, row.leaveTime?.to))}
+                {!overtime && typeof row.days === 'number' && detail('Số ngày', row.days.toLocaleString('vi-VN'))}
+                {overtime && row.overtime && detail('Số giờ làm thêm', row.overtime.hours.toLocaleString('vi-VN'))}
               </>}
-              {overtime && row.overtime && <View style={styles.field}>
-                <Text style={shared.label}>Công việc phụ trách</Text>
-                {overtimeTasks(row.overtime).map(item => <Text key={item.id} style={shared.muted}>{item.title}</Text>)}
-              </View>}
+              {trip && row.trip && <>
+                {detail('Địa điểm công tác', row.trip.destination)}
+                {!!row.trip.host && detail('Đơn vị làm việc', row.trip.host)}
+                {row.trip.estimatedCost > 0 && detail('Chi phí dự kiến', vnd.format(row.trip.estimatedCost))}
+              </>}
+              {overtime && row.overtime && detail('Công việc phụ trách', overtimeTasks(row.overtime).map(item => item.title).join(', '))}
+              {detail(overtime ? 'Lý do làm thêm giờ' : trip ? 'Mục đích / nội dung công tác' : 'Lý do / nội dung', row.reason)}
             </>}
             <View style={shared.detailRow}>
-              <FieldLabel style={shared.label} required={canRoute}>Người duyệt</FieldLabel>
               {!row || canRoute ? <>
+                <FieldLabel style={shared.label} required={canRoute}>Người duyệt</FieldLabel>
                 {!!approver && (directoryState !== 'ready' || !approvers.some(member => member.email === approver)) &&
                   <Text style={shared.muted}>{getMemberName(approver, members)}</Text>}
                 {directoryState === 'loading' && <ActivityIndicator accessibilityLabel="Đang tải người duyệt" color={colors.accent} />}
@@ -417,21 +427,19 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                   disabled={busy} emptyMessage="Không có người duyệt phù hợp." />}
                 {canRoute && <Button label="Lưu người duyệt" secondary disabled={busy || !approver || approver === row?.approverEmail}
                   onPress={() => void submit('route')} />}
-              </> : <Text style={shared.muted}>{getMemberName(approver, members)}</Text>}
+              </> : detail('Người duyệt', getMemberName(approver, members))}
             </View>
-            {row?.reply ? <Text style={shared.body}>Ý kiến người duyệt · {row.reply}</Text> : null}
-            {error && !confirmDelete && <Text accessibilityRole="alert" style={shared.error}>{error}</Text>}
+            {row?.reply ? detail('Ý kiến người duyệt', row.reply) : null}
+            {error && <Text accessibilityRole="alert" style={shared.error}>{error}</Text>}
             {canDecide && <>
               {input('Ý kiến xử lý', reply, setReply, { maxLength: 500, multiline: true, requiredFor: 'khi từ chối' })}
-              <View style={shared.choices}>
+              <View style={[shared.choices, styles.decisionActions]}>
                 <Button label="Duyệt" disabled={busy} onPress={() => void submit('approve')} />
                 <Button label="Từ chối" secondary disabled={busy} onPress={() => void submit('reject')} />
               </View>
             </>}
             {editable && <Button label={row ? 'Lưu đơn' : 'Gửi đơn'} disabled={busy} onPress={() => void submit('edit')} />}
-            {row && canActOnRequest(row, 'delete', access) && <Button label="Xóa đơn" secondary disabled={busy}
-              onPress={() => { setError(''); setConfirmDelete(true); }} />}
-            {busy && !confirmDelete && <ActivityIndicator accessibilityLabel="Đang lưu đơn" color={colors.accent} />}
+            {busy && <ActivityIndicator accessibilityLabel="Đang lưu đơn" color={colors.accent} />}
           </View>
         </ScrollView>
       </View>
@@ -452,9 +460,6 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
           })}
         </View>
       </CalendarDialog>}
-      {confirmDelete && row && <ConfirmDialog label="Xác nhận xóa đơn" title="Xóa đơn?"
-        message={requestDeleteMessage(row)} action="Xác nhận xóa" pendingAction="Đang xóa…"
-        pending={busy} error={error} onCancel={cancelDelete} onConfirm={() => void submit('delete')} />}
     </SafeAreaView>
   </Modal>;
 }
@@ -465,11 +470,15 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     borderWidth: 1, borderColor: colors.line },
   popupContent: { gap: 14, padding: 20 },
   field: { gap: 6 },
+  detailLabel: { fontWeight: '700' },
+  decisionActions: { justifyContent: 'flex-end' },
   requestCard: { gap: 4 },
   deletable: { minHeight: 58 },
   dateWithDelete: { paddingRight: 48 },
   deleteRequest: { position: 'absolute', right: 4, bottom: 6 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  leaveDateRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  leaveDate: { flexGrow: 1, flexBasis: 106 },
   dateLabel: { width: 76 },
   dropdown: { flex: 1 },
   picker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

@@ -79,13 +79,18 @@ export function WorkspaceNavigator({
     canReviewRequests={canReviewRequests} personalTasks={tasksComplete ? tasks : null}
     tasksError={error || sentError} onRetryTasks={retryTasks} onNavigate={setRoute} />;
   if (route.screen === 'luong') return <PayrollScreen key={JSON.stringify([email, isAdmin, route.month])}
-    email={email} isAdmin={isAdmin} initialMonth={route.month} />;
+    email={email} isAdmin={isAdmin} initialMonth={route.month}
+    onOpenAdvance={(requestId, month) => { setRoute({ screen: 'don-tu', requestId, fromPayrollMonth: month }); onScrollTop(); }} />;
   if (route.screen === 'cham-cong') return <AttendanceScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
   if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests, route.requestId])}
     email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
     initialRequestId={route.requestId}
-    onBackToReview={route.fromNotification ? () => setRoute({ screen: 'don-tu' }) : route.requestId ? openReviewQueue : undefined}
-    backLabel={route.fromNotification ? 'Về danh sách đơn từ' : undefined}
+    onBackToReview={route.fromPayrollMonth ? () => {
+      setRoute({ screen: 'luong', month: route.fromPayrollMonth });
+      onScrollTop();
+    } : route.fromNotification ? () => setRoute({ screen: 'don-tu' }) : route.requestId ? openReviewQueue : undefined}
+    backLabel={route.fromPayrollMonth ? (isAdmin ? 'Về bảng lương' : 'Về phiếu lương')
+      : route.fromNotification ? 'Về danh sách đơn từ' : undefined}
     tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />;
   if (route.screen === 'thu-chi') return <CashScreen key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, route.cashId, route.projectExpense])}
     access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.cashId} projectExpense={route.projectExpense}

@@ -11,6 +11,7 @@ type OvertimeDetails = { hours: number } & ({ tasks: OvertimeTask[] } | { taskId
 export type RequestFields = {
   type: string; reason: string; from: string; to: string; days: number; amount: number; month: string;
   trip?: { destination: string; host: string; estimatedCost: number };
+  leaveTime?: { from: string; to: string };
   overtime?: OvertimeDetails;
 };
 export type StaffRequest = RequestFields & {
@@ -86,6 +87,7 @@ export async function changeRequest(row: StaffRequest, access: RequestAccess, ac
     } else if (action === 'edit') {
       transaction.update(ref, { ...options.fields, ...patch,
         ...(current.trip && !options.fields?.trip ? { trip: deleteField() } : {}),
+        ...(current.leaveTime && !options.fields?.leaveTime ? { leaveTime: deleteField() } : {}),
         ...(current.overtime && !options.fields?.overtime ? { overtime: deleteField() } : {}),
       });
     } else if (action === 'route') {

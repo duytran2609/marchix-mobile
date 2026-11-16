@@ -9,9 +9,9 @@ import { useToast } from '../components/Toast';
 import { EmployeeForm, PayBreakdown, PayEditor, PayrollModal } from '../features/payroll/PayrollForms';
 import { EmployeeTable, PayrollTable } from '../features/payroll/PayrollTable';
 import { exportPayroll, exportPayslip } from '../features/payroll/exportPayroll';
-import { amount, calculatePay, locked, money, monthLabel } from '../features/payroll/payroll';
+import { amount, calculatePay, locked, money, monthLabel, recordedAdvanceRequests } from '../features/payroll/payroll';
 import type { PayrollRow } from '../features/payroll/payrollColumns';
-import { approvedAdvance, confirmOwnPayslip, createPayrollExpenses, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
+import { approvedAdvanceRequests, confirmOwnPayslip, createPayrollExpenses, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
 import type { Payslip } from '../features/payroll/payroll';
 import type { PayrollData } from '../features/payroll/payrollStore';
 import { todayInVietnam } from '../features/tasks/taskDates';
@@ -30,7 +30,10 @@ const monthsOfYear = Array.from({ length: 12 }, (_, index) => {
   return { value, label: 'Tháng ' + value };
 });
 
-export function PayrollScreen({ email, isAdmin, initialMonth }: { email: string; isAdmin: boolean; initialMonth?: string }) {
+export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
+  email: string; isAdmin: boolean; initialMonth?: string;
+  onOpenAdvance: (requestId: string, month: string) => void;
+}) {
   const styles = useScreenStyles();
   const { colors } = useTheme();
   const showToast = useToast();
@@ -120,7 +123,8 @@ export function PayrollScreen({ email, isAdmin, initialMonth }: { email: string;
             <Text style={styles.badge}>{slip.status}</Text>
           </View>
           <Text style={styles.label}>{slip.name}</Text>
-          <PayBreakdown pay={slip} />
+          <PayBreakdown pay={slip} advances={recordedAdvanceRequests(slip)}
+            onOpenAdvance={id => onOpenAdvance(id, slip.month)} />
           {slip.status === 'Đã chốt' && (slip.employeeConfirmedAt
             ? <Text style={styles.badge}>Bạn đã xác nhận</Text>
             : <Button label="Xác nhận phiếu lương" disabled={busy} onPress={() => reviewSlip(slip)} />)}
@@ -138,9 +142,12 @@ export function PayrollScreen({ email, isAdmin, initialMonth }: { email: string;
   const byEmployee = new Map(monthly.map(slip => [slip.empId, slip]));
   const rows = active.map(employee => {
     const slip = byEmployee.get(employee.id);
-    const advance = approvedAdvance(requests, employee.email, month);
-    const pay = slip && locked(slip) ? slip : calculatePay(employee, slip ?? {}, month, rates, advance);
-    return { employee, slip, pay, advance, name: employee.name, status: slip?.status || 'Nháp' };
+    if (slip && locked(slip)) {
+      return { employee, slip, pay: slip, advances: recordedAdvanceRequests(slip), name: employee.name, status: slip.status };
+    }
+    const advances = approvedAdvanceRequests(requests, employee.email, month);
+    const pay = calculatePay(employee, slip ?? {}, month, rates, advances.reduce((sum, entry) => sum + entry.amount, 0));
+    return { employee, slip, pay, advances, name: employee.name, status: 'Nháp' };
   });
   const employee = employees.find(item => item.id === editor?.id);
   const selected = rows.find(row => row.employee.id === editor?.id);
@@ -225,7 +232,8 @@ export function PayrollScreen({ email, isAdmin, initialMonth }: { email: string;
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {editor.kind === 'employee' ? <EmployeeForm employee={employee} busy={busy} onSave={fields =>
         void run(async () => { await saveEmployee(email, fields, editor.id); return 'Đã lưu hồ sơ nhân sự.'; }, true)} />
-      : selected && <><PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advance={selected.advance}
+      : selected && <><PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advances={selected.advances}
+        onOpenAdvance={id => onOpenAdvance(id, month)}
         slip={selected.slip} busy={busy} onSave={input => void run(async () => {
           await writePayroll(email, month, [selected.employee], data, 'save', new Map([[selected.employee.id, input]]));
           return 'Đã lưu dòng lương.';

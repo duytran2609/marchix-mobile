@@ -246,6 +246,19 @@ try {
   await denied(setDoc(requestRef(db), { ...requestData, createdBy: colleague }));
   await denied(setDoc(requestRef(db), { ...requestData, approverEmail: staff }));
   await denied(setDoc(requestRef(outsiderDb), requestData));
+  const leaveRef = doc(db, 'requests', requestId + '-leave');
+  const leave = { ...requestData, type: 'Nghỉ phép', amount: 0 };
+  const leaveTime = { from: '08:15', to: '12:30' };
+  await denied(setDoc(leaveRef, { ...requestData, leaveTime }));
+  await denied(setDoc(leaveRef, { ...leave, leaveTime: { from: '08:15' } }));
+  await setDoc(leaveRef, { ...leave, leaveTime });
+  assert.deepEqual((await getDocFromServer(leaveRef)).get('leaveTime'), leaveTime);
+  await denied(updateDoc(leaveRef, { 'leaveTime.to': '08:00' }));
+  await denied(updateDoc(leaveRef, { 'leaveTime.to': '12:60' }));
+  await updateDoc(leaveRef, { 'leaveTime.to': '12:45' });
+  await deleteDoc(leaveRef);
+  await setDoc(leaveRef, leave);
+  await deleteDoc(leaveRef);
   const tripRef = doc(db, 'requests', requestId + '-trip');
   const trip = { ...requestData, type: 'Công tác', amount: 0, days: 1,
     trip: { destination: 'Hà Nội', host: 'Đối tác', estimatedCost: 1000000 } };
@@ -452,8 +465,16 @@ try {
   await denied(updateDoc(myTask, { comments: [second, first] }));
   await denied(updateDoc(doc(otherDb, 'tasks', myTask.id), { comments: [first, { ...second, by: colleague }] }));
   await updateDoc(myTask, { comments: [first, second] });
+  const sentTask = doc(reviewerDb, 'tasks', myTask.id);
+  const response = { ...first, by: reviewer, text: 'Đã ghi nhận.' };
+  const reply = { ...response, replyTo: { index: 1, by: second.by, at: second.at } };
+  await denied(updateDoc(sentTask, { comments: [first, second, response] }));
+  await denied(updateDoc(sentTask, { comments: [first, second, { ...reply, replyTo: { ...reply.replyTo, index: 2 } }] }));
+  await denied(updateDoc(sentTask, { comments: [first, second, { ...reply, replyTo: { ...reply.replyTo, by: reviewer } }] }));
+  await denied(updateDoc(doc(otherDb, 'tasks', myTask.id), { comments: [first, second, { ...reply, by: colleague }] }));
+  await updateDoc(sentTask, { comments: [first, second, reply] });
   const updated = (await getDocFromServer(myTask)).data();
-  assert.deepEqual(updated.comments, [first, second]);
+  assert.deepEqual(updated.comments, [first, second, reply]);
   assert.equal(updated.progress, 60);
   console.log('PASS: quyền đọc và ghi việc, cập nhật tiến độ và chỉ thêm trao đổi của chính mình.');
 } finally {

@@ -11,6 +11,9 @@ const columns = ['Họ tên', 'Công', 'Lương theo công', 'Phụ cấp + thư
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
 async function openPayroll(page: Page, admin: boolean) {
+  const startupReminder = page.getByRole('dialog', { name: /cần chú ý hôm nay/ });
+  await page.addLocatorHandler(startupReminder, () =>
+    startupReminder.getByRole('button', { name: 'Đã xem', exact: true }).click(), { times: 1 });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: admin ? 'Đăng nhập quản trị (mô phỏng)' : 'Đăng nhập Google (mô phỏng)' }).click();
   await page.getByRole('button', { name: 'Mở menu' }).click();
@@ -28,11 +31,22 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
   const label = month.slice(5) + '/' + month.slice(0, 4);
   const slip = base + '/payroll/' + month + '_nhanvien-luong-demo';
   const expense = base + '/cash/luong_' + month + '_nhanvien-luong-demo';
+  const advanceId = 'payroll-advance-' + Date.now();
+  const advance = base + '/requests/' + advanceId;
+  const advanceReason = 'Ứng lương để kiểm tra phiếu';
+  const advanceLabel = 'Xem đơn tạm ứng: ' + advanceReason + ' · 750.000 đ';
 
   try {
+    const approved = await request.patch(advance, { headers, data: { fields: {
+      type: { stringValue: 'Tạm ứng lương' }, status: { stringValue: 'Đã duyệt' },
+      createdBy: { stringValue: 'nhanvien@example.test' }, reason: { stringValue: advanceReason },
+      amount: { integerValue: '750000' }, month: { stringValue: month }, createdAt: { stringValue: new Date().toISOString() },
+    } } });
+    expect(approved.ok()).toBeTruthy();
     await openPayroll(page, false);
     await expect(page.getByRole('heading', { name: 'Phiếu lương của bạn' })).toBeVisible();
     await expect(page.getByText('Tháng 10/2026', { exact: true })).toBeVisible();
+    await expect(page.getByText('Phiếu này chưa lưu chi tiết đơn tạm ứng.')).toBeVisible();
     await expect(page.getByText('Tháng 09/2026', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Tháng 08/2026', { exact: true })).toHaveCount(0);
     const legacyDownloadPromise = page.waitForEvent('download');
@@ -91,6 +105,8 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
 
     await expect(admin.getByRole('button', { name: 'Lấy ngày công từ Chấm công' })).toHaveCount(0);
     await admin.getByRole('button', { name: 'Xem dòng lương Nhân viên lương demo' }).click();
+    await expect(admin.getByRole('dialog').getByText('Tạm ứng lương', { exact: true })).toBeVisible();
+    await expect(admin.getByRole('button', { name: advanceLabel, exact: true })).toBeVisible();
     await admin.getByLabel('Ngày công thực tế').fill('13');
     await admin.getByLabel('Ngày công chuẩn').fill('26');
     await admin.getByLabel('Thưởng / khoản thêm (VNĐ)').fill('500000');
@@ -104,7 +120,7 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await exportExcel.click();
     const draftBook = read(await readFile((await (await draftDownload).path())!), { type: 'buffer' });
     expect(utils.sheet_to_json(draftBook.Sheets[draftBook.SheetNames[0]], { header: 1 })).toContainEqual([
-      'Nhân viên lương demo', '13 / 26', 5000000, 500000, 5500000, 0, 0, 200000, 5300000, 0, 5500000, 'Nháp',
+      'Nhân viên lương demo', '13 / 26', 5000000, 500000, 5500000, 0, 0, 950000, 4550000, 0, 5500000, 'Nháp',
     ]);
 
     await admin.getByRole('button', { name: 'Chốt bảng lương', exact: true }).click();
@@ -112,7 +128,13 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await expect(page.getByText('Tháng ' + label, { exact: true })).toHaveCount(0);
     await admin.getByRole('button', { name: 'Xác nhận chốt', exact: true }).click();
     await expect(page.getByText('Tháng ' + label, { exact: true })).toBeVisible();
-    await expect(page.getByText(/5[.\s]300[.\s]000 đ/)).toBeVisible();
+    await expect(page.getByText(/4[.\s]550[.\s]000 đ/)).toBeVisible();
+    await expect(page.getByText('Tạm ứng lương', { exact: true })).toBeVisible();
+    await expect(page.getByText('750.000 đ', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: advanceLabel, exact: true }).click();
+    await expect(page.getByRole('dialog').getByText(advanceReason, { exact: true })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Đóng đơn', exact: true }).click();
+    await expect(page.getByText('Tháng ' + label, { exact: true })).toBeVisible();
     await expect(requestPayment).toBeDisabled();
     await page.getByRole('button', { name: 'Xác nhận phiếu lương', exact: true }).click();
     await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
@@ -134,7 +156,7 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     const download = await downloadPromise;
     const book = read(await readFile((await download.path())!), { type: 'buffer' });
     const values = utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1 });
-    const payrollRow = ['Nhân viên lương demo', '13 / 26', 5000000, 500000, 5500000, 0, 0, 200000, 5300000, 0, 5500000, 'Đã chốt'];
+    const payrollRow = ['Nhân viên lương demo', '13 / 26', 5000000, 500000, 5500000, 0, 0, 950000, 4550000, 0, 5500000, 'Đã chốt'];
     expect(values[0]).toEqual(columns);
     expect(values).toContainEqual(payrollRow);
 
@@ -168,9 +190,12 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     }
     const result = await request.get(expense, { headers });
     expect(result.ok()).toBeTruthy();
-    expect((await result.json()).fields).toMatchObject({ amount: { integerValue: '5300000' }, status: { stringValue: 'Chờ chi' } });
+    expect((await result.json()).fields).toMatchObject({ amount: { integerValue: '4550000' }, status: { stringValue: 'Chờ chi' } });
+    await request.delete(advance, { headers });
+    await admin.getByRole('button', { name: 'Xem dòng lương Nhân viên lương demo' }).click();
+    await expect(admin.getByRole('button', { name: advanceLabel, exact: true })).toBeVisible();
   } finally {
     await admin.close();
-    await Promise.all([slip, expense].map(url => request.delete(url, { headers })));
+    await Promise.all([slip, expense, advance].map(url => request.delete(url, { headers })));
   }
 });

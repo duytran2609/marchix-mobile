@@ -3,7 +3,7 @@ import { shiftDay, todayInVietnam } from '../src/features/tasks/taskDates';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
-test('Nhắc việc khi vào app và hiện lại khi quay về app', async ({ page, request }) => {
+test('Nhắc việc một lần mỗi lần đăng nhập, kể cả khi mở lại app giữa hai lần đăng nhập', async ({ page, request }) => {
   const id = `startup-reminder-${Date.now()}`;
   const today = todayInVietnam();
   const admin = 'quantri@example.test';
@@ -22,6 +22,7 @@ test('Nhắc việc khi vào app và hiện lại khi quay về app', async ({ p
     [`requests/${id}`, { type: 'Nghỉ phép', status: 'Chờ duyệt', createdBy: staff }],
   ] as const;
   const dialog = page.getByRole('dialog', { name: 'Chào Quản trị demo — cần chú ý hôm nay' });
+  const signIn = page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' });
 
   try {
     for (const [path, fields] of fixtures) {
@@ -31,7 +32,7 @@ test('Nhắc việc khi vào app và hiện lại khi quay về app', async ({ p
       expect(response.ok()).toBe(true);
     }
     await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
-    await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+    await signIn.click();
     await expect(dialog.getByText(`Đến hạn hôm nay: ${task}`, { exact: true })).toBeVisible();
     await expect(dialog.getByText(/đề nghị thu chi và \d+ đơn từ chờ duyệt/)).toBeVisible();
     await expect(dialog.getByText(/Nhân viên đang có/)).toContainText(assignee);
@@ -48,6 +49,17 @@ test('Nhắc việc khi vào app và hiện lại khi quay về app', async ({ p
         document.dispatchEvent(new Event('visibilitychange'));
       }, visibilityState);
     }
+    await expect(dialog).toBeHidden();
+
+    await page.reload();
+    await expect(page.getByRole('button', { name: /^Cần quyết định \(\d+\)$/ })).toBeVisible();
+    await expect(dialog).toBeHidden();
+
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+    await page.getByRole('alertdialog', { name: 'Xác nhận đăng xuất' })
+      .getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+    await signIn.click();
     await expect(dialog.getByText(`Đến hạn hôm nay: ${task}`, { exact: true })).toBeVisible();
   } finally {
     await Promise.all(fixtures.map(([path]) => request.delete(`${base}/${path}`, { headers })));

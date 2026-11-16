@@ -3,10 +3,11 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { DateCalendarButton, DateCalendarField } from './CalendarDialog';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { checklistWeight, maxChecklistWeight, validChecklistWeight } from './checklistProgress';
-import { auth, emulatorMode, pilotMode } from '../../services/firebase/firebase';
+import { auth, db, emulatorMode, pilotMode } from '../../services/firebase/firebase';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { Button } from '../../components/Button';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
@@ -20,7 +21,7 @@ import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachmen
 import type { PickedAttachment } from './taskAttachments';
 import {
   createTask, editableStatus, editableStatuses, getAssignmentComment, listTaskAssignees, newTaskId, parseTaskProgress,
-  taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
+  taskCompletionModes, taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
 } from './tasks';
 import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee } from './tasks';
 import { createThemedStyles, useTheme } from '../../theme/theme';
@@ -120,7 +121,10 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     repeat: taskRepeatOptions.find(value => value === task?.repeat) ?? initialOptions.repeat,
     projectId: task?.projectId ?? initial?.projectId ?? initialOptions.projectId,
     milestone: task?.milestone === true,
+    requireReview: task?.requireReview,
   }));
+  const [defaultRequireReview, setDefaultRequireReview] = useState(true);
+  const requiresReview = options.requireReview ?? defaultRequireReview;
   const [progressText, setProgressText] = useState(String(task?.progress ?? 0));
   const [note, setNote] = useState(task?.note ?? initial?.note ?? '');
   const [message, setMessage] = useState(assignment?.text ?? '');
@@ -141,6 +145,13 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     ? [...items, { t: newItem.trim(), weight: newWeight, done: false, sourceIndex: null }] : items;
   const checklist = draftItems.map(item => ({ ...item, t: item.t.trim(), weight: item.weight ? Number(item.weight) : 1 }));
   const validWeights = checklist.every(item => validChecklistWeight(item.weight));
+
+  useEffect(() => {
+    if (task?.requireReview !== undefined) return;
+    return onSnapshot(doc(db, 'settings', 'work'),
+      snapshot => setDefaultRequireReview(snapshot.get('requireReview') !== false),
+      () => setDefaultRequireReview(true));
+  }, [task?.requireReview]);
 
   useEffect(() => {
     let active = true;
@@ -226,8 +237,11 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
         showFieldError('main', 'Không đọc được tệp đính kèm. Hãy bỏ tệp lỗi và chọn lại.');
         return;
       }
+      const { requireReview, ...assignmentOptions } = options;
+      const completionMode = workflowLocked ? undefined : requireReview ?? (task ? undefined : requiresReview);
       const data = {
-        ...options, progress, taskId, title: taskTitle, assigneeEmails: assignees, due, startDate: start,
+        ...assignmentOptions, progress, taskId, title: taskTitle, assigneeEmails: assignees, due, startDate: start,
+        ...(completionMode !== undefined && { requireReview: completionMode }),
         note, message, checklist: checklist.map(({ t, weight, sourceIndex }) =>
           task ? { t, weight, sourceIndex } : { t, weight }), watchers, attachments,
       };
@@ -290,18 +304,6 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                           if (approver === member) setApprover('');
                         }} />}
                 </View>
-                {members ? <View style={styles.field}>
-                  <Text style={styles.label}>Người duyệt</Text>
-                  {!canChangeApprover ? <Text style={styles.muted}>{members.find(member => member.email === approver)?.name
-                    || approver || 'Chưa chỉ định'}</Text> : <MemberPicker
-                    members={members.filter(member => member.canReview && !assignees.includes(member.email))}
-                    email={email} selected={approver ? [approver] : []} disabled={saving}
-                    title="Người duyệt" label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
-                    onToggle={member => {
-                      if (member !== approver) setApprover(member);
-                      else if (!workflowLocked) setApprover('');
-                    }} />}
-                </View> : null}
                 <View style={styles.field}>
                   <FieldLabel style={styles.label} required>Mức độ ưu tiên</FieldLabel>
                   <Choices items={choices(taskPriorities)} value={options.priority} disabled={saving}
@@ -316,17 +318,10 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                   <FieldLabel style={styles.label} required={dueRequired}>Hạn chót</FieldLabel>
                   <DateCalendarButton label="Hạn chót" value={due} min={earliestDue}
                     initialDay={due && due >= earliestDue ? due : earliestDue || today} disabled={saving} onChange={setDue} />
-                  <View style={styles.quickDates}>
-                    {quickDates.map(({ label, days }) => {
-                      const day = shiftDay(today, days);
-                      const disabled = saving || day < earliestDue;
-                      return <Pressable key={label} accessibilityRole="button" aria-pressed={due === day}
-                        style={[styles.back, disabled && styles.saving]} disabled={disabled}
-                        onPress={() => setDue(day)}>
-                        <Text style={styles.actionText}>{label}</Text>
-                      </Pressable>;
-                    })}
-                  </View>
+                  <Choices items={quickDates.map(({ label, days }) => {
+                    const value = shiftDay(today, days);
+                    return { value, label, disabled: value < earliestDue };
+                  })} value={due} disabled={saving} onChange={setDue} />
                 </View>
                 <View style={styles.field}>
                   <Text style={styles.label}>Tệp đính kèm{allFiles.length ? ` · ${allFiles.length}` : ''}</Text>
@@ -354,6 +349,24 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                       value={options.projectId} onChange={value => updateOption('projectId', value)} disabled={saving} />
                   </View>
                   <View style={styles.field}>
+                    <Text style={styles.label}>Chế độ hoàn thành</Text>
+                    <Dropdown label="Chế độ hoàn thành" hideLabel choices={taskCompletionModes} highlightSelection={false}
+                      value={requiresReview || task?.status === 'Chờ duyệt' ? 'review' : 'report'}
+                      disabled={saving || workflowLocked} onChange={value => updateOption('requireReview', value === 'review')} />
+                  </View>
+                  <View style={styles.field}>
+                    <Text style={styles.label}>Người duyệt</Text>
+                    {canChangeApprover && members ? <MemberPicker
+                      members={members.filter(member => member.canReview && !assignees.includes(member.email))}
+                      email={email} selected={approver ? [approver] : []} disabled={saving}
+                      title="Người duyệt" label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
+                      onToggle={member => {
+                        if (member !== approver) setApprover(member);
+                        else if (!workflowLocked) setApprover('');
+                      }} /> : <Text style={styles.muted}>{members?.find(member => member.email === approver)?.name
+                      || approver || 'Chưa chỉ định'}</Text>}
+                  </View>
+                  <View style={styles.field}>
                     <FieldLabel style={styles.label} required={!workflowLocked}>
                       {task ? 'Trạng thái' : 'Tình trạng ban đầu'}
                     </FieldLabel>
@@ -376,6 +389,10 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                     <Text style={styles.label}>Lặp lại</Text>
                     <Choices items={choices(taskRepeatOptions)} value={options.repeat} disabled={saving}
                       onChange={value => updateOption('repeat', value)} />
+                    {task?.recurrenceOn
+                      ? <Text style={styles.muted}>Chỉnh lịch lặp ở kỳ mới nhất. Các kỳ vẫn tính từ ngày giao việc gốc.</Text>
+                      : options.repeat !== 'Không lặp' &&
+                        <Text style={styles.muted}>Kỳ mới được tạo theo ngày giao, kể cả khi kỳ trước chưa xong.</Text>}
                   </View>
                   <View style={styles.field}>
                     <Text style={styles.label}>Việc con (checklist)</Text>
@@ -421,8 +438,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                     <Text style={styles.label}>Mốc bàn giao dự án</Text>
                   </Pressable>
                   <View style={styles.field}>
-                    <Text style={styles.label}>Mô tả / chỗ vướng</Text>
-                    <TextInput accessibilityLabel="Mô tả / chỗ vướng" multiline style={[styles.input, styles.multiline]}
+                    <Text style={styles.label}>Mô tả / Yêu cầu bàn giao</Text>
+                    <TextInput accessibilityLabel="Mô tả / Yêu cầu bàn giao" multiline style={[styles.input, styles.multiline]}
                       value={note} onChangeText={setNote} editable={!saving} maxLength={2000} />
                   </View>
                   <View style={styles.field}>
@@ -489,7 +506,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   weightArrowText: { color: colors.accent, fontSize: 15, lineHeight: 17 },
   itemControls: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   deleteItem: { height: 42, justifyContent: 'center' },
-  quickDates: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   back: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 9,
     paddingHorizontal: 10, backgroundColor: colors.accentSoft },
   actionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },

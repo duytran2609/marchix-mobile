@@ -125,14 +125,18 @@ export async function pilotCreate(input: AssignmentInput) {
     const ref = doc(tasks, index ? `${input.taskId}_${index}` : input.taskId);
     const assignee = people.get(assigneeEmail)!.name;
     if (!existing.empty) return { id: ref.id, assignee };
-    const approverEmail = input.approverEmail ?? (assigneeEmail !== by && people.get(by)?.canReview ? by : '');
+    const approverEmail = input.approverEmail ??
+      (input.requireReview !== false && assigneeEmail !== by && people.get(by)?.canReview ? by : '');
     const attachments = attach(batch, ref, files, by, now);
     const comments = input.message || attachments.length
       ? [{ by, at: now, kind: 'assignment', text: input.message.trim(), files: attachments }] : [];
     batch.set(ref, { ...details(input), assigneeEmail, assignee, approverEmail, assignedBy: by, mobileAssignmentId: input.taskId,
+      ...(input.requireReview !== undefined && { requireReview: input.requireReview }),
       status: input.status, progress: input.checklist.length ? 0 : input.progress,
       checklist: input.checklist.map(({ t, weight }) => ({ t, weight, done: false })), comments,
-      spawned: false, doneAt: '', createdAt: now, ...updated(by, now) });
+      spawned: input.repeat !== 'Không lặp', doneAt: '', createdAt: now, ...updated(by, now),
+      ...(input.repeat !== 'Không lặp' && { repeatSchedule: { cadence: input.repeat, period: 0, checkLegacy: false } }),
+    });
     notify(batch, by, [assigneeEmail], ref.id, 'Bạn được giao việc mới', input.title.trim(), now);
     return { id: ref.id, assignee };
   });
@@ -165,7 +169,8 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
     if (index >= 0) comments.splice(index, 1);
     if (input.message || attachments.length) comments.splice(Math.max(0, index), 0,
       { by, at: original?.at ?? now, kind: 'assignment', text: input.message.trim(), files: attachments });
-    const patch: Record<string, unknown> = { ...details(input), comments, ...updated(by, now) };
+    const patch: Record<string, unknown> = { ...details(input), comments, ...updated(by, now),
+      ...(input.repeat !== 'Không lặp' && { spawned: true }) };
     if (open(task)) {
       const approverEmail = input.approverEmail ?? task.approverEmail ?? '';
       if (!people.has(assigneeEmail) && assigneeEmail !== task.assigneeEmail) throw new Error('Người thực hiện không còn hoạt động.');
@@ -187,10 +192,11 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
       });
       Object.assign(patch, { assigneeEmail, approverEmail, status: input.status,
         checklist: items, progress: items.length ? percent(items) : input.progress });
+      if (input.requireReview !== undefined) patch.requireReview = input.requireReview;
       if (assigneeEmail !== task.assigneeEmail) patch.assignee = people.get(assigneeEmail)!.name;
       if (input.status !== task.status) {
         const fields = ['assignedBy','assigneeEmail','assignee','approverEmail','due','projectId','priority',
-          'repeat','watchers','title','startDate','note','milestone'] as const;
+          'repeat','watchers','title','startDate','note','milestone','requireReview'] as const;
         const taskFields = { ...task, id: input.taskId };
         if (fields.some(key => Object.hasOwn(patch, key) &&
           JSON.stringify(patch[key]) !== JSON.stringify(taskFields[key]))) {
@@ -225,41 +231,6 @@ export async function pilotChecklist(input: { taskId: string; index: number; lab
   });
 }
 
-function stageNextOccurrence(tx: DocumentWriter, ref: DocumentReference,
-  task: Task & { spawned?: boolean; seriesId?: string }, by: string, now: string) {
-  if (!task.spawned && task.due && (task.repeat === 'Hằng tuần' || task.repeat === 'Hằng tháng')) {
-    const shift = (value?: string) => {
-      if (!value) return '';
-      const date = new Date(value + 'T00:00:00Z');
-      if (!Number.isFinite(date.getTime())) return '';
-      if (task.repeat === 'Hằng tuần') date.setUTCDate(date.getUTCDate() + 7);
-      else {
-        const day = date.getUTCDate();
-        date.setUTCDate(1);
-        date.setUTCMonth(date.getUTCMonth() + 1);
-        const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-        date.setUTCDate(Math.min(day, end));
-      }
-      return date.toISOString().slice(0, 10);
-    };
-    const due = shift(task.due);
-    if (due) {
-      const seriesId = task.seriesId ?? ref.id;
-      tx.set(doc(collection(db, 'tasks')), {
-        title: task.title, note: task.note ?? '', startDate: shift(task.startDate), due,
-        status: 'Chưa làm', progress: 0, priority: task.priority ?? 'Trung bình', repeat: task.repeat,
-        assigneeEmail: task.assigneeEmail, assignee: task.assignee ?? '', assignedBy: task.assignedBy ?? by,
-        approverEmail: task.approverEmail ?? '', projectId: task.projectId ?? '', watchers: task.watchers ?? [],
-        milestone: task.milestone ?? false, comments: [], doneAt: '', spawned: false, seriesId,
-        checklist: (task.checklist ?? []).map(item => ({ ...item, done: false })),
-        createdAt: now, ...updated(by, now),
-      });
-      return true;
-    }
-  }
-  return false;
-}
-
 export async function pilotReport(input: { taskId: string; note: string }) {
   const by = email();
   const ref = doc(db, 'tasks', input.taskId);
@@ -277,12 +248,11 @@ export async function pilotReport(input: { taskId: string; note: string }) {
     if (text.length > 1000 || (settings.get('requireReportNote') === true && !text)) {
       throw new Error('Hãy ghi kết quả thực hiện trong tối đa 1.000 ký tự.');
     }
-    const requiresReview = settings.get('requireReview') !== false;
+    const requiresReview = typeof task.requireReview === 'boolean'
+      ? task.requireReview : settings.get('requireReview') !== false;
     if (requiresReview && !task.approverEmail) throw new Error('Hãy nhờ người giao việc chỉ định người duyệt trước khi báo hoàn thành.');
     const now = new Date().toISOString();
-    const spawned = !requiresReview && stageNextOccurrence(tx, ref, task, by, now);
     tx.update(ref, { status: requiresReview ? 'Chờ duyệt' : 'Xong', progress: 100, doneAt: now, ...updated(by, now),
-      ...(spawned ? { spawned } : {}),
       ...(text ? { comments: [...(task.comments ?? []), { by, at: now, text, files: [] }] } : {}) });
     const recipients = requiresReview ? [task.assignedBy, task.approverEmail] : [task.assignedBy];
     notify(tx, by, recipients, ref.id, requiresReview ? 'Công việc chờ duyệt' : `Việc “${task.title}” chuyển sang Xong`, task.title, now);
@@ -296,7 +266,7 @@ export async function pilotReview(input: { taskId: string; submission: string; d
   const reviewNote = input.note.trim();
   if (reviewNote.length > 1000 || (approved ? !input.rating : !reviewNote)) throw new Error('Hãy nhập thông tin duyệt công việc.');
   await runTransaction(db, async tx => {
-    const task = (await tx.get(ref)).data() as (Task & { spawned?: boolean; seriesId?: string }) | undefined;
+    const task = (await tx.get(ref)).data() as Task | undefined;
     if (!task || task.approverEmail !== by || task.assigneeEmail === by || task.status !== 'Chờ duyệt' ||
         (task.doneAt || task.updatedAt || '') !== input.submission) throw new Error('Lượt gửi duyệt này đã thay đổi hoặc bạn không có quyền duyệt.');
     const now = new Date().toISOString();
@@ -304,7 +274,6 @@ export async function pilotReview(input: { taskId: string; submission: string; d
       progress: approved ? 100 : task.checklist?.length ? percent(task.checklist) : task.progress ?? 0,
       doneAt: approved ? task.doneAt || now : '', rating: approved ? input.rating : '',
       reviewNote, reviewedBy: by, reviewedAt: now, ...updated(by, now) };
-    if (approved && task.assignedBy === by && stageNextOccurrence(tx, ref, task, by, now)) change.spawned = true;
     tx.update(ref, change);
     notify(tx, by, [task.assigneeEmail, task.assignedBy], ref.id,
       approved ? 'Công việc đã được duyệt' : 'Công việc cần làm lại', reviewNote || task.title, now);

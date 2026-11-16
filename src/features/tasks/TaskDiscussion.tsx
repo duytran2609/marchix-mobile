@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ComponentRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { FieldLabel } from '../../components/FieldLabel';
@@ -9,8 +10,8 @@ import { useToast } from '../../components/Toast';
 import { auth, pilotMode, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { formatVietnamDateTime } from '../../utils/dateTime';
 import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachments, saveTaskAttachment } from './taskAttachments';
-import { addTaskAttachments, addTaskComment, commentMaxLength, getAssignmentComment } from './tasks';
-import type { Task, TaskAssignee, TaskAttachment } from './tasks';
+import { addTaskAttachments, addTaskComment, commentMaxLength, findTaskReplyIndex, getAssignmentComment } from './tasks';
+import type { Task, TaskAssignee, TaskAttachment, TaskReplyTarget } from './tasks';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
 
@@ -25,29 +26,59 @@ export function TaskDiscussion({ task, email, name, members }: {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [message, setMessage] = useState('');
+  const [replyTo, setReplyTo] = useState<TaskReplyTarget>();
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState('');
   const [sort, setSort] = useState<'oldest' | 'newest'>('oldest');
-  const isAssignee = task.assigneeEmail === email;
-  const canComment = isAssignee && task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
+  const discussionOpen = task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
+  const canComment = discussionOpen && task.assigneeEmail === email;
+  const canReply = discussionOpen && (canComment || task.assignedBy === email);
+  const allComments = task.comments ?? [];
   const assignmentMessage = getAssignmentComment(task);
-  const comments = task.comments?.filter(comment => comment !== assignmentMessage) ?? [];
+  const comments = allComments.map((comment, index) => ({ comment, index }))
+    .filter(({ comment }) => comment !== assignmentMessage);
   const recentStart = Math.max(0, comments.length - 20);
-  const messages = comments.filter((comment, index) => index >= recentStart || discussionFiles(comment).length > 0);
+  const messages = comments.filter(({ comment }, index) => index >= recentStart || discussionFiles(comment).length > 0);
   if (assignmentMessage && (assignmentMessage.text || discussionFiles(assignmentMessage).length)) {
-    messages.unshift(assignmentMessage);
+    messages.unshift({ comment: assignmentMessage, index: allComments.indexOf(assignmentMessage) });
   }
-  const orderedMessages = messages.map((comment, index) => ({ comment, index, time: Date.parse(comment.at) || 0 }))
+  const orderedMessages = messages.map(entry => ({ ...entry, time: Date.parse(entry.comment.at) || 0 }))
     .sort((a, b) => sort === 'oldest' ? a.time - b.time || a.index - b.index : b.time - a.time || b.index - a.index);
 
+  useEffect(() => {
+    if (replyTo && canReply) input.current?.focus();
+  }, [replyTo, canReply]);
+
+  function authorName(by: string) {
+    return (by === email ? name : members.get(by)?.name)
+      || (by === task.assigneeEmail ? task.assignee : '') || by || 'Thành viên';
+  }
+
+  function renderQuote(target: TaskReplyTarget) {
+    const original = allComments[findTaskReplyIndex(allComments, target)];
+    return <View style={styles.quote}>
+      <Text style={screenStyles.label}>Trả lời {authorName(target.by)}</Text>
+      <Text numberOfLines={2} style={screenStyles.muted}>
+        {original ? original.text || discussionFiles(original).map(file => file.name).join(', ') || 'Trao đổi'
+          : 'Trao đổi gốc không còn hiển thị.'}
+      </Text>
+    </View>;
+  }
+
   async function send() {
-    if (!canComment || sending || uploading || !message.trim()) return;
+    if (!(replyTo ? canReply : canComment) || sending || uploading || !message.trim()) return;
+    if (replyTo && findTaskReplyIndex(allComments, replyTo) < 0) {
+      showToast('Trao đổi gốc không còn tồn tại.', 'error');
+      return;
+    }
     setSending(true);
     try {
-      await addTaskComment(task.id, email, message);
+      await addTaskComment(task.id, email, message, replyTo);
       setMessage('');
+      setReplyTo(undefined);
     } catch {
       showToast('Chưa gửi được trao đổi. Kiểm tra kết nối và thử lại.', 'error');
     } finally {
@@ -96,8 +127,7 @@ export function TaskDiscussion({ task, email, name, members }: {
       {orderedMessages.map(({ comment, index }) => {
         const member = members.get(comment.by);
         const self = comment.by === email;
-        const author = (self ? name : member?.name)
-          || (comment.by === task.assigneeEmail ? task.assignee : '') || comment.by || 'Thành viên';
+        const author = authorName(comment.by);
         const photo = member?.photoURL || (self ? auth.currentUser?.photoURL : null);
         const time = formatVietnamDateTime(comment.at);
         return <View key={`${comment.at}-${index}`} style={[screenStyles.detailRow, styles.discussionRow]}>
@@ -108,6 +138,7 @@ export function TaskDiscussion({ task, email, name, members }: {
               {time ? <Text style={styles.discussionTime}>{time}</Text> : null}
             </View>
             {comment === assignmentMessage ? <Text style={styles.discussionTime}>Lời nhắn khi giao việc</Text> : null}
+            {comment.replyTo ? renderQuote(comment.replyTo) : null}
             {comment.text ? <Text style={screenStyles.body}>{comment.text}</Text> : null}
             {discussionFiles(comment).map((file, index) => taskAssignmentEnabled
               ? <Pressable key={`${file.id}-${index}`} accessibilityRole="button" accessibilityLabel={`Tải tệp ${file.name}`}
@@ -118,18 +149,32 @@ export function TaskDiscussion({ task, email, name, members }: {
                   </View>
                 </Pressable>
               : <Text key={`${file.id}-${index}`} style={screenStyles.muted}>{file.name} · {formatFileSize(file.size)}</Text>)}
+            {canReply && comment.by && comment.at ? <Pressable accessibilityRole="button"
+              accessibilityLabel={`Trả lời trao đổi của ${author}`}
+              disabled={sending || uploading} style={styles.replyButton}
+              onPress={() => setReplyTo({ index, by: comment.by, at: comment.at })}>
+              <Text style={styles.replyAction}>Trả lời</Text>
+            </Pressable> : null}
           </View>
         </View>;
       })}
-      {canComment ? <>
+      {canComment || (canReply && replyTo) ? <>
+        {replyTo && <View style={styles.replyPreview}>
+          {renderQuote(replyTo)}
+          <Pressable accessibilityRole="button" disabled={sending} style={styles.replyButton}
+            onPress={() => setReplyTo(undefined)}>
+            <Text style={styles.replyAction}>Hủy trả lời</Text>
+          </Pressable>
+        </View>}
         <FieldLabel style={screenStyles.label} required>Nội dung trao đổi</FieldLabel>
-        <TextInput accessibilityLabel="Nội dung trao đổi" placeholder="Nhập trao đổi về công việc"
+        <TextInput ref={input} accessibilityLabel="Nội dung trao đổi" placeholder="Nhập trao đổi về công việc"
           style={[screenStyles.input, screenStyles.messageInput]} value={message} onChangeText={setMessage}
           multiline maxLength={commentMaxLength} editable={!sending} />
-        {taskAssignmentEnabled && <FilePickerButton label="Đính kèm tệp" pickingLabel="Đang gửi tệp…"
+        {taskAssignmentEnabled && !replyTo && <FilePickerButton label="Đính kèm tệp" pickingLabel="Đang gửi tệp…"
           picking={uploading} disabled={sending} onPress={() => void upload()}
           hint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng." />}
-        <Button label={sending ? 'Đang gửi…' : 'Gửi trao đổi'} onPress={send} disabled={sending || uploading || !message.trim()} />
+        <Button label={sending ? 'Đang gửi…' : replyTo ? 'Gửi trả lời' : 'Gửi trao đổi'}
+          onPress={send} disabled={sending || uploading || !message.trim()} />
       </> : null}
     </View>
   );
@@ -149,4 +194,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   discussionHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   discussionName: { flex: 1, minWidth: 0, fontWeight: '800' },
   discussionTime: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  quote: { flexShrink: 1, borderLeftWidth: 3, borderLeftColor: colors.accent, backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 8, paddingVertical: 5, gap: 2 },
+  replyPreview: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  replyButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  replyAction: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 }));

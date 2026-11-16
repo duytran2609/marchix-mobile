@@ -4,7 +4,6 @@ import type { ComponentRef } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../components/Toast';
 import type { MemberSession } from '../features/auth/useSession';
-import { StartupReminder } from '../features/notifications/StartupReminder';
 import { notificationTaskTarget } from '../features/notifications/notifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { useWorkspacePush } from '../features/notifications/workspacePush';
@@ -96,8 +95,6 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
         isAdmin={isAdmin} name={name} photoURL={photoURL}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
-      <StartupReminder email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash}
-        canReviewCash={canReviewCash} canReviewRequests={canReviewRequests} />
     </>
   );
 }

@@ -27,7 +27,7 @@ export function statusTone(status: string, colors: Palette) {
 }
 
 export function TaskProgress({ task, previewStatus, previewProgress, variant }: {
-  task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list';
+  task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list' | 'detail';
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -42,7 +42,7 @@ export function TaskProgress({ task, previewStatus, previewProgress, variant }: 
       </View>
       <View accessibilityRole="progressbar" accessibilityLabel="Tiến độ công việc"
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}
-        style={[styles.track, variant === 'list' && styles.listTrack]}>
+        style={[styles.track, variant && styles.fullHeightTrack, variant === 'list' && styles.listTrack]}>
         <View style={[styles.progressFill, { width: `${progress}%` }]} />
       </View>
     </View>
@@ -55,6 +55,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   pill: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 12, fontWeight: '700' },
   progressValue: { color: colors.ink, fontWeight: '800', fontSize: 13 },
   track: { height: 5, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
-  listTrack: { height: 7, marginTop: 3 },
+  fullHeightTrack: { height: 7 },
+  listTrack: { marginTop: 3 },
   progressFill: { height: '100%', borderRadius: 4, backgroundColor: colors.accent },
 }));

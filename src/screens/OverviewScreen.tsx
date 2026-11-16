@@ -18,7 +18,7 @@ import { mondayOf, suggestWeekTasks } from '../features/weekly-plan/weeklyPlan';
 import type { WorkspaceRoute } from '../navigation/workspaceRoutes';
 import { pilotMode } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
-import { createThemedStyles, useTheme } from '../theme/theme';
+import { createThemedStyles, lightColors, useTheme } from '../theme/theme';
 
 type Load<T> = T[] | 'error' | null;
 type Entry = { label: string; detail?: string; route: WorkspaceRoute };
@@ -269,8 +269,8 @@ export function OverviewScreen({
           <Text style={screen.body}>Đã thu {vnd.format(cashMonth.income)}</Text>
           <Text style={screen.body}>Đã chi {vnd.format(cashMonth.expense)}</Text>
         </View> : <Text style={screen.muted} accessibilityLiveRegion="polite">Chưa ghi nhận khoản đã thu hoặc đã chi trong kỳ.</Text>}
-        <Pressable accessibilityRole="button" style={styles.inlineAction} onPress={() => onNavigate({ screen: 'thu-chi' })}>
-          <Text style={styles.link}>Mở sổ Thu chi</Text>
+        <Pressable accessibilityRole="button" style={styles.sectionAction} onPress={() => onNavigate({ screen: 'thu-chi' })}>
+          <Text style={styles.sectionActionLabel}>Mở sổ Thu chi</Text>
         </Pressable>
       </>), { primary: true })}
       {card('Tình trạng công việc', state(tasks, <>
@@ -318,8 +318,8 @@ export function OverviewScreen({
         <View style={styles.cardHeading}><Text style={screen.label}>Phải chi</Text><Text style={screen.label}>{vnd.format(expense)}</Text></View>
         {bar(100 * expense / Math.max(1, income, expense), colors.accent)}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDebt }}
-          style={styles.row} onPress={() => setShowDebt(value => !value)}>
-          <Text style={styles.link}>Chi tiết công nợ</Text>
+          style={styles.sectionAction} onPress={() => setShowDebt(value => !value)}>
+          <Text style={styles.sectionActionLabel}>Chi tiết công nợ</Text>
         </Pressable>
         {showDebt && <>
           <Text style={screen.body}>Chênh lệch {vnd.format(income - expense)}</Text>
@@ -335,9 +335,9 @@ export function OverviewScreen({
             detail: task.status === 'Vướng' ? `Đang vướng · ${formatDue(task.due)}` : formatDue(task.due),
             route: taskRoute(task),
           }, task.id))}
-        <Pressable accessibilityRole="button" style={styles.inlineAction}
+        <Pressable accessibilityRole="button" style={styles.sectionAction}
           onPress={() => onNavigate({ screen: 'ke-hoach-tuan' })}>
-          <Text style={styles.link}>Mở kế hoạch tuần</Text>
+          <Text style={styles.sectionActionLabel}>Mở kế hoạch tuần</Text>
         </Pressable>
       </>), { primary: true })}
       {card('Truy cập nhanh', <>
@@ -356,6 +356,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   wide: { flexBasis: '42%', flexGrow: 1 },
   cardHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   inlineAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  sectionAction: { alignSelf: 'stretch', minHeight: 48, paddingHorizontal: 16, paddingVertical: 10,
+    alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: lightColors.accent },
+  sectionActionLabel: { color: lightColors.onAccent, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   grow: { flex: 1, minWidth: 0 },
   projectMetadata: { gap: 2, marginTop: 4 },
   metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
