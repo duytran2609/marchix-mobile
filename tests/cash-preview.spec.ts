@@ -1,4 +1,5 @@
-import { devices, expect, test, type Locator, type Page } from '@playwright/test';
+import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
+import { devices, expect, type Locator, type Page } from '@playwright/test';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
@@ -11,7 +12,9 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
   const headers = { Authorization: 'Bearer owner' };
   const note = 'Chi phí kiểm tra thu chi ' + Date.now();
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(admin);
   const reviewer = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(reviewer);
   const button = (target: Page, name: string) => target.getByRole('button', { name, exact: true });
   const status = (target: Page | Locator, value: string) => target.getByText(value, { exact: true });
   const entry = (target: Page) => target.getByRole('button', { name: new RegExp(note) });

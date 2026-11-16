@@ -1,4 +1,5 @@
-import { devices, expect, test, type Page } from '@playwright/test';
+import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
+import { devices, expect, type Page } from '@playwright/test';
 import { todayInVietnam } from '../src/features/tasks/taskDates';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium', actionTimeout: 10_000 });
@@ -24,6 +25,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
       createdBy: staff, approverEmail: 'nguoigiao@example.test', approvedBy: 'nguoigiao@example.test' }],
   ] as const;
   const source = await browser.newPage({ ...devices['iPhone 13'] });
+  await acknowledgeStartupReminder(source);
   source.setDefaultTimeout(10_000);
   const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
   const numberFrom = (text: string) => Number(text.replace(/\D/g, ''));

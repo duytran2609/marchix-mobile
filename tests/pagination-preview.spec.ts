@@ -1,4 +1,5 @@
-import { devices, expect, test } from '@playwright/test';
+import { test } from './helpers/startupReminder';
+import { devices, expect } from '@playwright/test';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 

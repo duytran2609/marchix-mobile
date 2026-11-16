@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { test } from './helpers/startupReminder';
+import { expect } from '@playwright/test';
 
 const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
 
