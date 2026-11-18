@@ -76,7 +76,7 @@ const TaskCard = memo(function TaskCard({
   const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
-      accessibilityHint={`Người giao việc: ${assignerName || 'Chưa rõ'}. Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${overdueLabel ? `${overdueLabel}. ` : ''}${due}.`}
+      accessibilityHint={`Người giao việc: ${assignerName || 'Chưa rõ'}. Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <ClickableCardHeader>
         <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
@@ -86,13 +86,16 @@ const TaskCard = memo(function TaskCard({
         <TaskPerson label="Người giao việc" name={assignerName} photoURL={assignerPhoto} selectable={selectable} />
         <TaskPerson label="Người thực hiện" name={assigneeKey(task) ? assigneeName : undefined}
           photoURL={assigneePhoto} fallback={assigneeName} selectable={selectable} />
-        <View style={styles.metadataRow}>
+        <View style={[styles.metadataRow, styles.dueRow]}>
           <Text selectable={selectable} style={styles.muted}>
             <Text style={styles.metaLabel}>Hạn chót: </Text>
             <Text style={overdueLabel ? styles.danger : undefined}>
               {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
             </Text>
           </Text>
+          {overdueLabel ? (
+            <Text selectable={selectable} style={styles.overdueTag}>{overdueLabel}</Text>
+          ) : null}
         </View>
         <View style={styles.metadataRow}>
           <Text selectable={selectable} style={styles.muted}>
@@ -101,9 +104,6 @@ const TaskCard = memo(function TaskCard({
           </Text>
         </View>
       </View>
-      {overdueLabel ? (
-        <Text selectable={selectable} style={styles.overdueTag}>{overdueLabel}</Text>
-      ) : null}
       <TaskProgress task={task} variant="list" />
     </Pressable>
   );
@@ -281,11 +281,12 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   metadata: { gap: 5 },
   metadataRow: { minHeight: 22, justifyContent: 'center' },
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
+  dueRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center', gap: 6 },
   personName: { color: colors.muted, fontSize: 13, fontWeight: '400' },
   metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   danger: { color: colors.danger, fontWeight: '700' },
-  overdueTag: { alignSelf: 'flex-start', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+  overdueTag: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
     color: colors.danger, backgroundColor: colors.dangerSoft, fontSize: 12, fontWeight: '700' },
 
 

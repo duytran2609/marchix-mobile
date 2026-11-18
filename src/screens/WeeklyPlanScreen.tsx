@@ -69,8 +69,7 @@ export function WeeklyPlanScreen({ name, selectedWeek, onSelectWeek, draftStorag
     </View>
     <WeekContent key={week} {...props} week={week} saving={saving} onSavingChange={setSaving}
       draftStorage={draftStorage} onOpenTask={setTaskId} />
-    {taskId && <TaskDetailPopup id={taskId} email={props.email} name={name}
-      onClose={closeTask} onBackToWeeklyPlan={closeTask} />}
+    {taskId && <TaskDetailPopup id={taskId} email={props.email} name={name} onClose={closeTask} />}
     {calendarOpen && <CalendarDialog title="Chọn tuần" onClose={() => setCalendarOpen(false)}>
       <Text style={ui.muted}>Chọn một ngày để xem cả tuần.</Text>
       <AssignmentCalendar initialDay={week} value={week} rangeEnd={sunday} disabled={saving} onSelect={day => {

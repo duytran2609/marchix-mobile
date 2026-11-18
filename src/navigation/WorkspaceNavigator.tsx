@@ -13,6 +13,7 @@ import { CashScreen } from '../screens/CashScreen';
 import { KpiScreen } from '../screens/KpiScreen';
 import { OverviewScreen } from '../screens/OverviewScreen';
 import { PayrollScreen } from '../screens/PayrollScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 import { ProjectsScreen } from '../screens/ProjectsScreen';
 import { RequestsScreen } from '../screens/RequestsScreen';
 import { ReviewQueueScreen } from '../screens/ReviewQueueScreen';
@@ -25,8 +26,8 @@ import { useTheme } from '../theme/theme';
 import type { WorkspaceRoute } from './workspaceRoutes';
 
 export function WorkspaceNavigator({
-  email, name, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, route, setRoute, showAssignment, setShowAssignment, onDragChange, onScrollTop,
-}: Pick<MemberSession, 'email' | 'name' | 'isAdmin' | 'hasReviewGrant' | 'canReadCash' | 'canReviewCash' | 'canReviewRequests'> & {
+  email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, route, setRoute, showAssignment, setShowAssignment, onDragChange, onScrollTop,
+}: Omit<MemberSession, 'kind'> & {
   route: WorkspaceRoute;
   setRoute: Dispatch<SetStateAction<WorkspaceRoute>>;
   showAssignment: boolean;
@@ -72,6 +73,7 @@ export function WorkspaceNavigator({
     setRoute({ screen: 'cho-duyet' });
   }
 
+  if (route.screen === 'ca-nhan') return <ProfileScreen email={email} name={name} photoURL={photoURL} isAdmin={isAdmin} />;
   if (route.screen === 'tong-quan') return <OverviewScreen
     key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, canReviewRequests])}
     email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}

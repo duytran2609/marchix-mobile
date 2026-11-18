@@ -85,6 +85,17 @@ service cloud.firestore {
         && validSettingsMember(request.resource.data);
     }
 
+    // memberAvatars/{email} stores one raster image (up to 768 KiB) per active member.
+    match /memberAvatars/{id} {
+      function validAvatar(data) {
+        return data.keys().hasAll(['type', 'image']) && data.keys().hasOnly(['type', 'image'])
+          && data.type in ['image/jpeg', 'image/png', 'image/webp']
+          && data.image is bytes && data.image.size() > 0 && data.image.size() <= 786432;
+      }
+      allow get: if activeMember() && id == email();
+      allow create, update: if activeMember() && id == email() && validAvatar(request.resource.data);
+    }
+
     function shortText(value) {
       return value is string && value.size() <= 250;
     }

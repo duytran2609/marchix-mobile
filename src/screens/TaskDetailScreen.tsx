@@ -338,9 +338,8 @@ export function LinkedTaskDetail({ id, email, name, onBack, backLabel }: {
   return <TaskDetailScreen liveTask={task} email={email} name={name} onBack={onBack} backLabel={backLabel} />;
 }
 
-export function TaskDetailPopup({ id, email, name, onClose, onBackToWeeklyPlan }: {
+export function TaskDetailPopup({ id, email, name, onClose }: {
   id: string; email: string; name: string; onClose: () => void;
-  onBackToWeeklyPlan?: () => void;
 }) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
@@ -352,9 +351,6 @@ export function TaskDetailPopup({ id, email, name, onClose, onBackToWeeklyPlan }
             <Text style={screenStyles.cardTitle}>Chi tiết công việc</Text>
             <PopupCloseButton label="Đóng chi tiết công việc" onPress={onClose} />
           </View>
-          {onBackToWeeklyPlan && <View style={styles.popupBack}>
-            <Button label="Quay lại Kế hoạch tuần" secondary onPress={onBackToWeeklyPlan} />
-          </View>}
           <ScrollView style={styles.popupScroll} contentContainerStyle={styles.popupScrollContent} keyboardShouldPersistTaps="handled">
             <LinkedTaskDetail id={id} email={email} name={name} />
           </ScrollView>
@@ -373,7 +369,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   popupScroll: { flexShrink: 1, minHeight: 0 },
-  popupBack: { alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 12 },
   popupScrollContent: { padding: 16 },
   popupContent: { borderWidth: 0, padding: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

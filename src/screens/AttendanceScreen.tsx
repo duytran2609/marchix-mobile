@@ -12,13 +12,13 @@ import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
-import { showAttendanceDate } from '../features/attendance/attendanceTableData';
 import type { AttendanceEditTarget } from '../features/attendance/attendanceTableData';
 import { exportAttendance } from '../features/attendance/exportAttendance';
 import { punch, removeAttendance, saveAdjustment, saveAttendanceNote, watchAttendance, watchAttendanceNotes } from '../features/attendance/attendanceStore';
 import type { AttendanceData, AttendanceMember } from '../features/attendance/attendanceStore';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
+import { formatVietnamDateWithWeekday } from '../utils/dateTime';
 
 const isTime = (value: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
@@ -65,6 +65,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   const { schedule, people, requests } = data;
   const todayRecord = records.get(attendanceId(email, today));
   const todayResult = todayRecord ? calculateAttendance(todayRecord, schedule, today) : null;
+  const working = todayResult?.flag === 'Đang làm';
   const todayWorked = (todayResult?.worked ?? 0) + (approvedOvertimeByDay(email, requests).get(today) ?? 0);
   const completedToday = todayResult && todayResult.entered !== null && todayResult.exited !== null;
   const weight = dayWeight(today, schedule);
@@ -113,14 +114,17 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   return <>
     <PageHeader title="Chấm công" />
     <View style={ui.panel}>
-      <AttendanceClock />
+      <View style={styles.clockGroup}>
+        <AttendanceClock />
+        {working && <Text accessibilityLiveRegion="polite" style={[ui.badge, styles.workingTag]}>Đang làm</Text>}
+      </View>
       <View style={styles.scheduleDetails}>
         <Text style={styles.scheduleText}>
-          <Text style={styles.scheduleLabel}>Ngày: </Text>{showAttendanceDate(today)}/{today.slice(0, 4)}
+          <Text style={styles.scheduleLabel}>Ngày: </Text>{formatVietnamDateWithWeekday(today)}
         </Text>
         <Text style={styles.scheduleText}>
           <Text style={styles.scheduleLabel}>Ca làm việc: </Text>
-          {weight === 0 ? 'Ngày nghỉ' : `${schedule.shiftIn}–${weight === 0.5 ? schedule.lunchFrom + ' (Nửa ngày)' : schedule.shiftOut}`}
+          {weight === 0 ? 'Ngày nghỉ' : `${schedule.shiftIn} - ${weight === 0.5 ? schedule.lunchFrom + ' (Nửa ngày)' : schedule.shiftOut}`}
         </Text>
       </View>
       {schedule.gpsOn && <Text style={styles.scheduleText}>Chấm công theo vị trí văn phòng</Text>}
@@ -131,9 +135,9 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
             <Metric label="Ra" value={clock(todayResult.exited)} alertDetail detail={todayResult.early ? 'Sớm ' + todayResult.early + ' phút' : undefined} />
           </>}
           <Metric label="Giờ làm" value={todayWorked ? `${Math.floor(todayWorked / 60)} tiếng ${todayWorked % 60} phút` : '–'} />
-          {todayResult && <Metric label="Công" value={todayResult.flag === 'Đang làm' ? '…' : String(todayResult.work)} />}
+          {todayResult && <Metric label="Công" value={working ? '…' : String(todayResult.work)} />}
         </View>
-        {!completedToday && !!todayResult?.flag && <Text style={ui.muted}>{todayResult.flag}</Text>}
+        {!completedToday && !working && !!todayResult?.flag && <Text style={ui.muted}>{todayResult.flag}</Text>}
       </>}
       {completedToday && !punching && <View style={styles.completedNotice}>
         <Text accessibilityLiveRegion="polite" style={styles.completedText}>Đã chấm công cho ngày hôm nay.</Text>
@@ -164,8 +168,8 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
           <Metric label="Phép / công tác" value={String(detail.summary.leave)} />
           <Metric label="Đi muộn" value={detail.summary.late + ' lần'} alertDetail={detail.summary.late > 0} detail={detail.summary.lateMinutes + ' phút'} />
           <View style={[styles.metric, styles.missedPunches]}>
-            <Text style={ui.muted}>Quên chấm vào <Text style={ui.cardTitle}>{detail.summary.forgottenIn}</Text></Text>
-            <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut}</Text></Text>
+            <Text style={ui.muted}>Quên chấm vào <Text style={ui.cardTitle}>{detail.summary.forgottenIn} lần</Text></Text>
+            <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut} lần</Text></Text>
           </View>
         </View>
         <PersonalAttendanceTable month={selectedMonth} days={personalDays} dailyNotes={dailyNotes} />
@@ -333,7 +337,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
 
   const details = [
     ['Nhân viên', member.name],
-    ['Ngày', showAttendanceDate(date) + '/' + date.slice(0, 4)],
+    ['Ngày', formatVietnamDateWithWeekday(date)],
     ['Giờ vào ghi nhận', clock(machineTime(record?.inTs))],
     ['Giờ ra ghi nhận', clock(machineTime(record?.outTs))],
     ['Công hiện tại', calculatedWork],
@@ -379,7 +383,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
         </View>
       </KeyboardAvoidingView>
       {confirmDelete && <ConfirmDialog label="Xác nhận xóa bản ghi chấm công" title="Xóa bản ghi chấm công?"
-        message={`Bản ghi của ${member.name} ngày ${showAttendanceDate(date)}/${date.slice(0, 4)} sẽ bị xóa vĩnh viễn.`}
+        message={`Bản ghi của ${member.name} ngày ${formatVietnamDateWithWeekday(date)} sẽ bị xóa vĩnh viễn.`}
         action="Xác nhận xóa" pendingAction="Đang xóa…" pending={pending} error={error}
         onCancel={cancelDelete} onConfirm={() => void submit(true)} />}
       <ToastLayer />
@@ -402,7 +406,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   scheduleLabel: { color: colors.metadataLabel, fontWeight: '700' },
   monthPicker: { width: 148, flexShrink: 1 },
   alertDetail: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+  clockGroup: { gap: 6 },
   clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  workingTag: { alignSelf: 'center', color: colors.success, backgroundColor: colors.successSoft },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexGrow: 1, flexBasis: '45%', backgroundColor: colors.accentSoft, borderRadius: 10, padding: 10 },
   metricInlineDetail: { fontWeight: '400' },

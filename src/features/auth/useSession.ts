@@ -2,6 +2,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { auth, configError, db } from '../../services/firebase/firebase';
+import { rememberAccount } from './recentAccounts';
 
 export type MemberSession = {
   kind: 'member'; email: string; name: string; photoURL: string | null; isAdmin: boolean; hasReviewGrant: boolean;
@@ -33,11 +34,18 @@ export function useSession() {
       } else {
         const email = user.email;
         setSession({ kind: 'loading' });
+        let rememberedName: string | undefined;
         stopMembership = onSnapshot(doc(db, 'members', email), { includeMetadataChanges: true }, snapshot => {
           const member = snapshot.data();
           const isAdmin = member?.role === 'admin';
-          setSession(snapshot.exists() && member?.enabled !== false
-            ? { kind: 'member', email, name: member?.name || email, photoURL: user.photoURL, isAdmin,
+          const allowed = snapshot.exists() && member?.enabled !== false;
+          const name = member?.name || email;
+          if (allowed && !snapshot.metadata.fromCache && rememberedName !== name) {
+            rememberAccount({ email, name, photoURL: user.photoURL });
+            rememberedName = name;
+          }
+          setSession(allowed
+            ? { kind: 'member', email, name, photoURL: user.photoURL, isAdmin,
                 hasReviewGrant: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('taskReview')),
                 canReviewRequests: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('requestReview')),
                 canReadCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashRecord')),

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import {
@@ -41,6 +42,20 @@ try {
   const outsiderDb = await connect('outsider@example.test', 'marchix-mobile-outsider');
   const anonymousDb = await connect(null, 'marchix-mobile-anonymous');
   const adminDb = await connect('quantri@example.test', 'marchix-mobile-demo-admin');
+  const avatar = client => doc(client, 'memberAvatars', staff);
+  const avatarData = {
+    type: 'image/png',
+    image: Bytes.fromUint8Array(await readFile(new URL('../assets/marchix-mark.png', import.meta.url))),
+  };
+  await setDoc(avatar(db), avatarData);
+  assert.ok((await getDocFromServer(avatar(db))).data().image.isEqual(avatarData.image));
+  await updateDoc(avatar(db), avatarData);
+  await denied(getDocFromServer(avatar(otherDb)));
+  await denied(getDocFromServer(avatar(anonymousDb)));
+  await denied(setDoc(avatar(otherDb), avatarData));
+  await denied(updateDoc(avatar(db), { type: 'image/svg+xml' }));
+  await denied(updateDoc(avatar(db), { role: 'admin' }));
+  await denied(updateDoc(avatar(db), { image: Bytes.fromUint8Array(new Uint8Array(786433)) }));
   const financeDraft = client => doc(client, 'projects', 'marchix-mobile-demo', 'finance', 'draft');
   const financeVersion = client => doc(client, 'projects', 'marchix-mobile-demo', 'budgetVersions', '1');
   const projectFinancePlan = {

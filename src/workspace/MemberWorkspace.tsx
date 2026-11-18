@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../components/Toast';
+import { watchMemberAvatar } from '../features/auth/memberAvatar';
 import type { MemberSession } from '../features/auth/useSession';
 import { notificationTaskTarget } from '../features/notifications/notifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
@@ -25,7 +26,11 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const [route, setRoute] = useState<WorkspaceRoute>({ screen: 'tong-quan' });
   const [showAssignment, setShowAssignment] = useState(false);
   const [draggingTask, setDraggingTask] = useState(false);
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null);
+  const avatar = customAvatar ?? photoURL;
   const unregisterPush = useWorkspacePush(email, openNote);
+
+  useEffect(() => watchMemberAvatar(email, setCustomAvatar), [email]);
 
   const scrollRoute = route.screen === 'cho-duyet' ? route.screen : route;
   useEffect(() => {
@@ -37,7 +42,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       showToast('Không mở được trang quản lý Marchix. Vui lòng thử lại.', 'error'));
   }
 
-  function selectTab(tab: WorkspaceTab) {
+  function selectTab(tab: WorkspaceTab | 'ca-nhan') {
     setMenuOpen(false);
     setShowAssignment(false);
     setRoute(current => current.screen === tab ? current : { screen: tab });
@@ -90,7 +95,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       <ScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
           route.screen === 'tong-quan' && styles.overviewPage]}>
-          <WorkspaceNavigator email={email} name={name} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
+          <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
             canReadCash={canReadCash} canReviewCash={canReviewCash} canReviewRequests={canReviewRequests}
             route={route} setRoute={setRoute}
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}
@@ -98,7 +103,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         </View>
       </ScrollView>
       <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
-        isAdmin={isAdmin} name={name} photoURL={photoURL}
+        isAdmin={isAdmin} name={name} photoURL={avatar}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
     </>
   );

@@ -290,6 +290,8 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
   const headers = { Authorization: 'Bearer owner' };
   const today = new Date();
   const local = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const weekdayLabel = today.getDay() === 0 ? 'Chủ nhật' : `Thứ ${today.getDay() + 1}`;
+  const fullDateLabel = `${weekdayLabel}, ${formatTaskDate(local)}`;
   const record = emulator + '/attendance/' + employee + '_' + local;
   const dailyNote = emulator + '/members/' + employee + '/attendanceNotes/' + local;
   const settings = emulator + '/settings/work';
@@ -310,9 +312,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
   } } });
   expect(configured.ok()).toBe(true);
 
-  async function openAttendance(target: typeof page, account: string) {
-    await target.goto(previewUrl);
-    await target.getByRole('button', { name: account }).click();
+  async function openAttendance(target: typeof page) {
     await target.getByRole('button', { name: 'Mở menu' }).click();
     await target.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
     await expect(target.getByRole('heading', { name: 'Chấm công', exact: true })).toBeVisible();
@@ -322,13 +322,24 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
   await acknowledgeStartupReminder(admin);
   try {
     await page.setViewportSize({ width: 678, height: 794 });
-    await page.context().grantPermissions(['geolocation']);
     await page.context().setGeolocation({ latitude: 10.7719, longitude: 106.69 });
-    await openAttendance(page, 'Đăng nhập Google (mô phỏng)');
+    const cdp = await page.context().newCDPSession(page);
+    const { targetInfo } = await cdp.send('Target.getTargetInfo');
+    await cdp.send('Browser.setPermission', {
+      permission: { name: 'geolocation' },
+      origin: new URL(previewUrl).origin,
+      browserContextId: targetInfo.browserContextId,
+      setting: 'denied',
+    });
+    await page.goto(previewUrl);
+    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await openAttendance(page);
     const personalHeading = page.getByRole('heading', { name: 'Bảng công của bạn' });
     await expect(personalHeading).toBeVisible();
-    await expect(page.getByText(/^Ngày:.*\d{2}\/\d{2}\/\d{4}$/)).toBeVisible();
-    await expect(page.getByText(/^Ca làm việc:.*\d{2}:\d{2}–\d{2}:\d{2}$/)).toBeVisible();
+    await expect(page.getByText('Ngày: ' + fullDateLabel, { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Ca làm việc: \d{2}:\d{2} - \d{2}:\d{2}$/)).toBeVisible();
+    await expect(page.getByText(/^Quên chấm vào \d+ lần$/)).toBeVisible();
+    await expect(page.getByText(/^Quên chấm ra \d+ lần$/)).toBeVisible();
     const liveClock = page.getByText(/^\d{2}:\d{2}:\d{2}$/).first();
     const initialTime = await liveClock.textContent();
     await expect.poll(() => liveClock.textContent()).not.toBe(initialTime);
@@ -336,26 +347,19 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     const punchPanel = await checkIn.locator('..').boundingBox();
     const personalPanel = await personalHeading.locator('../..').boundingBox();
     expect(punchPanel?.width).toBeCloseTo(personalPanel!.width);
-    const deniedPage = await browser.newPage();
-    await acknowledgeStartupReminder(deniedPage);
-    try {
-      const cdp = await deniedPage.context().newCDPSession(deniedPage);
-      const { targetInfo } = await cdp.send('Target.getTargetInfo');
-      await cdp.send('Browser.setPermission', {
-        permission: { name: 'geolocation' },
-        setting: 'denied',
-        browserContextId: targetInfo.browserContextId,
-      });
-      await openAttendance(deniedPage, 'Đăng nhập Google (mô phỏng)');
-      expect(await deniedPage.evaluate(async () =>
-        (await navigator.permissions.query({ name: 'geolocation' })).state)).toBe('denied');
-      await deniedPage.getByRole('button', { name: 'Chấm công vào', exact: true }).click();
-      await expect(deniedPage.getByRole('alert')).toHaveText(
-        'Cần cấp quyền truy cập vị trí để chấm công. Hãy cấp quyền vị trí rồi thử lại.');
-      expect((await request.get(record, { headers })).status()).toBe(404);
-    } finally {
-      await deniedPage.close();
-    }
+    expect(await page.evaluate(async () =>
+      (await navigator.permissions.query({ name: 'geolocation' })).state)).toBe('denied');
+    await checkIn.click();
+    await expect(page.getByRole('alert')).toHaveText(
+      'Cần cấp quyền truy cập vị trí để chấm công. Hãy cấp quyền vị trí rồi thử lại.');
+    expect((await request.get(record, { headers })).status()).toBe(404);
+    await cdp.detach();
+    await page.context().grantPermissions(['geolocation'], { origin: previewUrl });
+    // A fresh document starts a new geolocation request after the denied one.
+    await page.reload();
+    await openAttendance(page);
+    await expect.poll(() => page.evaluate(async () =>
+      (await navigator.permissions.query({ name: 'geolocation' })).state)).toBe('granted');
 
     await checkIn.click();
     await expect(page.getByRole('alert')).toContainText('Bạn cách văn phòng 211 m. Bán kính cho phép là 200 m.');
@@ -378,6 +382,9 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     await checkIn.click();
     const completedNotice = page.getByText('Đã chấm công cho ngày hôm nay.', { exact: true });
     await expect(page.getByRole('button', { name: 'Chấm công ra', exact: true })).toBeVisible();
+    const workingTag = page.getByText('Đang làm', { exact: true });
+    await expect(workingTag).toBeVisible();
+    await expect(workingTag.locator('..').getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeVisible();
     await expect(completedNotice).toHaveCount(0);
     const checkOut = page.getByRole('button', { name: 'Chấm công ra', exact: true });
     const beforeCheckOut = await request.get(record, { headers });
@@ -408,6 +415,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     await page.context().setGeolocation({ latitude: 10.7717, longitude: 106.69 });
     await checkOut.click();
     await expect(completedNotice).toBeVisible();
+    await expect(workingTag).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Chấm công (vào|ra)/ })).toHaveCount(0);
     await expect(page.getByText('Cần xác minh giờ vào/ra', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Chọn tháng', { exact: true })).toHaveCount(0);
@@ -425,7 +433,9 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
       return [fields?.inDist?.integerValue, fields?.outDist?.integerValue];
     }).toEqual(['189', '189']);
 
-    await openAttendance(admin, 'Đăng nhập quản trị (mô phỏng)');
+    await admin.goto(previewUrl);
+    await admin.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+    await openAttendance(admin);
     await expect(admin.getByRole('heading', { name: 'Bảng chấm công toàn công ty' })).toBeVisible();
     const day = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][today.getDay()];
     const dateLabel = day + ' · ' + local.slice(8) + '/' + local.slice(5, 7);
@@ -457,6 +467,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     await companyTable.getByRole('button', { name: 'Sửa công Nhân viên demo, ' + dateLabel }).click();
     const editor = admin.getByRole('dialog', { name: 'Sửa công', exact: true });
     await expect(editor).toContainText('Nhân viên: Nhân viên demo');
+    await expect(editor.getByText('Ngày: ' + fullDateLabel, { exact: true })).toBeVisible();
     for (const [label, value] of [
       ['Giờ vào điều chỉnh · Giờ', '08'],
       ['Giờ vào điều chỉnh · Phút', '30'],
@@ -517,7 +528,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     const deleteAttendance = admin.getByRole('button', { name: 'Xóa bản ghi chấm công', exact: true });
     await deleteAttendance.click();
     const attendanceConfirmation = admin.getByRole('alertdialog', { name: 'Xác nhận xóa bản ghi chấm công' });
-    await expect(attendanceConfirmation).toContainText('Nhân viên demo');
+    await expect(attendanceConfirmation).toContainText(`Nhân viên demo ngày ${fullDateLabel}`);
     await attendanceConfirmation.getByRole('button', { name: 'Hủy' }).click();
     await expect(editor.getByRole('button', { name: 'Giờ vào điều chỉnh · Giờ: 08', exact: true })).toBeVisible();
     await expect(editor.getByRole('button', { name: 'Giờ vào điều chỉnh · Phút: 30', exact: true })).toBeVisible();
@@ -662,12 +673,28 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await openMenu.click();
   const items = drawer.getByRole('button');
   const labels = [
-    'Đóng menu', 'Mở Quản lý Marchix bản web', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
-    'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Văn thư', 'Cài đặt', 'Đăng xuất',
+    'Đóng menu', 'Web Quản lý Marchix ↗', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
+    'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Văn thư', 'Cài đặt', 'Thông tin cá nhân', 'Đăng xuất',
   ];
   await expect(items).toHaveCount(labels.length);
   for (const [index, label] of labels.entries()) await expect(items.nth(index)).toHaveAccessibleName(label);
 
+  await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Thông tin cá nhân' })).toBeVisible();
+  await expect(page.getByText('Nhân viên demo', { exact: true })).toBeVisible();
+  await expect(page.getByText('nhanvien@example.test', { exact: true })).toBeVisible();
+  await expect(page.getByText('Nhân viên', { exact: true })).toBeVisible();
+  await expect(page.getByText('nhanvien@example.test', { exact: true })).toHaveCSS('text-align', 'right');
+  const chooseAvatar = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Đổi ảnh đại diện' }).click();
+  await (await chooseAvatar).setFiles('assets/marchix-mark.png');
+  await expect(page.getByText('Đã cập nhật ảnh đại diện.')).toBeVisible();
+  const avatarImage = page.locator('img[src^="data:image/png;base64,"]');
+  await expect(avatarImage).toHaveCount(1);
+
+  await openMenu.click();
+  await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toHaveAttribute('aria-current', 'page');
   await drawer.getByRole('button', { name: 'Cài đặt' }).click();
   await expect(drawer).toBeHidden();
   await expect(page.getByRole('tablist', { name: 'Nhóm cài đặt' }).getByRole('tab')).toHaveCount(1);
@@ -726,6 +753,13 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await confirmation.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
   await expect(drawer).toBeHidden();
   await expect(page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Tài khoản gần đây' })).toBeVisible();
+  await page.getByRole('button', { name: 'Đăng nhập với nhanvien@example.test' }).click();
+  await openMenu.click();
+  await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
+  await expect(page.getByText('nhanvien@example.test', { exact: true })).toBeVisible();
+  await expect(avatarImage).toHaveCount(1);
 });
 
 test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới hạn theo vai trò', async ({ page, browser, request }) => {
@@ -839,6 +873,7 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     }) } })).ok()).toBeTruthy();
 
     await openPlanning(page, 'Đăng nhập Google (mô phỏng)');
+    await expect(page.getByText(/^(?:Thứ [2-7]|Chủ nhật), \d{2}\/\d{2}\/\d{4}$/)).toBeVisible();
     const suggestion = page.getByRole('button', { name: new RegExp(title) });
     await expect(suggestion).toBeVisible();
     await expect(suggestion.getByText('Trạng thái: Đang làm', { exact: true })).toBeVisible();
@@ -897,7 +932,8 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
     const farSuggestion = page.getByRole('button', { name: new RegExp(farTaskTitle) });
     await farSuggestion.click();
     await expect(task.getByText(farTaskTitle, { exact: true })).toBeVisible();
-    await task.getByRole('button', { name: 'Quay lại Kế hoạch tuần', exact: true }).click();
+    await expect(task.getByRole('button', { name: 'Quay lại Kế hoạch tuần', exact: true })).toHaveCount(0);
+    await task.getByRole('button', { name: 'Đóng chi tiết công việc', exact: true }).click();
     await expect(task).toBeHidden();
     await expect(page.getByText(weekRange(farWeek))).toBeVisible();
     await expect(content).toHaveValue(unfinished);

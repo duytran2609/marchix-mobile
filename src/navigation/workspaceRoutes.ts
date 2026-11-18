@@ -22,6 +22,7 @@ export type WorkspaceRoute =
   | { screen: 'thu-chi'; cashId?: string; fromProject?: string; fromNotification?: true; projectExpense?: ProjectExpenseSeed }
   | { screen: 'luong'; month?: string }
   | { screen: 'cai-dat' }
+  | { screen: 'ca-nhan' }
   | { screen: 'van-thu'; recordId?: string }
   | ProjectRoute
   | { screen: 'task-detail'; task: TaskSelection; backTo?: 'tong-quan' };

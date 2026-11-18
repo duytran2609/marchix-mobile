@@ -6,15 +6,10 @@ import type { WorkspaceNotification } from '../features/notifications/notificati
 import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
+import { formatVietnamDateWithWeekday } from '../utils/dateTime';
 
 export const workspaceHeaderPadding = 20;
 
-const vietnamWeekday = new Intl.DateTimeFormat('vi-VN', {
-  timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long',
-});
-const vietnamDate = new Intl.DateTimeFormat('vi-VN', {
-  timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric',
-});
 const vietnamTime = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 });
@@ -26,13 +21,10 @@ function HeaderClock({ inRow = false }: { inRow?: boolean }) {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const weekday = vietnamWeekday.format(now);
-  const date = `${weekday.charAt(0).toLocaleUpperCase('vi-VN')}${weekday.slice(1)}, ${vietnamDate.format(now)}`;
-
   return (
     <View pointerEvents="none" style={[styles.clock, inRow && styles.clockInRow]}>
       <Text numberOfLines={1} adjustsFontSizeToFit style={styles.clockDate}>
-        {date}
+        {formatVietnamDateWithWeekday(now)}
       </Text>
       <Text numberOfLines={1} adjustsFontSizeToFit style={styles.clockTime}>{vietnamTime.format(now)}</Text>
     </View>

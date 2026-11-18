@@ -28,12 +28,12 @@ const sidebarIcons = {
 
 export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onClose, onSelect, onOpenWeb, onLogout }: {
   open: boolean;
-  activeTab: WorkspaceTab;
+  activeTab: WorkspaceTab | 'ca-nhan';
   isAdmin: boolean;
   name: string;
   photoURL: string | null;
   onClose: () => void;
-  onSelect: (tab: WorkspaceTab) => void;
+  onSelect: (tab: WorkspaceTab | 'ca-nhan') => void;
   onOpenWeb: () => void;
   onLogout: () => Promise<void>;
 }) {
@@ -48,6 +48,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
   const showToast = useToast();
   const confirming = logout !== 'closed';
   const pending = logout === 'pending';
+  const profileActive = activeTab === 'ca-nhan';
   const initials = name.trim().split(/\s+/).slice(-2).map(part => Array.from(part)[0]).join('').toLocaleUpperCase('vi');
 
   useEffect(() => {
@@ -100,7 +101,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
                   accessible accessibilityLabel="Logo Marchix" style={styles.logo} />
                 <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} />
               </View>
-              <Button label="Mở Quản lý Marchix bản web" secondary disabled={confirming} onPress={onOpenWeb} />
+              <Button label="Web Quản lý Marchix ↗" secondary disabled={confirming} onPress={onOpenWeb} />
             </View>
             <ScrollView contentContainerStyle={styles.list}>
               {workspaceTabs.map(item => {
@@ -121,15 +122,21 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
             </ScrollView>
             <View style={styles.footer}>
               <View style={styles.profile}>
-                <View style={styles.avatar} aria-hidden>
-                  {photoURL && photoURL !== failedPhoto
-                    ? <Image source={{ uri: photoURL }} style={styles.avatarImage} onError={() => setFailedPhoto(photoURL)} />
-                    : <Text style={styles.initials}>{initials}</Text>}
-                </View>
-                <View style={styles.profileDetails}>
-                  <Text style={styles.profileName}>{name}</Text>
-                  <Text style={styles.role}>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</Text>
-                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Thông tin cá nhân"
+                  accessibilityState={{ selected: profileActive }} disabled={confirming}
+                  {...(Platform.OS === 'web' && profileActive ? { 'aria-current': 'page' } : {})}
+                  onPress={() => onSelect('ca-nhan')}
+                  style={({ pressed }) => [styles.profileButton, profileActive && styles.selected, pressed && styles.pressed]}>
+                  <View style={styles.avatar} aria-hidden>
+                    {photoURL && photoURL !== failedPhoto
+                      ? <Image source={{ uri: photoURL }} style={styles.avatarImage} onError={() => setFailedPhoto(photoURL)} />
+                      : <Text style={styles.initials}>{initials}</Text>}
+                  </View>
+                  <View style={styles.profileDetails}>
+                    <Text style={styles.profileName}>{name}</Text>
+                    <Text style={styles.role}>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</Text>
+                  </View>
+                </Pressable>
                 <Pressable ref={logoutTrigger} accessibilityRole="button" accessibilityLabel="Đăng xuất"
                   disabled={confirming} onPress={() => setLogout('confirm')}
                   style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}>
@@ -181,8 +188,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   selectedLabel: { color: colors.accent, fontWeight: '800' },
   footer: { padding: 12, backgroundColor: colors.background,
     borderTopWidth: 1, borderTopColor: colors.line },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12,
+  profile: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: 6, borderRadius: 12,
     borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
+  profileButton: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center',
+    gap: 8, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.accentSoft },
   avatarImage: { width: '100%', height: '100%' },

@@ -1,9 +1,13 @@
 import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
+import { CardChevron } from '../components/CardChevron';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { useToast } from '../components/Toast';
 import { signInWithGoogle } from '../features/auth/google';
+import { loadRecentAccounts } from '../features/auth/recentAccounts';
+import type { RecentAccount } from '../features/auth/recentAccounts';
 import type { Session } from '../features/auth/useSession';
 import { auth, checkAuthEmulator, configError, emulatorHost, emulatorMode, pilotMode } from '../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../theme/theme';
@@ -14,6 +18,7 @@ const demoAccounts = {
   reviewer: { sub: 'marchix-mobile-demo-reviewer', email: 'nguoigiao@example.test', name: 'Người giao việc demo' },
   admin: { sub: 'marchix-mobile-demo-admin', email: 'quantri@example.test', name: 'Quản trị demo' },
 };
+const demoAccountList = Object.values(demoAccounts);
 
 export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) {
   const { colors } = useTheme();
@@ -21,21 +26,35 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
   const screenStyles = useScreenStyles();
   const showToast = useToast();
   const [busy, setBusy] = useState(false);
+  const [recentAccounts, setRecentAccounts] = useState<RecentAccount[]>([]);
   const loginPending = useRef(false);
 
-  async function login(account: keyof typeof demoAccounts = 'staff') {
+  useEffect(() => {
+    if (sessionKind !== 'signed-out' || configError) return;
+    let active = true;
+    void loadRecentAccounts().then(accounts => {
+      if (active) setRecentAccounts(emulatorMode
+        ? accounts.filter(account => demoAccountList.some(demo => demo.email === account.email))
+        : accounts);
+    });
+    return () => { active = false; };
+  }, [sessionKind]);
+
+  async function login(email?: string) {
     if (loginPending.current) return;
     loginPending.current = true;
     setBusy(true);
     try {
       if (emulatorMode) {
+        const account = email ? demoAccountList.find(demo => demo.email === email) : demoAccounts.staff;
+        if (!account) return;
         if (Platform.OS !== 'web') await checkAuthEmulator();
         const mockGoogleToken = JSON.stringify({
-          ...demoAccounts[account], email_verified: true,
+          ...account, email_verified: true,
         });
         await signInWithCredential(auth, GoogleAuthProvider.credential(mockGoogleToken));
       } else {
-        await signInWithGoogle();
+        await signInWithGoogle(email);
       }
     } catch (err) {
       showToast(emulatorMode ? `Không đăng nhập được qua ${emulatorHost}:9099. Kiểm tra Firebase Emulator đang chạy và điện thoại dùng cùng Wi-Fi với máy tính.`
@@ -71,6 +90,22 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
               ? 'Bản thử dùng tài khoản Google mô phỏng và dữ liệu công việc giả.'
               : pilotMode ? 'Dùng tài khoản Google đang dùng trên web để vào Quản lý Marchix.'
                 : 'Dùng tài khoản Google đã được quản trị Marchix cấp quyền trên staging.'}</Text>
+            {recentAccounts.length > 0 && <View style={styles.recentList}>
+              <Text accessibilityRole="header" style={screenStyles.label}>Tài khoản gần đây</Text>
+              {recentAccounts.map(account => (
+                <Pressable key={account.email} accessibilityRole="button"
+                  accessibilityLabel={`Đăng nhập với ${account.email}`}
+                  accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => void login(account.email)}
+                  style={({ pressed }) => [styles.account, pressed && styles.accountPressed, busy && screenStyles.dimmed]}>
+                  <MemberAvatar name={account.name} photoURL={account.photoURL} />
+                  <View style={styles.accountDetails}>
+                    <Text numberOfLines={1} style={screenStyles.label}>{account.name}</Text>
+                    <Text numberOfLines={2} style={screenStyles.muted}>{account.email}</Text>
+                  </View>
+                  <CardChevron />
+                </Pressable>
+              ))}
+            </View>}
             <Pressable accessibilityRole="button" accessibilityLabel={googleLabel}
               accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={() => void login()}
               style={({ pressed }) => [styles.googleButton, pressed && styles.googlePressed]}>
@@ -79,9 +114,9 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
             </Pressable>
             {emulatorMode && <View style={styles.demoButtons}>
               <Button label="Đăng nhập người giao việc (mô phỏng)" secondary
-                onPress={() => void login('reviewer')} disabled={busy} />
+                onPress={() => void login(demoAccounts.reviewer.email)} disabled={busy} />
               <Button label="Đăng nhập quản trị (mô phỏng)" secondary
-                onPress={() => void login('admin')} disabled={busy} />
+                onPress={() => void login(demoAccounts.admin.email)} disabled={busy} />
             </View>}
           </>}
       </View>
@@ -104,6 +139,14 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   logo: { width: 64, height: 64 },
   heading: { color: colors.ink, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   centered: { textAlign: 'center' },
+  recentList: { gap: 8 },
+  account: {
+    minHeight: 56, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.line, backgroundColor: colors.background,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  accountPressed: { backgroundColor: colors.surfaceMuted },
+  accountDetails: { flex: 1, minWidth: 0 },
   googleButton: {
     minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
     borderWidth: 1, borderColor: '#747775', backgroundColor: '#FFFFFF',
