@@ -32,3 +32,12 @@ export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
   secondary: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line },
   dimmed: { opacity: 0.65 },
 }));
+
+export const useInformationStyles = createThemedStyles(colors => StyleSheet.create({
+  panel: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 18, borderWidth: 1,
+    borderColor: colors.line, backgroundColor: colors.paper },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  divider: { borderTopWidth: 1, borderTopColor: colors.line },
+  label: { width: '44%', color: colors.ink, fontSize: 14, lineHeight: 22, fontWeight: '700' },
+  value: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 15, lineHeight: 22, textAlign: 'right' },
+}));

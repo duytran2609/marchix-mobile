@@ -1,39 +1,52 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
 import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { useScreenStyles } from '../../theme/screenStyles';
+import { useInformationStyles, useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
 import { amount, calculatePay, contracts, employeeStatuses, emptyEmployee, locked, money } from './payroll';
 import type { Employee, EmployeeFields, PayAmounts, PayInputs, PayrollAdvance, Payslip, Rates } from './payroll';
 import { payrollDeductions, payrollMetrics, payrollMoney, payrollWork } from './payrollColumns';
 
-export function PayBreakdown({ pay, advances, onOpenAdvance }: {
-  pay: PayAmounts; advances?: PayrollAdvance[]; onOpenAdvance: (requestId: string) => void;
+export function PayBreakdown({ pay, employeeName, showTaxable, advances, onOpenAdvance }: {
+  pay: PayAmounts; employeeName?: string; showTaxable?: boolean;
+  advances?: PayrollAdvance[]; onOpenAdvance: (requestId: string) => void;
 }) {
   const styles = useScreenStyles();
-  return <View style={styles.stack}>
-    <PayMetric label="Công" value={payrollWork(pay)} />
-    {payrollMetrics.map(metric => metric === payrollDeductions ? <View key={metric.label} style={styles.stack}>
-      <PayMetric label="Tạm ứng lương" value={payrollMoney(amount(pay.advance))} />
-      {advances?.map(advance => <Button key={advance.requestId} secondary
-        label={`Xem đơn tạm ứng: ${advance.reason || advance.requestId} · ${money(advance.amount)}`}
-        onPress={() => onOpenAdvance(advance.requestId)} />)}
-      {!advances?.length && amount(pay.advance) > 0 &&
-        <Text style={styles.muted}>Phiếu này chưa lưu chi tiết đơn tạm ứng.</Text>}
-      <PayMetric label="Khấu trừ khác" value={payrollMoney(amount(pay.deduction))} />
-    </View> : <PayMetric key={metric.label} label={metric.label} value={payrollMoney(metric.get(pay))} />)}
-  </View>;
-}
+  const information = useInformationStyles();
+  const advanceAmount = amount(pay.advance);
+  const rows = [
+    ...(employeeName !== undefined ? [{ label: 'Họ tên', value: employeeName }] : []),
+    { label: 'Công', value: payrollWork(pay) },
+    ...payrollMetrics.flatMap(metric => metric === payrollDeductions ? [
+      { label: 'Tạm ứng lương', value: payrollMoney(advanceAmount) },
+      { label: 'Khấu trừ khác', value: payrollMoney(amount(pay.deduction)) },
+    ] : [{ label: metric.label, value: payrollMoney(metric.get(pay)) }]),
+    ...(showTaxable ? [{ label: 'Thu nhập tính thuế', value: money(pay.taxable) }] : []),
+  ];
 
-function PayMetric({ label, value }: { label: string; value: string }) {
-  const styles = useScreenStyles();
-  return <View style={[styles.detailRow, styles.listHeader]}>
-    <Text style={[styles.muted, styles.listHeading]}>{label}</Text>
-    <Text style={label === 'Thực lĩnh' ? styles.cardTitle : styles.label}>{value}</Text>
+  return <View style={information.panel}>
+    {rows.map(({ label, value }, index) => (
+      <View key={label} style={index > 0 && information.divider}>
+        <View style={information.row}>
+          <Text style={information.label}>{label}</Text>
+          <Text style={[information.value, label === 'Thực lĩnh' && styles.cardTitle]}>{value}</Text>
+        </View>
+        {label === 'Tạm ứng lương' && (advances?.length || advanceAmount > 0) ? (
+          <View style={[styles.stack, { paddingBottom: 10 }]}>
+            {advances?.length ? advances.map(advance => <Button key={advance.requestId} secondary
+              label={`Xem đơn tạm ứng: ${advance.reason || advance.requestId} · ${money(advance.amount)}`}
+              onPress={() => onOpenAdvance(advance.requestId)} />)
+              : <Text style={styles.muted}>Phiếu này chưa lưu chi tiết đơn tạm ứng.</Text>}
+          </View>
+        ) : null}
+      </View>
+    ))}
   </View>;
 }
 
@@ -44,17 +57,17 @@ export function PayrollModal({ title, busy, onClose, children }: {
   return <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent
     onRequestClose={() => { if (!busy) onClose(); }}>
     <SafeAreaView style={popup.overlay}>
-      <KeyboardAvoidingView style={popup.center} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardViewport style={popup.center}>
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={[styles.panel, popup.panel]}>
           <View style={styles.listHeader}>
             <Text accessibilityRole="header" style={[styles.cardTitle, styles.listHeading]}>{title}</Text>
             <PopupCloseButton label="Đóng" onPress={onClose} disabled={busy} />
           </View>
-          <ScrollView style={popup.scroll} contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
+          <KeyboardScrollView style={popup.scroll} contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
             {children}
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
     </SafeAreaView>
   </Modal>;
 }
@@ -178,8 +191,7 @@ export function PayEditor({ employee, month, rates, advances, slip, pay, busy, o
     {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
       required={key === 'workDays' || key === 'standardDays'}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
-    <PayBreakdown pay={preview} advances={advances} onOpenAdvance={onOpenAdvance} />
-    <Text style={styles.muted}><Text style={styles.metadataLabel}>Thu nhập tính thuế: </Text>{money(preview.taxable)}</Text>
+    <PayBreakdown pay={preview} showTaxable advances={advances} onOpenAdvance={onOpenAdvance} />
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
       : <Button label="Lưu dòng lương" disabled={busy} onPress={() => {

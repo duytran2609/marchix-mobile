@@ -1,14 +1,16 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CardChevron } from '../../components/CardChevron';
 import { createThemedStyles } from '../../theme/theme';
+import { mondayOf } from '../weekly-plan/weeklyPlan';
 import { formatTaskDate } from './taskDates';
 import { taskProgressValue } from './TaskProgress';
 import type { Task } from './tasks';
 
 const dayMs = 86_400_000;
 const tickWidth = 56;
-const rowHeight = 68;
+const rowHeight = 76;
 const headerHeight = 36;
+
+export type GanttRange = 'month' | 'week';
 
 function calendarDay(value?: string) {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
@@ -23,84 +25,91 @@ function schedule(task: Task) {
   const start = calendarDay(task.startDate);
   const due = calendarDay(task.due);
   if (start !== undefined && due !== undefined && start <= due) {
-    return { start, end: due, label: `${dateLabel(start)} – ${dateLabel(due)}` };
+    return { start, end: due, startDate: dateLabel(start), deadline: dateLabel(due) };
   }
-  if (due !== undefined) return { start: due, label: `Hạn ${dateLabel(due)}` };
-  if (start !== undefined) return { start, label: `Bắt đầu ${dateLabel(start)}` };
-  return { label: 'Chưa đặt lịch' };
+  if (due !== undefined) return { start: due, deadline: dateLabel(due) };
+  if (start !== undefined) return { start, startDate: dateLabel(start) };
+  return {};
 }
 
-export function TaskGantt({ tasks, today, onOpen }: { tasks: Task[]; today: string; onOpen: (task: Task) => void }) {
+export function TaskGantt({ tasks, today, range, onOpen }: {
+  tasks: Task[]; today: string; range: GanttRange;
+  onOpen: (task: Task) => void;
+}) {
   const styles = useStyles();
   const todayDay = Date.parse(today) / dayMs;
-  const rows = tasks.map(task => ({ task, progress: taskProgressValue(task), ...schedule(task) }));
-  const firstScheduled = rows.reduce((first, row) => Math.min(first, row.start ?? first), Infinity);
-  const lastScheduled = rows.reduce((last, row) => Math.max(last, row.end ?? row.start ?? last), -Infinity);
-  const first = Number.isFinite(firstScheduled) ? firstScheduled : todayDay;
-  const last = Number.isFinite(lastScheduled) ? lastScheduled : todayDay;
-  const start = todayDay >= first - 7 && todayDay <= last + 7 ? Math.min(first, todayDay) : first;
-  const span = Math.max(7, last - start + 1, todayDay <= last + 7 ? todayDay - start + 1 : 0);
-  const daysPerTick = span <= 21 ? 1 : 7 * Math.ceil(span / (28 * 7));
-  const tickCount = Math.ceil(span / daysPerTick);
+  const rows = tasks.map(task => {
+    const dates = schedule(task);
+    const progress = taskProgressValue(task);
+    const labels = [];
+    if (dates.startDate) labels.push(`Bắt đầu: ${dates.startDate}`);
+    if (dates.deadline) labels.push(`Hạn chót: ${dates.deadline}`);
+    if (!labels.length) labels.push('Chưa đặt lịch');
+    return { task, progress, ...dates, hint: `${labels.join('. ')}. Tiến độ ${progress}%.` };
+  });
+  const start = Date.parse(range === 'week' ? mondayOf(today) : `${today.slice(0, 7)}-01`) / dayMs;
+  const nextMonth = new Date(start * dayMs);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  const tickCount = range === 'week' ? 7 : nextMonth.getTime() / dayMs - start;
   const timelineWidth = tickCount * tickWidth;
-  const dayWidth = tickWidth / daysPerTick;
-  const todayOffset = (todayDay - start) * dayWidth;
-  const showToday = todayOffset >= 0 && todayOffset < timelineWidth;
+  const rangeEnd = start + tickCount;
+  const todayTick = todayDay - start;
 
   return (
     <View style={styles.chart}>
       <View style={styles.names}>
         <View style={styles.nameHeader}><Text style={styles.heading}>Công việc</Text></View>
-        {rows.map(({ task, label, progress }) => (
+        {rows.map(({ task, startDate, deadline, hint, progress }) => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
-            accessibilityHint={`${label}. Tiến độ ${progress}%.`}
+            accessibilityHint={hint}
             onPress={() => onOpen(task)} style={({ pressed }) => [styles.nameRow, pressed && styles.pressed]}>
-            <View style={styles.taskDetails}>
+            <View style={styles.taskHeading}>
               <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-              <Text numberOfLines={1} style={styles.dateLabel}>{label}</Text>
+              <Text style={styles.progressValue}>{progress}%</Text>
             </View>
-            <Text style={styles.progressValue}>{progress}%</Text>
-            <View style={styles.chevron}><CardChevron /></View>
+            {startDate ? <Text style={styles.dateLabel}>Bắt đầu: {startDate}</Text> : null}
+            {deadline ? <Text style={styles.dateLabel}>
+              <Text style={styles.deadlineLabel}>Hạn chót: </Text>{deadline}
+            </Text> : null}
+            {!startDate && !deadline ? <Text style={styles.dateLabel}>Chưa đặt lịch</Text> : null}
           </Pressable>
         ))}
       </View>
-      <ScrollView horizontal style={styles.timelineScroll} accessibilityLabel="Trục thời gian công việc">
+      <ScrollView key={range} horizontal style={styles.timelineScroll} accessibilityLabel="Trục thời gian công việc">
         <View style={{ width: timelineWidth }}>
           <View style={styles.axis}>
             {Array.from({ length: tickCount }, (_, index) => {
-              const day = start + index * daysPerTick;
-              const date = new Date(day * dayMs);
-              const year = date.getUTCFullYear();
-              const previousYear = new Date((day - daysPerTick) * dayMs).getUTCFullYear();
-              const containsToday = todayDay >= day && todayDay < day + daysPerTick;
-              return <View key={day} style={[styles.tick, containsToday && styles.todayTick]}>
+              const day = start + index;
+              return <View key={day} style={[styles.tick, index === todayTick && styles.todayTick]}>
                 <Text style={styles.dateLabel}>{dateLabel(day).slice(0, 5)}</Text>
-                {index === 0 || year !== previousYear ? <Text style={styles.year}>{year}</Text>
-                  : containsToday ? <Text style={styles.year}>Hôm nay</Text> : null}
               </View>;
             })}
           </View>
           <View pointerEvents="none" style={StyleSheet.absoluteFill} aria-hidden>
+            <View style={[styles.todayColumn, { left: todayTick * tickWidth }]} />
             {Array.from({ length: tickCount }, (_, index) => (
               <View key={index} style={[styles.gridLine, { left: index * tickWidth }]} />
             ))}
-            {showToday && <View style={[styles.todayLine, { left: todayOffset + dayWidth / 2 }]} />}
           </View>
-          {rows.map(({ task, start: taskStart, end, label, progress }) => {
-            if (taskStart === undefined) return <View key={task.id} style={styles.timelineRow} />;
-            const dayOffset = taskStart - start;
+          {rows.map(({ task, start: taskStart, end, hint, progress }) => {
+            if (taskStart === undefined || (end ?? taskStart) < start || taskStart >= rangeEnd) {
+              return <View key={task.id} style={styles.timelineRow} />;
+            }
+            const visibleStart = Math.max(taskStart, start);
+            const dayOffset = visibleStart - start;
             const isMarker = end === undefined;
-            const left = isMarker ? Math.min(timelineWidth - 10, Math.max(0, (dayOffset + 0.5) * dayWidth - 5))
-              : dayOffset * dayWidth;
-            const width = isMarker ? 10 : Math.max(2, (end - taskStart + 1) * dayWidth);
+            const left = isMarker ? (dayOffset + 0.5) * tickWidth - 5 : dayOffset * tickWidth;
+            const width = isMarker ? 10 : (Math.min(end + 1, rangeEnd) - visibleStart) * tickWidth;
+            const completedThrough = isMarker ? taskStart : taskStart + (end - taskStart + 1) * progress / 100;
+            const fillWidth = Math.min(width, Math.max(0, (completedThrough - visibleStart) * tickWidth));
             return (
               <View key={task.id} style={styles.timelineRow}>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc trên biểu đồ: ${task.title}`}
-                  accessibilityHint={`${label}. Tiến độ ${progress}%.`} hitSlop={20}
+                  accessibilityHint={hint} hitSlop={20}
                   onPress={() => onOpen(task)}
                   style={({ pressed }) => [isMarker ? styles.marker : styles.bar, { left, width }, pressed && styles.timelinePressed]}>
                   {!isMarker && (
-                    <View pointerEvents="none" style={[styles.barFill, task.status === 'Xong' && styles.doneBar, { width: `${progress}%` }]} />
+                    <View pointerEvents="none" style={[styles.barFill, task.status === 'Xong' && styles.doneBar, { width: fillWidth }]} />
                   )}
                 </Pressable>
               </View>
@@ -119,22 +128,22 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   nameHeader: { height: headerHeight, justifyContent: 'center', paddingHorizontal: 10,
     backgroundColor: colors.surfaceMuted, borderBottomWidth: 1, borderColor: colors.line },
   heading: { color: colors.ink, fontWeight: '800', fontSize: 13 },
-  nameRow: { height: rowHeight, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
+  nameRow: { height: rowHeight, justifyContent: 'center', gap: 2, paddingHorizontal: 10,
     borderBottomWidth: 1, borderColor: colors.line },
   pressed: { backgroundColor: colors.accentSoft },
-  taskDetails: { flex: 1, minWidth: 0, gap: 3 },
-  taskTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
-  chevron: { alignSelf: 'flex-start', paddingTop: 6 },
+  taskHeading: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  taskTitle: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 13, fontWeight: '700' },
   progressValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   dateLabel: { color: colors.muted, fontSize: 11 },
-  year: { color: colors.muted, fontSize: 10 },
+  deadlineLabel: { fontWeight: '700' },
   timelineScroll: { flex: 1, minWidth: 0 },
   axis: { height: headerHeight, flexDirection: 'row', backgroundColor: colors.surfaceMuted,
     borderBottomWidth: 1, borderColor: colors.line },
-  tick: { width: tickWidth, paddingHorizontal: 5, justifyContent: 'center' },
+  tick: { width: tickWidth, alignItems: 'center', justifyContent: 'center' },
   todayTick: { backgroundColor: colors.accentSoft },
   gridLine: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: colors.line },
-  todayLine: { position: 'absolute', top: headerHeight, bottom: 0, width: 1, backgroundColor: colors.accent },
+  todayColumn: { position: 'absolute', top: headerHeight, bottom: 0, width: tickWidth,
+    backgroundColor: colors.accentSoft, opacity: 0.65 },
   timelineRow: { height: rowHeight, justifyContent: 'center', borderBottomWidth: 1, borderColor: colors.line },
   bar: { position: 'absolute', height: 14, borderRadius: 5, overflow: 'hidden', backgroundColor: colors.accentSoft },
   barFill: { height: '100%', backgroundColor: colors.accent },

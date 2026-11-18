@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { FieldLabel } from '../../components/FieldLabel';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
@@ -69,13 +71,13 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
 
   return <Modal transparent visible onRequestClose={close} statusBarTranslucent navigationBarTranslucent>
     <SafeAreaView style={popup.overlay}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={popup.center}>
+      <KeyboardViewport style={popup.center}>
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={popup.panel}>
           <View style={popup.header}>
             <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
             <PopupCloseButton label="Đóng biểu mẫu dự án" onPress={close} disabled={saving} />
           </View>
-          <ScrollView style={popup.scroll} contentContainerStyle={popup.body} keyboardShouldPersistTaps="handled">
+          <KeyboardScrollView style={popup.scroll} contentContainerStyle={popup.body} keyboardShouldPersistTaps="handled">
             {!project && <Text selectable style={styles.muted}>
               <Text style={popup.codeLabel}>Mã dự án: </Text>DA-{projectId}
             </Text>}
@@ -117,9 +119,9 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
             {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
             <Button label={saving ? 'Đang lưu…' : 'Lưu dự án'} onPress={() => void submit()} disabled={saving} />
             <Button label="Hủy" onPress={close} secondary disabled={saving} />
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
     </SafeAreaView>
   </Modal>;
 }

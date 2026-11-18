@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardViewport } from '../components/KeyboardViewport';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { PeopleSummary } from '../components/PeopleSummary';
@@ -21,7 +23,7 @@ import {
 import type { AssignmentProject, EditableStatus, Task, TaskAssignee } from '../features/tasks/tasks';
 import { auth, db, emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../theme/theme';
-import { useScreenStyles } from '../theme/screenStyles';
+import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 
 type TaskDirectory = { members: TaskAssignee[]; projects?: AssignmentProject[] };
 const detailTabs = [
@@ -34,6 +36,7 @@ function TaskMetadata({ task, email, name, members, project }: {
   task: Task; email: string; name: string; members: Map<string, TaskAssignee>; project?: string;
 }) {
   const styles = useStyles();
+  const information = useInformationStyles();
   const watchers = Array.isArray(task.watchers) ? task.watchers : [];
   const assignee = task.assignee?.trim();
   const assigner = task.assignedBy?.trim();
@@ -49,17 +52,17 @@ function TaskMetadata({ task, email, name, members, project }: {
   const fields = [
     ['Hạng mục', task.category?.trim() || 'Chưa xác định'],
     ['Người giao việc', assigner
-      ? <PeopleSummary wrap people={[person(assigner)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(assigner)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
     ['Người thực hiện', task.assigneeEmail || assignee
-      ? <PeopleSummary wrap people={[person(task.assigneeEmail, assignee)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.assigneeEmail, assignee)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
     ['Người duyệt', task.approverEmail
-      ? <PeopleSummary wrap people={[person(task.approverEmail)]} textStyle={styles.metadataName} /> : 'Chưa chỉ định'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.approverEmail)]} textStyle={styles.metadataName} /> : 'Chưa chỉ định'],
     ['Người theo dõi', watchers.length
-      ? <PeopleSummary wrap people={watchers.map(personEmail => person(personEmail))} textStyle={styles.metadataName} /> : 'Chưa chọn'],
+      ? <PeopleSummary wrap wrapAlignEnd people={watchers.map(personEmail => person(personEmail))} textStyle={styles.metadataName} /> : 'Chưa chọn'],
     ['Dự án', project || task.projectId || 'Chung toàn công ty'],
     ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
     ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
-    ['Mức độ ưu tiên', <Text style={styles.metadataValue}><TaskPriority priority={task.priority} /></Text>],
+    ['Mức độ ưu tiên', <Text style={information.value}><TaskPriority priority={task.priority} /></Text>],
     ...(typeof task.requireReview === 'boolean' ? [[
       'Chế độ hoàn thành', taskCompletionModes[task.requireReview ? 1 : 0].label,
     ] as const] : []),
@@ -67,11 +70,11 @@ function TaskMetadata({ task, email, name, members, project }: {
     ['Mốc bàn giao dự án', task.milestone ? 'Có' : 'Không'],
   ] as const;
 
-  return <View style={styles.taskMetadata}>
+  return <View style={information.panel}>
     {fields.map(([label, value], index) => (
-      <View key={label} style={[styles.metadataField, index > 0 && styles.metadataDivider]}>
-        <Text style={styles.metadataLabel}>{label}:</Text>
-        {typeof value === 'string' ? <Text style={styles.metadataValue}>{value}</Text> : value}
+      <View key={label} style={[information.row, index > 0 && information.divider]}>
+        <Text style={information.label}>{label}</Text>
+        {typeof value === 'string' ? <Text style={information.value}>{value}</Text> : value}
       </View>
     ))}
   </View>;
@@ -82,6 +85,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
 }) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
+  const information = useInformationStyles();
   const showToast = useToast();
   const [tab, setTab] = useState<typeof detailTabs[number]['value']>('general');
   const checklist = liveTask.checklist ?? [];
@@ -209,6 +213,13 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
         </View>}
         <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
         <SegmentedButtons label="Chi tiết công việc" choices={detailTabs} value={tab} onChange={setTab} />
+        {tab === 'description' && <View style={screenStyles.stack}>
+          <Text accessibilityRole="header" style={screenStyles.cardTitle}>Mô tả / Yêu cầu bàn giao</Text>
+          <View style={[information.panel, styles.taskNote]}>
+            {liveTask.note ? <Text selectable style={screenStyles.body}>{liveTask.note}</Text>
+              : <Text style={screenStyles.muted}>Chưa có mô tả hoặc yêu cầu bàn giao.</Text>}
+          </View>
+        </View>}
         {tab === 'general' && <>
           <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
           <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} variant="detail" />
@@ -296,11 +307,6 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
           </View>
         ) : null}
       </>}
-      {tab === 'description' && <View style={[screenStyles.panel, styles.taskNote]}>
-        <Text accessibilityRole="header" style={screenStyles.cardTitle}>Mô tả / Yêu cầu bàn giao</Text>
-        {liveTask.note ? <Text selectable style={screenStyles.body}>{liveTask.note}</Text>
-          : <Text style={screenStyles.muted}>Chưa có mô tả hoặc yêu cầu bàn giao.</Text>}
-      </View>}
       <View style={tab !== 'discussion' && styles.hidden}>
         <TaskDiscussion task={liveTask} email={email} name={name} members={members} />
       </View>
@@ -345,17 +351,17 @@ export function TaskDetailPopup({ id, email, name, onClose }: {
   const screenStyles = useScreenStyles();
   return <Modal transparent visible onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
     <SafeAreaView style={styles.popupOverlay}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.popupCenter}>
+      <KeyboardViewport style={styles.popupCenter}>
         <View role="dialog" accessibilityLabel="Chi tiết công việc" accessibilityViewIsModal style={styles.popup}>
           <View style={styles.popupHeader}>
             <Text style={screenStyles.cardTitle}>Chi tiết công việc</Text>
             <PopupCloseButton label="Đóng chi tiết công việc" onPress={onClose} />
           </View>
-          <ScrollView style={styles.popupScroll} contentContainerStyle={styles.popupScrollContent} keyboardShouldPersistTaps="handled">
+          <KeyboardScrollView style={styles.popupScroll} contentContainerStyle={styles.popupScrollContent} keyboardShouldPersistTaps="handled">
             <LinkedTaskDetail id={id} email={email} name={name} />
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
       <ToastLayer safeAreaApplied />
     </SafeAreaView>
   </Modal>;
@@ -372,15 +378,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupScrollContent: { padding: 16 },
   popupContent: { borderWidth: 0, padding: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  taskNote: { minHeight: 180 },
+  taskNote: { paddingVertical: 20 },
   hidden: { display: 'none' },
-  taskMetadata: { paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.line,
-    backgroundColor: colors.surfaceMuted },
-  metadataField: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 9 },
-  metadataDivider: { borderTopWidth: 1, borderTopColor: colors.line },
-  metadataLabel: { width: '44%', color: colors.metadataLabel, fontSize: 15, lineHeight: 24, fontWeight: '700' },
-  metadataValue: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 17, lineHeight: 24 },
-  metadataName: { fontSize: 17, lineHeight: 24, fontWeight: '400' },
+  metadataName: { fontSize: 15, lineHeight: 22, fontWeight: '400', textAlign: 'right' },
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: colors.line, borderRadius: 5,
     alignItems: 'center', justifyContent: 'center' },

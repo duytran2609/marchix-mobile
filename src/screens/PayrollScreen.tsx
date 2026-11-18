@@ -117,13 +117,12 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
       {selectedMonth && <Dropdown label="Chọn tháng" value={selectedMonth} onChange={setHistoryMonth}
         choices={months.map(value => ({ value, label: monthLabel(value) }))} />}
       <PaginatedList items={data.slips.filter(slip => slip.month === selectedMonth)} resetKey={selectedMonth}>
-        {pageItems => pageItems.map(slip => <View key={slip.id} style={styles.panel}>
+        {pageItems => pageItems.map(slip => <View key={slip.id} style={styles.stack}>
           <View style={styles.listHeader}>
             <Text style={styles.cardTitle}>Tháng {monthLabel(slip.month)}</Text>
             <Text style={styles.badge}>{slip.status}</Text>
           </View>
-          <Text style={styles.label}>{slip.name}</Text>
-          <PayBreakdown pay={slip} advances={recordedAdvanceRequests(slip)}
+          <PayBreakdown pay={slip} employeeName={slip.name} advances={recordedAdvanceRequests(slip)}
             onOpenAdvance={id => onOpenAdvance(id, slip.month)} />
           {slip.status === 'Đã chốt' && (slip.employeeConfirmedAt
             ? <Text style={styles.badge}>Bạn đã xác nhận</Text>

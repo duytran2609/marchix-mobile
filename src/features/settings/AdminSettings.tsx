@@ -1,8 +1,9 @@
+import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { PaginatedList } from '../../components/PaginatedList';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
 import { Button } from '../../components/Button';
@@ -185,19 +186,19 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
-      <SafeAreaView style={popup.backdrop}>
+      <KeyboardSafeAreaView style={popup.backdrop}>
         <View role="dialog" accessibilityLabel={popupTitle} accessibilityViewIsModal
           style={[popup.card, { backgroundColor: colors.paper }]}>
           <View style={popup.header}>
             <Text accessibilityRole="header" style={[ui.cardTitle, popup.title]}>{popupTitle}</Text>
             <PopupCloseButton label={`Đóng ${popupTitle.toLowerCase()}`} disabled={busy} onPress={close} />
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>
+          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>
             {content}
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
         <ToastLayer safeAreaApplied />
-      </SafeAreaView>
+      </KeyboardSafeAreaView>
     </Modal>
   );
 }

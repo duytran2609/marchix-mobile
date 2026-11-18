@@ -2,6 +2,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import type { Palette } from '../../theme/theme';
 import type { EditableStatus, Task } from './tasks';
+import { taskStatus } from './taskStatuses';
+
+export { taskStatus } from './taskStatuses';
 
 const statusTones = (colors: Palette) => ({
   'Chưa làm': { text: colors.muted, background: colors.surfaceMuted },
@@ -11,10 +14,6 @@ const statusTones = (colors: Palette) => ({
   'Xong': { text: colors.success, background: colors.successSoft },
   'Khác': { text: colors.muted, background: colors.surfaceMuted },
 });
-
-export function taskStatus(task: Task) {
-  return task.status || 'Chưa làm';
-}
 
 export function taskProgressValue(task: Task, status = taskStatus(task), previewProgress?: number) {
   const value = previewProgress ?? Number(task.progress ?? (status === 'Xong' ? 100 : 0));

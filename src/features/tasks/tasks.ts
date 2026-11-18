@@ -2,11 +2,11 @@ import { collection, doc, onSnapshot, query, runTransaction, where } from 'fireb
 import { httpsCallable } from 'firebase/functions';
 import { db, pilotMode, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
 import { pilotAddAttachments, pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
+import { editableStatuses } from './taskStatuses';
 export { taskCategoryMaxLength } from './pilotTasks';
+export { editableStatuses, taskStatuses } from './taskStatuses';
 
-export const editableStatuses = ['Chưa làm', 'Đang làm', 'Vướng'] as const;
 export type EditableStatus = typeof editableStatuses[number];
-export const taskStatuses = [...editableStatuses, 'Chờ duyệt', 'Xong'] as const;
 export const reviewRatings = ['Xuất sắc', 'Tốt', 'Khá', 'Trung bình', 'Kém'] as const;
 export type ReviewRating = typeof reviewRatings[number];
 export const commentMaxLength = 1000;

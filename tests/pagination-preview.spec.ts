@@ -31,18 +31,38 @@ test('Sổ thu chi chuyển trang, đổi số dòng và đặt lại trang khi 
     await page.getByRole('dialog').getByRole('button', { name: 'Thu chi', exact: true }).click();
     await page.getByRole('button', { name: /^Tháng:/ }).click();
     await page.getByRole('radio', { name: 'Tháng 12/2099', exact: true }).click();
-    await button('Số dòng mỗi trang: 25 dòng').click();
-    await page.getByRole('radio', { name: '10 dòng', exact: true }).click();
-
     const previous = button('Trang trước');
     const next = button('Trang sau');
     await expect(previous).toBeDisabled();
-    await expect(entries).toHaveCount(10);
+    await expect(page.getByText('Trang 1 / 3', { exact: true })).toBeVisible();
+    await expect(entries).toHaveCount(5);
     await next.click();
-    await expect(page.getByText('Trang 2 / 2', { exact: true })).toBeVisible();
+    await expect(page.getByText('Trang 2 / 3', { exact: true })).toBeVisible();
+    await expect(entries).toHaveCount(5);
+    await next.click();
+    await expect(page.getByText('Trang 3 / 3', { exact: true })).toBeVisible();
     await expect(entries).toHaveCount(2);
     await expect(next).toBeDisabled();
-    await previous.click();
+
+    const pageSize = button('Số dòng mỗi trang: 5 dòng');
+    const nextSection = page.getByText('Đã chi theo hạng mục', { exact: true });
+    await pageSize.evaluate(element => element.scrollIntoView({ block: 'end' }));
+    const beforeOpening = await pageSize.boundingBox();
+    const sectionBefore = await nextSection.boundingBox();
+    await pageSize.click();
+    const options = page.getByRole('radiogroup', { name: 'Số dòng mỗi trang' });
+    await expect(options).toBeVisible();
+    const triggerBounds = await page.getByRole('button', { name: 'Số dòng mỗi trang: 5 dòng', exact: true, includeHidden: true }).boundingBox();
+    const optionBounds = await options.getByRole('radio', { name: '5 dòng', exact: true }).boundingBox();
+    const sectionAfter = await nextSection.boundingBox();
+    expect(triggerBounds!.y).toBeLessThan(beforeOpening!.y);
+    expect(sectionAfter!.y - triggerBounds!.y).toBeCloseTo(sectionBefore!.y - beforeOpening!.y, 0);
+    expect(optionBounds!.y - (triggerBounds!.y + triggerBounds!.height)).toBeGreaterThan(0);
+    expect(optionBounds!.y - (triggerBounds!.y + triggerBounds!.height)).toBeLessThan(12);
+    await expect(options.getByRole('radio', { name: '100 dòng', exact: true })).toBeInViewport();
+    await expect(page.getByText('5 dòng', { exact: true })).toHaveCount(2);
+    await options.getByRole('radio', { name: '10 dòng', exact: true }).click();
+    await expect(page.getByText('Trang 1 / 2', { exact: true })).toBeVisible();
     await expect(entries).toHaveCount(10);
 
     await next.click();

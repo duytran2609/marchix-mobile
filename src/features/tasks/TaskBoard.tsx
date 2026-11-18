@@ -8,6 +8,7 @@ import { SearchInput } from '../../components/SearchInput';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
 import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
 import { TaskGantt } from './TaskGantt';
+import type { GanttRange } from './TaskGantt';
 import { TaskKanban } from './TaskKanban';
 import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
@@ -21,15 +22,20 @@ const taskFilters = ['Tất cả', 'Chưa xong', 'Quá hạn', ...taskStatuses] 
 const statusOptions = taskFilters.map(value => ({ value, label: value }));
 const priorityFilters = ['', ...taskPriorities, 'Chưa đặt'] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
+const ganttRangeChoices = [
+  { value: 'month', label: 'Theo tháng' },
+  { value: 'week', label: 'Theo tuần' },
+] as const;
 type TaskFilter = typeof taskFilters[number];
 type PriorityFilter = typeof priorityFilters[number];
 type TaskView = 'list' | 'kanban' | 'gantt';
 
 export type TaskBoardOptions = {
-  search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; project: string | null; view: TaskView;
+  search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; project: string | null;
+  view: TaskView; ganttRange: GanttRange;
 };
 export const initialTaskBoardOptions: TaskBoardOptions = {
-  search: '', filter: 'Tất cả', assignee: '', priority: '', project: null, view: 'list',
+  search: '', filter: 'Tất cả', assignee: '', priority: '', project: null, view: 'list', ganttRange: 'month',
 };
 
 function isOpenTask(task: Task) {
@@ -50,24 +56,11 @@ function assigneeKey(task: Task) {
   return task.assigneeEmail || (name ? `name:${name}` : '');
 }
 
-function TaskPerson({ label, name, photoURL, selectable, fallback = 'Chưa rõ' }: {
-  label: string; name?: string; photoURL?: string | null; selectable?: boolean; fallback?: string;
-}) {
-  const styles = useStyles();
-  return (
-    <View style={[styles.metadataRow, styles.personRow]}>
-      <Text selectable={selectable} style={[styles.muted, styles.metaLabel]}>{label}: </Text>
-      <PeopleSummary people={[{ id: name || '', name: name || fallback, photoURL }]}
-        textStyle={styles.personName} selectable={selectable} />
-    </View>
-  );
-}
-
 const TaskCard = memo(function TaskCard({
-  task, today, onOpen, kanban = false, assigneeName, assigneePhoto, assignerName, assignerPhoto,
+  task, today, onOpen, kanban = false, assigneeName, assigneePhoto,
 }: {
   task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
-  assigneePhoto?: string | null; assignerName?: string; assignerPhoto?: string | null;
+  assigneePhoto?: string | null;
 }) {
   const styles = useStyles();
   const selectable = kanban ? false : undefined;
@@ -76,29 +69,33 @@ const TaskCard = memo(function TaskCard({
   const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
-      accessibilityHint={`Người giao việc: ${assignerName || 'Chưa rõ'}. Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
+      accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <ClickableCardHeader>
         <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
           style={styles.cardTitle}>{task.title}</Text>
       </ClickableCardHeader>
       <View style={styles.metadata}>
-        <TaskPerson label="Người giao việc" name={assignerName} photoURL={assignerPhoto} selectable={selectable} />
-        <TaskPerson label="Người thực hiện" name={assigneeKey(task) ? assigneeName : undefined}
-          photoURL={assigneePhoto} fallback={assigneeName} selectable={selectable} />
+        <View style={[styles.metadataRow, styles.personRow]}>
+          <Text selectable={selectable} style={[styles.metadataText, styles.metaLabel]}>Người thực hiện:</Text>
+          <PeopleSummary people={[{ id: assigneeKey(task), name: assigneeName, photoURL: assigneePhoto }]}
+            textStyle={styles.metadataText} selectable={selectable} />
+        </View>
         <View style={[styles.metadataRow, styles.dueRow]}>
-          <Text selectable={selectable} style={styles.muted}>
+          <Text selectable={selectable} style={styles.metadataText}>
             <Text style={styles.metaLabel}>Hạn chót: </Text>
             <Text style={overdueLabel ? styles.danger : undefined}>
               {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
             </Text>
           </Text>
           {overdueLabel ? (
-            <Text selectable={selectable} style={styles.overdueTag}>{overdueLabel}</Text>
+            <View style={styles.overdueTag}>
+              <Text selectable={selectable} style={styles.overdueText}>{overdueLabel}</Text>
+            </View>
           ) : null}
         </View>
         <View style={styles.metadataRow}>
-          <Text selectable={selectable} style={styles.muted}>
+          <Text selectable={selectable} style={styles.metadataText}>
             <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>
             <TaskPriority priority={task.priority} />
           </Text>
@@ -119,7 +116,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { search, filter, priority, project, view } = options;
+  const { search, filter, priority, project, view, ganttRange } = options;
   const { width } = useWindowDimensions();
   const filterField = [styles.filterField, projects && width < 600 && styles.halfFilterField];
   const [directory, setDirectory] = useState<{ email: string; members: Map<string, TaskAssignee> }>();
@@ -190,14 +187,11 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
   }
 
   function renderTaskCard(task: Task, open: (task: Task) => void, kanban = false) {
-    const assigner = task.assignedBy?.trim();
     const assignee = task.assigneeEmail;
     const storedAssigneeName = assigneeName(task);
     return <TaskCard key={task.id} task={task} today={today} onOpen={open} kanban={kanban}
       assigneeName={storedAssigneeName === assignee ? members?.get(assignee)?.name || storedAssigneeName : storedAssigneeName}
-      assigneePhoto={photoFor(assignee)}
-      assignerName={assigner === memberEmail ? member.name : assigner && (members?.get(assigner)?.name || assigner)}
-      assignerPhoto={photoFor(assigner)} />;
+      assigneePhoto={photoFor(assignee)} />;
   }
 
   return (
@@ -212,9 +206,6 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
         ))}
       </View>
       <View style={styles.controls}>
-        <SearchInput accessibilityLabel="Tìm tên công việc" placeholder="Tìm tên công việc"
-          placeholderTextColor={colors.muted} style={styles.search} value={search} returnKeyType="search"
-          onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <View style={styles.filterRow}>
           <Dropdown style={filterField} label="Trạng thái" menuLabel="Lọc theo trạng thái" fallbackLabel="Tất cả" value={filter} choices={statusOptions} onChange={selectFilter} />
           <Dropdown style={filterField} label="Người thực hiện" menuLabel="Lọc theo người thực hiện" fallbackLabel="Tất cả" value={assignee} choices={assigneeOptions} singleLineValue
@@ -227,6 +218,9 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
             fallbackLabel={project || 'Tất cả'}
             onChange={value => onOptionsChange({ ...options, project: value === 0 ? null : value })} />}
         </View>
+        <SearchInput accessibilityLabel="Tìm tên công việc" placeholder="Tìm tên công việc"
+          placeholderTextColor={colors.muted} style={styles.search} value={search} returnKeyType="search"
+          onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <SegmentedButtons label="Kiểu xem công việc" value={view}
           choices={[{ value: 'list', label: 'Danh sách' }, { value: 'kanban', label: 'Bảng Kanban' },
             { value: 'gantt', label: 'Biểu đồ Gantt' }]}
@@ -235,9 +229,12 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
       <View style={styles.results}>
         <Text accessibilityRole="header" style={styles.resultTitle}>{visibleTasks.length} công việc</Text>
         {search || filter !== 'Tất cả' || assignee || priority || project !== null ? (
-          <Pressable accessibilityRole="button" onPress={() => onOptionsChange({ ...initialTaskBoardOptions, view })}
+          <Pressable accessibilityRole="button" onPress={() => onOptionsChange({ ...initialTaskBoardOptions, view, ganttRange })}
             style={styles.clearButton}><Text style={styles.activeLabel}>Xóa bộ lọc</Text></Pressable>
         ) : null}
+        {view === 'gantt' && <Dropdown label="Khung thời gian" hideLabel highlightSelection={false} style={styles.ganttRange}
+          value={ganttRange} choices={ganttRangeChoices}
+          onChange={ganttRange => onOptionsChange({ ...options, ganttRange })} />}
       </View>
       {visibleTasks.length === 0 ? <View style={styles.card}>
         <Text accessibilityLiveRegion="polite" style={styles.cardTitle}>
@@ -248,7 +245,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
       </View> : view === 'list' ? <PaginatedList items={visibleTasks} resetKey={JSON.stringify(options)}>
         {pageItems => pageItems.map(task => renderTaskCard(task, onOpen))}
       </PaginatedList> : view === 'gantt' ? (
-        <TaskGantt tasks={visibleTasks} today={today} onOpen={onOpen} />
+        <TaskGantt tasks={visibleTasks} today={today} range={ganttRange} onOpen={onOpen} />
       ) : (
         <TaskKanban columns={columns} columnWidth={Math.min(290, width * 0.74)} email={member.email}
           columnColor={status => statusTone(status, colors).text} onOpen={onOpen} onDragChange={onDragChange}
@@ -272,8 +269,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0 },
   halfFilterField: { flexBasis: '45%' },
-  results: { minHeight: 34, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  resultTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
+  results: { minHeight: 34, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
+  resultTitle: { flexShrink: 1, fontSize: 15, fontWeight: '800', color: colors.ink },
+  ganttRange: { width: 116, maxWidth: '54%', marginLeft: 'auto' },
   clearButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   card: { gap: 9, padding: 13, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.paper },
   pressed: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
@@ -281,13 +279,13 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   metadata: { gap: 5 },
   metadataRow: { minHeight: 22, justifyContent: 'center' },
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
-  dueRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center', gap: 6 },
-  personName: { color: colors.muted, fontSize: 13, fontWeight: '400' },
+  dueRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center', columnGap: 6 },
   metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
+  metadataText: { color: colors.muted, fontSize: 13, lineHeight: 22, fontWeight: '400' },
   danger: { color: colors.danger, fontWeight: '700' },
-  overdueTag: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-    color: colors.danger, backgroundColor: colors.dangerSoft, fontSize: 12, fontWeight: '700' },
+  overdueTag: { maxWidth: '100%', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.dangerSoft },
+  overdueText: { color: colors.danger, fontSize: 11, lineHeight: 18, fontWeight: '700' },
 
 
 

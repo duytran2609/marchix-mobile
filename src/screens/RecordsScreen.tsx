@@ -1,7 +1,8 @@
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ClickableCardHeader } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
@@ -144,8 +145,15 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
               <Pressable key={row.id} accessibilityRole="button" onPress={() => setLocalRecordId(row.id)}
                 style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
                 <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
-                <Text style={styles.muted}>{recordNumber(row)}</Text>
-                <Text style={styles.muted}>{recordKinds[row.kind ?? 'letter']}</Text>
+                <Text style={styles.badge}>{recordStates[row.status]}</Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>Số văn bản: </Text>
+                  {recordNumber(row)}
+                </Text>
+                <Text style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>Loại văn bản: </Text>
+                  {recordKinds[row.kind ?? 'letter']}
+                </Text>
                 <Text style={styles.muted}>
                   <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
                   {row.partner || '—'}
@@ -154,7 +162,6 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                   <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
                   {assignee(row)}
                 </Text>
-                <Text style={styles.badge}>{recordStates[row.status]}</Text>
               </Pressable>
             ))}
             </PaginatedList>
@@ -166,7 +173,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
         if (activePreview) setPreview(undefined);
         else if (!editing) closeRecord();
       }}>
-        <SafeAreaView style={local.backdrop}>
+        <KeyboardSafeAreaView style={local.backdrop}>
           <View role="dialog" accessibilityViewIsModal accessibilityLabel={popupTitle}
             style={[local.dialog, { backgroundColor: colors.paper },
               (!editing || activePreview) && local.tallDialog]}>
@@ -177,7 +184,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                 <Text accessibilityRole="header" style={[styles.cardTitle, local.flex]}>Chi tiết công văn</Text>
                 <PopupCloseButton label={closeLabel} onPress={closeRecord} />
               </View>}
-              <ScrollView style={editing ? local.formScroll : local.flex} keyboardShouldPersistTaps="handled"
+              <KeyboardScrollView style={editing ? local.formScroll : local.flex} keyboardShouldPersistTaps="handled"
                 contentContainerStyle={local.body}>
                 {editing ? editor : selected ? <View style={styles.stack}>
                   <Text style={styles.badge}>{recordBooks[selected.direction]}</Text>
@@ -214,10 +221,10 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                 : rows ? <Text accessibilityRole="alert" style={styles.muted}>Hồ sơ không có trong phạm vi truy cập của bạn.</Text>
                   : error ? <Text accessibilityRole="alert" style={styles.error}>Không tải được hồ sơ.</Text>
                     : <ActivityIndicator accessibilityLabel="Đang tải hồ sơ" color={colors.accent} />}
-              </ScrollView>
+              </KeyboardScrollView>
             </View>
           </View>
-        </SafeAreaView>
+        </KeyboardSafeAreaView>
       </Modal>}
     </>
   );

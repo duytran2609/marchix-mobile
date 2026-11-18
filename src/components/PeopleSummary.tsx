@@ -4,13 +4,14 @@ import type { StyleProp, TextStyle } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 import { MemberAvatar } from './MemberAvatar';
 
-export function PeopleSummary({ people, showAvatar = true, textStyle, selectable, decorative, wrap }: {
+export function PeopleSummary({ people, showAvatar = true, textStyle, selectable, decorative, wrap, wrapAlignEnd }: {
   people: { id: string; name: string; photoURL?: string | null }[];
   showAvatar?: boolean;
   textStyle?: StyleProp<TextStyle>;
   selectable?: boolean;
   decorative?: boolean;
   wrap?: boolean;
+  wrapAlignEnd?: boolean;
 }) {
   const styles = useStyles();
   const [summaryWidth, setSummaryWidth] = useState(0);
@@ -24,7 +25,7 @@ export function PeopleSummary({ people, showAvatar = true, textStyle, selectable
       </Text>
     </View>);
 
-  if (wrap) return <View style={[styles.summary, styles.names, styles.wrap]}>{renderPeople()}</View>;
+  if (wrap) return <View style={[styles.summary, styles.names, styles.wrap, wrapAlignEnd && styles.wrapEnd]}>{renderPeople()}</View>;
   if (people.length === 1) {
     return <View aria-hidden={decorative} pointerEvents={decorative ? 'none' : undefined}
       style={styles.summary}>
@@ -46,6 +47,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   summary: { flex: 1, minWidth: 0, overflow: 'hidden' },
   names: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   wrap: { flexWrap: 'wrap' },
+  wrapEnd: { justifyContent: 'flex-end' },
   person: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
   wrappedPerson: { maxWidth: '100%' },
   text: { color: colors.ink, fontSize: 14, fontWeight: '700' },

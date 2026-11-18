@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bytes } from 'firebase/firestore';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AttachmentLabel } from '../../components/AttachmentLabel';
+import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
@@ -202,8 +204,10 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       </>}
       {attachment && <>
         <View style={existing ? undefined : [popup.fileCard, { borderColor: colors.line }]}>
-          <Text style={styles.body}>{attachment.name}</Text>
-          {!existing && <Text style={styles.muted}>{formatFileSize(attachment.size)}</Text>}
+          <AttachmentLabel file={attachment}>
+            <Text style={styles.body}>{attachment.name}</Text>
+            {!existing && <Text style={styles.muted}>{formatFileSize(attachment.size)}</Text>}
+          </AttachmentLabel>
         </View>
         <View style={[styles.choices, !existing && popup.rightActions]}>
           <Button label={existing ? 'Xem PDF vừa chọn' : 'Xem trước'} secondary disabled={!!busy}
@@ -236,7 +240,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     else if (!lock.current) onCancel();
   };
   return <Modal visible transparent animationType="fade" onRequestClose={close}>
-    <SafeAreaView style={popup.backdrop}>
+    <KeyboardSafeAreaView style={popup.backdrop}>
       <View role="dialog" accessibilityViewIsModal accessibilityLabel={incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
         style={[popup.card, { backgroundColor: colors.paper }]}>
         {preview ? <RecordAttachmentPreview embedded file={preview} onClose={() => setPreview(undefined)} /> : <>
@@ -246,10 +250,10 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
             </Text>
             <PopupCloseButton label="Đóng biểu mẫu Văn thư" disabled={!!busy} onPress={close} />
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>{content}</ScrollView>
+          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>{content}</KeyboardScrollView>
         </>}
       </View>
-    </SafeAreaView>
+    </KeyboardSafeAreaView>
   </Modal>;
 }
 

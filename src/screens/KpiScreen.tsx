@@ -4,19 +4,17 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { Metric, useMetricStyles } from '../components/Metric';
 import { kpiForMonth, kpiGrade, kpiMonths } from '../features/kpi/kpi';
 import type { KpiMember, KpiRow } from '../features/kpi/kpi';
 import { watchKpi } from '../features/kpi/kpiStore';
 import type { KpiData } from '../features/kpi/kpiStore';
 import { formatTaskDate, todayInVietnam } from '../features/tasks/taskDates';
+import { taskStatuses } from '../features/tasks/taskStatuses';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 
 const monthLabel = (month: string) => `Tháng ${month.slice(5)}/${month.slice(0, 4)}`;
-const metrics = [
-  ['total', 'Số việc'], ['onTime', 'Đúng hạn'], ['late', 'Trễ'],
-  ['missed', 'Quá hạn'], ['pending', 'Chưa tới hạn'], ['unverified', 'Thiếu giờ xong'],
-] as const;
 
 export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boolean }) {
   const ui = useScreenStyles();
@@ -66,6 +64,7 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
         ? lockedAt ? `Điểm đã chốt tự động ngày ${formatTaskDate(lockedAt.slice(0, 10))}.` : 'Điểm đã chốt tự động.'
         : selectedProject.id ? 'Điểm tạm tính theo công việc của dự án.'
           : 'Điểm tạm tính theo thời gian thực. Hệ thống tự chốt vào ngày 1 tháng sau.'}</Text>
+      {locked && <Text style={ui.muted}>Các ô trạng thái phản ánh trạng thái hiện tại của công việc.</Text>}
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: showRules }}
         onPress={() => setShowRules(value => !value)} style={styles.rulesButton}>
         <Text style={styles.rulesLabel}>Cách tính KPI {showRules ? '▴' : '▾'}</Text>
@@ -92,10 +91,12 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
 function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: boolean }) {
   const ui = useScreenStyles();
   const styles = useStyles();
+  const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const grade = row.grade || kpiGrade(row.pct);
   const gradeColors = { A: colors.success, B: colors.accent, C: colors.warning, D: colors.danger };
   const color = gradeColors[grade as keyof typeof gradeColors] ?? colors.muted;
+  const statuses = row.statusCounts.Khác ? [...taskStatuses, 'Khác' as const] : taskStatuses;
 
   return <View style={ui.panel}>
     <View style={styles.cardHeader}>
@@ -105,17 +106,15 @@ function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: b
       </View>
       <View style={styles.score}>
         <Text style={[styles.scoreValue, { color }]}>{row.pct === null ? '–' : `${row.pct}%`}</Text>
-        <Text style={ui.muted}>Xếp loại {grade}</Text>
+        <Text style={ui.muted}>Xếp loại <Text style={styles.grade}>{grade}</Text></Text>
       </View>
     </View>
     {row.pct !== null && <View style={styles.track}>
       <View style={[styles.fill, { width: `${Math.max(0, Math.min(100, row.pct))}%`, backgroundColor: color }]} />
     </View>}
-    <View style={styles.metrics}>
-      {metrics.map(([key, title]) => <View key={key} style={styles.metric}>
-        <Text style={ui.label}>{row[key] ?? '–'}</Text>
-        <Text style={ui.muted}>{title}</Text>
-      </View>)}
+    <View style={metricStyles.grid}>
+      <Metric label="Số việc" value={row.total ?? '–'} />
+      {statuses.map(status => <Metric key={status} label={status} value={row.statusCounts[status] ?? 0} />)}
     </View>
   </View>;
 }
@@ -129,8 +128,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   person: { flexShrink: 1, gap: 4 },
   score: { alignItems: 'flex-end' },
   scoreValue: { fontSize: 25, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  grade: { fontWeight: '700' },
   track: { height: 6, backgroundColor: colors.surfaceMuted, borderRadius: 4, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 4 },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  metric: { flexGrow: 1, flexBasis: '29%', backgroundColor: colors.surfaceMuted, padding: 9, borderRadius: 8, gap: 2 },
 }));

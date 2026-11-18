@@ -82,7 +82,7 @@ export function PersonalAttendanceTable({ days, dailyNotes, month }: { days: Att
   const styles = useStyles();
   return <>
     <AttendanceLegend />
-    <PaginatedList items={days} initialSize={50} resetKey={month}>
+    <PaginatedList items={days} resetKey={month}>
       {pageItems => (
         <ScrollView horizontal showsHorizontalScrollIndicator accessibilityLabel="Bảng công cá nhân theo ngày">
           <View role="table">

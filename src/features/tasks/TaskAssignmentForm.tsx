@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { AttachmentLabel } from '../../components/AttachmentLabel';
+import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { DateCalendarButton, DateCalendarField } from './CalendarDialog';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { checklistWeight, maxChecklistWeight, validChecklistWeight } from './checklistProgress';
@@ -267,7 +270,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
   return (
     <Modal transparent visible onRequestClose={() => { if (!pending.current) onClose(); }} statusBarTranslucent>
       <SafeAreaView style={styles.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
+        <KeyboardViewport style={styles.keyboard}>
           <View style={styles.panel}>
             <View style={styles.modalHeader}>
               <Text accessibilityRole="header" style={styles.heading}>{task ? 'Chỉnh sửa công việc' : 'Giao việc mới'}</Text>
@@ -278,7 +281,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                 choices={[{ value: 'main', label: 'Thông tin chính' }, { value: 'options', label: 'Tùy chọn' }]} />
             </View>
             <View style={styles.formBody}>
-              <ScrollView key={tab} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+              <KeyboardScrollView key={tab} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
                 {tab === 'main' ? <>
                 {!task ? <Text style={styles.muted}>Mỗi người được chọn sẽ nhận một công việc riêng.</Text> : null}
                 <View style={styles.field}>
@@ -336,8 +339,10 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                     hint="Tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi." />
                   {allFiles.map((file, index) => <View key={'id' in file ? file.id : index - retained.length} style={styles.person}>
                     <View style={styles.personLabel}>
-                      <Text style={styles.label}>{file.name}</Text>
-                      <Text style={styles.muted}>{formatFileSize(file.size)}</Text>
+                      <AttachmentLabel file={file}>
+                        <Text style={styles.label}>{file.name}</Text>
+                        <Text style={styles.muted}>{formatFileSize(file.size)}</Text>
+                      </AttachmentLabel>
                     </View>
                     <Pressable accessibilityRole="button" accessibilityLabel={`Bỏ tệp ${file.name}`}
                       style={styles.back} disabled={saving || picking} onPress={() => {
@@ -455,7 +460,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                       value={message} onChangeText={setMessage} editable={!saving} maxLength={1000} />
                   </View>
                 </>}
-              </ScrollView>
+              </KeyboardScrollView>
             </View>
             <View style={styles.footer}>
               <Pressable accessibilityRole="button" disabled={saving || picking}
@@ -466,7 +471,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
             </View>
           </View>
           <ToastLayer safeAreaApplied />
-        </KeyboardAvoidingView>
+        </KeyboardViewport>
       </SafeAreaView>
     </Modal>
   );

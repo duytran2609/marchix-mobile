@@ -34,8 +34,14 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
     }
     await page.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill(original);
     await page.getByRole('button', { name: 'Gửi trao đổi' }).click();
-    const respond = sender.getByText(original, { exact: true }).locator('..')
+    const originalText = sender.getByText(original, { exact: true });
+    const respond = originalText.locator('..')
       .getByRole('button', { name: 'Trả lời trao đổi của Nhân viên demo' });
+    await expect(respond).toBeVisible();
+    const bodyBox = (await originalText.boundingBox())!;
+    const replyBox = (await respond.getByText('Trả lời', { exact: true }).boundingBox())!;
+    expect(replyBox.x).toBeCloseTo(bodyBox.x);
+    expect(replyBox.y - (bodyBox.y + bodyBox.height)).toBeLessThan(8);
     await respond.click();
     await expect(sender.getByText('Trả lời Nhân viên demo', { exact: true })).toBeVisible();
     await sender.getByRole('button', { name: 'Hủy trả lời' }).click();
@@ -765,7 +771,8 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
 test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới hạn theo vai trò', async ({ page, browser, request }) => {
   test.setTimeout(60_000);
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
-  const emulator = `http://${host}:8080/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || '8080';
+  const emulator = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
   const headers = { Authorization: 'Bearer owner' };
   const employee = 'nhanvien@example.test';
   const colleague = 'dongnghiep@example.test';
@@ -775,7 +782,8 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
   const paths = [
     ['tasks/kpi-test-late', { ...task, doneAt: month + '-10T17:00:00.000Z' }],
     ['tasks/kpi-test-missing-date', { ...task, priority: 'Thấp' }],
-    ['kpi/kpi-test-staff', { email: employee, month, total: 2, onTime: 2, late: 0, missed: 0, pending: 0,
+    ['tasks/kpi-test-other-project', { ...task, projectId: 'kpi-other-project', status: 'Xong' }],
+    ['kpi/kpi-test-staff', { email: employee, month, total: 3, onTime: 3, late: 0, missed: 0, pending: 0,
       pct: '92', grade: 'A', lockedAt: '2025-04-01T00:00:00.000Z' }],
     ['kpi/kpi-test-colleague', { email: colleague, month, total: 1, onTime: 1, late: 0, missed: 0, pending: 0, pct: 100 }],
   ] as const;
@@ -799,11 +807,19 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
     await openKpi(page, 'Đăng nhập Google (mô phỏng)');
     await expect(page.getByText('Điểm đã chốt tự động ngày 01/04/2025.')).toBeVisible();
     await expect(page.getByText('92%', { exact: true })).toBeVisible();
+    const pendingReview = page.getByText('Chờ duyệt', { exact: true }).locator('..');
+    const completed = page.getByText('Xong', { exact: true }).locator('..');
+    await expect(pendingReview.getByText('2', { exact: true })).toBeVisible();
+    await expect(completed.getByText('1', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Đồng nghiệp demo' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Dự án: Toàn công ty' }).click();
     await page.getByRole('radio', { name: 'Marchix Mobile · Demo' }).click();
     await expect(page.getByText('45%', { exact: true })).toBeVisible();
-    await expect(page.getByText('Xếp loại D')).toBeVisible();
+    const grade = page.getByText('Xếp loại D');
+    await expect(grade).toBeVisible();
+    await expect(grade.getByText('D', { exact: true })).toHaveCSS('font-weight', '700');
+    await expect(pendingReview.getByText('2', { exact: true })).toBeVisible();
+    await expect(completed.getByText('0', { exact: true })).toBeVisible();
     await openKpi(admin, 'Đăng nhập quản trị (mô phỏng)');
     await expect(admin.getByRole('heading', { name: 'Đồng nghiệp demo' })).toBeVisible();
     await expect(admin.getByText('100%', { exact: true })).toBeVisible();
@@ -1183,6 +1199,8 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   const assigneeBox = (await assignee.boundingBox())!;
   expect(assigneeBox.y).toBeCloseTo(statusBox.y);
   expect(assigneeBox.x).toBeGreaterThan(statusBox.x);
+  const lastFilter = (await page.getByRole('button', { name: /^Hạng mục:/ }).boundingBox())!;
+  expect((await search.boundingBox())!.y).toBeGreaterThan(lastFilter.y + lastFilter.height);
   expect((await kanban.boundingBox())!.y).toBeGreaterThan(assigneeBox.y + assigneeBox.height);
 
   await assignee.click();
@@ -1223,6 +1241,28 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
   await expect(projectCard).toBeVisible();
   await expect(card).toHaveCount(0);
+  await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
+  const range = page.getByRole('button', { name: /^Khung thời gian:/ });
+  const ganttCount = range.locator('../..').getByRole('heading', { name: /^\d+ công việc$/ });
+  const countBox = (await ganttCount.boundingBox())!;
+  const rangeBox = (await range.boundingBox())!;
+  expect(rangeBox.x).toBeGreaterThan(countBox.x + countBox.width);
+  expect(rangeBox.y + rangeBox.height / 2).toBeCloseTo(countBox.y + countBox.height / 2);
+  const ganttDates = page.getByLabel('Trục thời gian công việc').getByText(/^\d{2}\/\d{2}$/);
+  await expect(range).toHaveAccessibleName('Khung thời gian: Theo tháng');
+  const [year, month] = todayInVietnam().split('-');
+  const monthDays = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  await expect(ganttDates).toHaveCount(monthDays);
+  await expect(ganttDates.first()).toHaveText(`01/${month}`);
+  await expect(ganttDates.last()).toHaveText(`${monthDays}/${month}`);
+  const rangeBackground = await range.evaluate(element => getComputedStyle(element).backgroundColor);
+  await range.click();
+  await page.getByRole('radiogroup', { name: 'Khung thời gian' }).getByRole('radio', { name: 'Theo tuần', exact: true }).click();
+  await expect(range).toHaveCSS('background-color', rangeBackground);
+  const monday = mondayOf(todayInVietnam());
+  await expect(ganttDates).toHaveText(Array.from({ length: 7 }, (_, index) => formatTaskDate(shiftDay(monday, index)).slice(0, 5)));
+  await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
+  await expect(range).toHaveCount(0);
   await category.click();
   await page.getByRole('radio', { name: 'Chung toàn công ty', exact: true }).click();
   await expect(card).toBeVisible();
@@ -1234,12 +1274,15 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
 
 test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm ứng', async ({ context, page }) => {
   const title = 'Kiểm tra giao diện Kanban với một tên công việc rất dài để xác nhận nội dung dừng ở đúng hai dòng trên điện thoại';
-  const doc = `http://127.0.0.1:8080/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/kanban-test-${Date.now()}`;
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const doc = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/kanban-test-${Date.now()}`;
+  const deadline = shiftDay(todayInVietnam(), -12);
   const headers = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' };
   const fixture = await fetch(doc, { method: 'PATCH', headers, body: JSON.stringify({ fields: {
     title: { stringValue: title }, assigneeEmail: { stringValue: 'nhanvien@example.test' },
     status: { stringValue: 'Chưa làm' }, progress: { integerValue: '25' },
-    due: { stringValue: '2026-12-15' }, priority: { stringValue: 'Cao' },
+    due: { stringValue: deadline }, priority: { stringValue: 'Cao' },
   } }) });
   expect(fixture.ok).toBeTruthy();
   try {
@@ -1248,14 +1291,20 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
     await openTasks(page);
     await page.getByRole('textbox', { name: 'Tìm tên công việc' }).fill('Kiểm tra giao diện Kanban');
     const card = page.getByRole('button', { name: `Mở công việc: ${title}` });
-    await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
-    await page.getByRole('button', { name: 'Bảng Kanban' }).click();
-    await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
-    const due = card.getByText('Hạn chót: 15/12/2026', { exact: true });
-    const priority = card.getByText('Mức độ ưu tiên: Cao', { exact: true });
-    await expect(due).toBeVisible();
-    await expect(priority).toBeVisible();
-    expect((await priority.boundingBox())!.y).toBeGreaterThan((await due.boundingBox())!.y);
+    for (const mode of ['Danh sách', 'Bảng Kanban']) {
+      await page.getByRole('button', { name: mode, exact: true }).click();
+      await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
+      await expect(card.getByText('Người giao việc:', { exact: true })).toHaveCount(0);
+      const [assignee, due, overdue, priority] = await Promise.all([
+        card.getByText('Người thực hiện:', { exact: true }).boundingBox(),
+        card.getByText(`Hạn chót: ${formatTaskDate(deadline)}`, { exact: true }).boundingBox(),
+        card.getByText('Quá hạn 12 ngày', { exact: true }).boundingBox(),
+        card.getByText('Mức độ ưu tiên: Cao', { exact: true }).boundingBox(),
+      ]);
+      expect(overdue!.x).toBeGreaterThan(due!.x + due!.width);
+      expect(overdue!.y + overdue!.height / 2).toBeCloseTo(due!.y + due!.height / 2);
+      expect(priority!.y - due!.y).toBeCloseTo(due!.y - assignee!.y);
+    }
 
     await card.scrollIntoViewIfNeeded();
     const client = await context.newCDPSession(page);
@@ -1476,9 +1525,17 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(received.getByText('Mức độ ưu tiên: Cao', { exact: true })).toBeVisible();
     await expect(received).toContainText('Chưa làm');
     await expect(received).toContainText('0%');
+    await receiverPage.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
+    const ganttDeadline = received.getByText(`Hạn chót: ${deadline}`, { exact: true });
+    await expect(ganttDeadline).toHaveCSS('font-weight', '400');
+    await expect(ganttDeadline.getByText('Hạn chót:', { exact: true })).toHaveCSS('font-weight', '700');
+    const firstTick = receiverPage.getByLabel('Trục thời gian công việc').getByText(/^\d{2}\/\d{2}$/).first();
+    await expect(firstTick.locator('..')).toHaveCSS('align-items', 'center');
     await received.click();
     await expect(receiverPage.getByRole('button', { name: 'Chỉnh sửa', exact: true })).toHaveCount(0);
-    const metadataValue = (label: string, value: string) => receiverPage.getByText(`${label}:`, { exact: true })
+    const detail = receiverPage.getByText('CHI TIẾT CÔNG VIỆC', { exact: true }).locator('../..');
+    const metadataValue = (label: string, value: string) => detail
+      .getByText(label, { exact: true })
       .locator('..').getByText(value, { exact: true });
     const detailDue = metadataValue('Hạn chót', deadline);
     const detailMilestone = metadataValue('Mốc bàn giao dự án', 'Có');
@@ -1491,7 +1548,9 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(metadataValue('Lặp lại', 'Hằng tuần')).toBeVisible();
     await expect(metadataValue('Người theo dõi', 'Nhân viên demo')).toBeVisible();
     await expect(detailMilestone).toBeVisible();
-    expect((await detailDue.boundingBox())?.x).toBeCloseTo((await detailMilestone.boundingBox())!.x, 0);
+    for (const field of [detailDue, detailMilestone]) {
+      await expect(field).toHaveCSS('text-align', 'right');
+    }
 
     const progressBlock = receiverPage.getByRole('progressbar', { name: 'Tiến độ công việc' }).locator('..');
     for (const status of ['Đang làm', 'Vướng']) {
@@ -1503,11 +1562,14 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(progressBlock.getByText('Chưa làm', { exact: true })).toBeVisible();
     await expect(receiverPage.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).not.toBeChecked();
     await receiverPage.getByRole('button', { name: 'Mô tả', exact: true }).click();
-    await expect(receiverPage.getByText('Mô tả cho cả hai người thực hiện.')).toBeVisible();
+    const description = receiverPage.getByRole('heading', { name: 'Mô tả / Yêu cầu bàn giao' }).locator('..');
+    await expect(description).toHaveCSS('border-top-width', '0px');
+    await expect(description.getByText('Mô tả cho cả hai người thực hiện.').locator('..')).toHaveCSS('border-top-width', '1px');
     await receiverPage.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     await expect(receiverPage.getByText('Nhắn khi có vướng mắc.')).toBeVisible();
     await expect(receiverPage.getByText('Lời nhắn khi giao việc', { exact: true })).toBeVisible();
     const discussion = receiverPage.getByRole('heading', { name: 'Trao đổi', exact: true }).locator('../..');
+    await expect(discussion.getByText(/^Nội dung trao đổi(?: \*)?$/)).toHaveCount(0);
     await expect(discussion.getByText('Người giao việc demo', { exact: true })).toBeVisible();
     await expect(discussion.getByText('ND', { exact: true })).toBeVisible();
     await expect(discussion.getByText(assignmentTime, { exact: true })).toBeVisible();
@@ -1518,7 +1580,11 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const downloading = receiverPage.waitForEvent('download');
     const downloadResponse = receiverPage.waitForResponse(response => response.url().endsWith('/downloadMobileTaskAttachment') &&
       response.request().method() === 'POST');
-    await receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` }).click();
+    const attachmentCard = receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` });
+    const iconBox = await attachmentCard.getByText('BIN', { exact: true }).boundingBox();
+    const filenameBox = await attachmentCard.getByText(attachment.name, { exact: true }).boundingBox();
+    expect(iconBox!.x).toBeLessThan(filenameBox!.x);
+    await attachmentCard.click();
     const download = await downloading;
     expect(download.suggestedFilename()).toBe(attachment.name);
     expect((await readFile((await download.path())!)).equals(attachment.buffer)).toBeTruthy();

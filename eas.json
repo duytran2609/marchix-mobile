@@ -13,6 +13,18 @@
       "ios": {
         "autoIncrement": true
       }
+    },
+    "ios-simulator-demo": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "env": {
+        "MARCHIX_IOS_SIMULATOR": "1",
+        "EXPO_PUBLIC_FIREBASE_MODE": "emulator"
+      },
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {

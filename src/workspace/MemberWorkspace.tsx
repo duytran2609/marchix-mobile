@@ -2,6 +2,7 @@ import { signOut } from 'firebase/auth';
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { useToast } from '../components/Toast';
 import { watchMemberAvatar } from '../features/auth/memberAvatar';
 import type { MemberSession } from '../features/auth/useSession';
@@ -92,7 +93,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         <WorkspaceHeader menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)}
           inbox={{ email, onOpenNote: openNote }} />
       </View>
-      <ScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
+      <KeyboardScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
           route.screen === 'tong-quan' && styles.overviewPage]}>
           <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
@@ -101,7 +102,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}
             onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} />
         </View>
-      </ScrollView>
+      </KeyboardScrollView>
       <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
         isAdmin={isAdmin} name={name} photoURL={avatar}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />

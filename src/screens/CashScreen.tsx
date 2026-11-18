@@ -1,8 +1,11 @@
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AttachmentLabel } from '../components/AttachmentLabel';
 import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
@@ -188,7 +191,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
           onPress={() => void pick()} hint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng." />
       </View>
       {picked.map((file, index) => <View key={index} style={styles.detailRow}>
-        <Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text>
+        <AttachmentLabel file={file}><Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
         <Button label={`Bỏ ${file.name}`} secondary disabled={busy || picking}
           onPress={() => setPicked(current => current.filter((_, i) => i !== index))} />
       </View>)}
@@ -204,7 +207,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
   const close = () => { if (!lock.current) onBack(); };
   return <Modal transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
     <SafeAreaView style={local.formOverlay}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={local.formKeyboard}>
+      <KeyboardViewport style={local.formKeyboard}>
         <View style={[styles.panel, local.formPanel]}>
           <View style={local.formHeader}>
             <Text accessibilityRole="header" style={styles.heading}>{seed
@@ -212,11 +215,11 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
               : 'Tạo đề nghị ' + type}</Text>
             <PopupCloseButton label="Đóng đề nghị" onPress={close} disabled={busy || picking} />
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={local.formBody}>
+          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={local.formBody}>
             {fields}
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
     </SafeAreaView>
   </Modal>;
 }
@@ -456,7 +459,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
             {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
               secondary onPress={() => void download()} disabled={exporting || !base.length} />}
             {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
-            <PaginatedList items={visible} initialSize={25} resetKey={JSON.stringify([month, project, type, status])}>
+            <PaginatedList items={visible} resetKey={JSON.stringify([month, project, type, status])}>
             {pageItems => pageItems.map(row => <Pressable key={row.id} accessibilityRole="button"
               onPress={() => setSelected(row.id)}
               style={({ pressed }) => [local.entry, pressed && styles.dimmed]}>
@@ -488,22 +491,22 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
     </View>}
     {showDetail && <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={back}>
         <SafeAreaView style={local.formOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={local.formKeyboard}>
+          <KeyboardViewport style={local.formKeyboard}>
             <View role="dialog" accessibilityViewIsModal accessibilityLabel="Chi tiết khoản thu chi"
               style={[local.formPanel, local.detailPopup]}>
               <View style={[local.formHeader, local.detailHeader]}>
                 <Text style={styles.cardTitle}>Chi tiết khoản thu chi</Text>
                 <PopupCloseButton label={onBackToReview ? backLabel : "Đóng chi tiết khoản thu chi"} onPress={back} />
               </View>
-              <ScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
+              <KeyboardScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
                 {onBackToReview && lookupError && <View style={styles.panel}>
                   <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
                   <Button label="Tải lại danh mục" secondary onPress={reload} />
                 </View>}
                 {detail}
-              </ScrollView>
+              </KeyboardScrollView>
             </View>
-          </KeyboardAvoidingView>
+          </KeyboardViewport>
         </SafeAreaView>
     </Modal>}
   </>;

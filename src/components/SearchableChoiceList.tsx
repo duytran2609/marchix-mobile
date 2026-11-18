@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 import { searchByName } from '../utils/search';
 import { MemberAvatar } from './MemberAvatar';
 import { PeopleSummary } from './PeopleSummary';
 import { SearchInput } from './SearchInput';
 import { Button } from './Button';
+import { DropdownOverlay, useDropdownAnchor } from './DropdownOverlay';
 
 export type SearchableChoice = { id: string; name: string; photoURL?: string | null; self?: boolean };
 
@@ -19,33 +19,31 @@ type ChoiceListProps = {
 export function SearchableChoiceDropdown(props: ChoiceListProps & { title: string; multiple?: boolean; placeholder?: string }) {
   const { title, multiple, items, selected, disabled, placeholder = 'Chưa chọn' } = props;
   const styles = useStyles();
-  const [open, setOpen] = useState(false);
-  const close = () => setOpen(false);
+  const { trigger, anchor, open, close } = useDropdownAnchor();
   const selectedItems = selected.map<SearchableChoice>(id => items.find(item => item.id === id) ?? { id, name: id })
     .filter(item => item.name);
   const summary = selectedItems.map(item => item.name).join(', ') || placeholder;
+  const triggerContent = <>
+    {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} decorative />
+      : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
+    <Text aria-hidden style={styles.selected}>▾</Text>
+  </>;
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={open}
-      disabled={disabled} onPress={() => setOpen(true)} style={styles.trigger}>
-      {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} decorative />
-        : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
-      <Text aria-hidden style={styles.selected}>▾</Text>
+    <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={!!anchor}
+      disabled={disabled} onPress={open} style={styles.trigger}>
+      {triggerContent}
     </Pressable>
-    {open && <Modal transparent visible onRequestClose={close} statusBarTranslucent navigationBarTranslucent>
-      <SafeAreaView style={styles.overlay}>
-        <KeyboardAvoidingView style={styles.center} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable accessible={false} aria-hidden tabIndex={-1} style={StyleSheet.absoluteFill} onPress={close} />
-          <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
-            <Text accessibilityRole="header" style={styles.panelTitle}>{title}</Text>
-            <SearchableChoiceList {...props} scrollable onToggle={id => {
-              props.onToggle(id);
-              if (!multiple) close();
-            }} />
-            <Button label="Xong" onPress={close} />
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>}
+    {anchor && !disabled && <DropdownOverlay anchor={anchor} onClose={close} triggerStyle={styles.trigger}
+      triggerContent={triggerContent} minWidth={240} minHeight={220} maxHeight={420} panelStyle={styles.popup}>
+      <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
+        <Text accessibilityRole="header" style={styles.panelTitle}>{title}</Text>
+        <SearchableChoiceList {...props} scrollable onToggle={id => {
+          props.onToggle(id);
+          if (!multiple) close();
+        }} />
+        <Button label="Xong" onPress={close} />
+      </View>
+    </DropdownOverlay>}
   </>;
 }
 
@@ -89,9 +87,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   list: { gap: 7 },
   shrink: { flexShrink: 1, minHeight: 0 },
   results: { flexGrow: 0, flexShrink: 1, maxHeight: 280 },
-  overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
-  panel: { width: '100%', maxWidth: 420, flexShrink: 1, padding: 14, gap: 10,
+  popup: { maxWidth: 420 },
+  panel: { flexShrink: 1, padding: 14, gap: 10,
     borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
   panelTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   trigger: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12,

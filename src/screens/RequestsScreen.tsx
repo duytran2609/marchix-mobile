@@ -1,6 +1,8 @@
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClickableCardHeader } from '../components/CardChevron';
@@ -340,10 +342,10 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   return <Modal visible transparent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
-    <SafeAreaView style={styles.modal}>
+    <KeyboardSafeAreaView style={styles.modal}>
       <View role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal
         style={[styles.popup, { width: Math.min(560, width - insets.left - insets.right - 32) }]}>
-        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <KeyboardScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.popupContent}>
             <View style={shared.listHeader}>
               <Text accessibilityRole="header" style={[shared.heading, shared.listHeading]}>{row ? 'Chi tiết đơn' : 'Tạo đơn'}</Text>
@@ -456,7 +458,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             {editable && <Button label={row ? 'Lưu đơn' : 'Gửi đơn'} disabled={busy} onPress={() => void submit('edit')} />}
             {busy && <ActivityIndicator accessibilityLabel="Đang lưu đơn" color={colors.accent} />}
           </View>
-        </ScrollView>
+        </KeyboardScrollView>
       </View>
       {monthPickerYear !== null && <CalendarDialog title="Trừ vào lương tháng" onClose={() => setMonthPickerYear(null)}>
         <View style={shared.listHeader}>
@@ -475,7 +477,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
           })}
         </View>
       </CalendarDialog>}
-    </SafeAreaView>
+    </KeyboardSafeAreaView>
   </Modal>;
 }
 

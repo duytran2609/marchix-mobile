@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AttachmentLabel } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
-import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
 import { FilePickerButton } from '../../components/FilePickerButton';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -140,18 +140,22 @@ export function TaskDiscussion({ task, email, name, members }: {
             {comment === assignmentMessage ? <Text style={styles.discussionTime}>Lời nhắn khi giao việc</Text> : null}
             {comment.replyTo ? renderQuote(comment.replyTo) : null}
             {comment.text ? <Text style={screenStyles.body}>{comment.text}</Text> : null}
-            {discussionFiles(comment).map((file, index) => taskAssignmentEnabled
-              ? <Pressable key={`${file.id}-${index}`} accessibilityRole="button" accessibilityLabel={`Tải tệp ${file.name}`}
-                  disabled={Boolean(downloading)} style={screenStyles.secondary} onPress={() => void download(file)}>
-                  <View style={styles.attachment}>
-                    <Text style={screenStyles.label}>{file.name}</Text>
-                    <Text style={screenStyles.muted}>{downloading === file.id ? 'Đang tải…' : `${formatFileSize(file.size)} · Tải tệp`}</Text>
-                  </View>
-                </Pressable>
-              : <Text key={`${file.id}-${index}`} style={screenStyles.muted}>{file.name} · {formatFileSize(file.size)}</Text>)}
+            {discussionFiles(comment).map((file, index) => {
+              const key = `${file.id}-${index}`;
+              const content = <AttachmentLabel file={file}>
+                <Text style={screenStyles.label}>{file.name}</Text>
+                <Text style={screenStyles.muted}>{downloading === file.id ? 'Đang tải…'
+                  : `${formatFileSize(file.size)}${taskAssignmentEnabled ? ' · Tải tệp' : ''}`}</Text>
+              </AttachmentLabel>;
+              const style = [screenStyles.secondary, styles.attachment];
+              return taskAssignmentEnabled
+                ? <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Tải tệp ${file.name}`}
+                    disabled={Boolean(downloading)} style={style} onPress={() => void download(file)}>{content}</Pressable>
+                : <View key={key} style={style}>{content}</View>;
+            })}
             {canReply && comment.by && comment.at ? <Pressable accessibilityRole="button"
               accessibilityLabel={`Trả lời trao đổi của ${author}`}
-              disabled={sending || uploading} style={styles.replyButton}
+              disabled={sending || uploading} style={[styles.replyButton, styles.commentReply]}
               onPress={() => setReplyTo({ index, by: comment.by, at: comment.at })}>
               <Text style={styles.replyAction}>Trả lời</Text>
             </Pressable> : null}
@@ -166,7 +170,6 @@ export function TaskDiscussion({ task, email, name, members }: {
             <Text style={styles.replyAction}>Hủy trả lời</Text>
           </Pressable>
         </View>}
-        <FieldLabel style={screenStyles.label} required>Nội dung trao đổi</FieldLabel>
         <TextInput ref={input} accessibilityLabel="Nội dung trao đổi" placeholder="Nhập trao đổi về công việc"
           style={[screenStyles.input, screenStyles.messageInput]} value={message} onChangeText={setMessage}
           multiline maxLength={commentMaxLength} editable={!sending} />
@@ -188,7 +191,7 @@ function discussionFiles(comment: NonNullable<Task['comments']>[number]) {
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   sortControl: { width: 172, maxWidth: '65%', flexShrink: 1 },
-  attachment: { padding: 10, gap: 3 },
+  attachment: { padding: 10, borderRadius: 9 },
   discussionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   discussionContent: { flex: 1, minWidth: 0, gap: 3 },
   discussionHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
@@ -198,5 +201,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 5, gap: 2 },
   replyPreview: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   replyButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  commentReply: { justifyContent: 'flex-start', paddingHorizontal: 0 },
   replyAction: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 }));

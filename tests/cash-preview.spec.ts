@@ -55,6 +55,27 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     const amountField = page.getByRole('textbox', { name: 'Số tiền (VNĐ)' });
     await amountField.fill('12a3456');
     await expect(amountField).toHaveValue('123.456');
+    const invoice = proposal.getByRole('textbox', { name: 'Số hóa đơn / báo giá', exact: true });
+    await invoice.click();
+    const keyboardTop = 300;
+    await page.evaluate(height => {
+      const viewport = window.visualViewport!;
+      Object.defineProperty(viewport, 'height', { configurable: true, value: height });
+      viewport.dispatchEvent(new Event('resize'));
+    }, keyboardTop);
+    await expect.poll(async () => {
+      const bounds = await invoice.boundingBox();
+      return bounds ? bounds.y + bounds.height : Infinity;
+    }).toBeLessThanOrEqual(keyboardTop);
+    await expect(invoice).toBeFocused();
+    await invoice.pressSequentially('HD-123');
+    await expect(invoice).toHaveValue('HD-123');
+    await page.evaluate(() => {
+      const viewport = window.visualViewport!;
+      Reflect.deleteProperty(viewport, 'height');
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    await amountField.scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: /^Nhóm hạng mục:/ })).toHaveCount(0);
     await expectSameRow(/^Hạng mục:/, /^Dự án:/, proposal);
     const normalBackground = await button(page, 'Hạng mục: Chọn hạng mục').evaluate(element => getComputedStyle(element).backgroundColor);

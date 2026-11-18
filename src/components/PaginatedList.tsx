@@ -4,18 +4,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 import { Dropdown } from './Dropdown';
 
-const pageSizes = [10, 25, 50, 100] as const;
+const pageSizes = [5, 10, 25, 50, 100] as const;
 type PageSize = typeof pageSizes[number];
 const choices = pageSizes.map(value => ({ value, label: `${value} dòng` }));
 
-export function PaginatedList<T>({ items, children, resetKey, initialSize = 10 }: {
+export function PaginatedList<T>({ items, children, resetKey }: {
   items: readonly T[];
   children: (pageItems: T[]) => ReactNode;
   resetKey?: string;
-  initialSize?: PageSize;
 }) {
   const styles = useStyles();
-  const [size, setSize] = useState<PageSize>(initialSize);
+  const [size, setSize] = useState<PageSize>(5);
   const [position, setPosition] = useState({ page: 1, key: resetKey });
   const pageCount = Math.max(1, Math.ceil(items.length / size));
   const page = position.key === resetKey ? Math.min(position.page, pageCount) : 1;
@@ -28,7 +27,7 @@ export function PaginatedList<T>({ items, children, resetKey, initialSize = 10 }
   return <>
     {children(items.slice(start, start + size))}
     {items.length > 0 && <View style={styles.toolbar}>
-      <Dropdown label="Số dòng mỗi trang" hideLabel singleLineValue highlightSelection={false}
+      <Dropdown label="Số dòng mỗi trang" hideLabel singleLineValue highlightSelection={false} keepMenuAttached
         style={styles.size} value={size} choices={choices}
         onChange={value => {
           if (size === value) return;

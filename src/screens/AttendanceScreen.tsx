@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PageHeader } from '../components/PageHeader';
+import { Metric, useMetricStyles } from '../components/Metric';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from '../components/Dropdown';
 import { TimeFields } from '../components/TimeFields';
@@ -25,6 +28,7 @@ const isTime = (value: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(val
 export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { isAdmin: boolean }) {
   const ui = useScreenStyles();
   const styles = useStyles();
+  const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const toast = useToast();
   const [now, setNow] = useState(() => new Date());
@@ -129,7 +133,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
       </View>
       {schedule.gpsOn && <Text style={styles.scheduleText}>Chấm công theo vị trí văn phòng</Text>}
       {(todayResult || todayWorked > 0) && <>
-        <View style={styles.metrics}>
+        <View style={metricStyles.grid}>
           {todayResult && <>
             <Metric label="Vào" value={clock(todayResult.entered)} alertDetail detail={todayResult.late ? 'Muộn ' + todayResult.late + ' phút' : undefined} />
             <Metric label="Ra" value={clock(todayResult.exited)} alertDetail detail={todayResult.early ? 'Sớm ' + todayResult.early + ' phút' : undefined} />
@@ -163,13 +167,13 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
       </View>
       {isAdmin && <CompanyAttendanceTable month={selectedMonth} rows={companyRows} onEdit={setEdit} />}
       {detail && <>
-        <View style={styles.metrics}>
-          <Metric label="Công thực tế" value={String(detail.summary.work)} inlineDetail={' / ' + detail.summary.standard + ' công chuẩn'} />
-          <Metric label="Phép / công tác" value={String(detail.summary.leave)} />
-          <Metric label="Đi muộn" value={detail.summary.late + ' lần'} alertDetail={detail.summary.late > 0} detail={detail.summary.lateMinutes + ' phút'} />
-          <View style={[styles.metric, styles.missedPunches]}>
-            <Text style={ui.muted}>Quên chấm vào <Text style={ui.cardTitle}>{detail.summary.forgottenIn} lần</Text></Text>
-            <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut} lần</Text></Text>
+        <View style={metricStyles.grid}>
+          <Metric label="Công thực tế" value={`${detail.summary.work} / ${detail.summary.standard}`} inlineDetail=" công chuẩn" />
+          <Metric label="Nghỉ phép / công tác" value={`${detail.summary.leave} ngày`} />
+          <Metric label="Đi muộn" value={`${detail.summary.late} lần`} />
+          <View style={[metricStyles.tile, styles.missedPunches]}>
+            <Text style={ui.muted}>Quên chấm vào <Text style={ui.cardTitle}>{detail.summary.forgottenIn}</Text> lần</Text>
+            <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut}</Text> lần</Text>
           </View>
         </View>
         <PersonalAttendanceTable month={selectedMonth} days={personalDays} dailyNotes={dailyNotes} />
@@ -254,18 +258,6 @@ function TableAction({ label, disabled, onPress }: { label: string; disabled?: b
   </Pressable>;
 }
 
-function Metric({ label, value, detail, inlineDetail, alertDetail }: {
-  label: string; value: string; detail?: string; inlineDetail?: string; alertDetail?: boolean;
-}) {
-  const styles = useStyles();
-  const ui = useScreenStyles();
-  return <View style={styles.metric}>
-    <Text style={ui.muted}>{label}</Text>
-    <Text style={ui.cardTitle}>{value}{inlineDetail && <Text style={[ui.muted, styles.metricInlineDetail]}>{inlineDetail}</Text>}</Text>
-    {detail && <Text style={alertDetail ? styles.alertDetail : ui.muted}>{detail}</Text>}
-  </View>;
-}
-
 function AdjustmentTimeField({ label, value, disabled, onChange }: {
   label: string; value: string; disabled: boolean; onChange: (value: string) => void;
 }) {
@@ -348,7 +340,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
     else if (!lock.current) onClose();
   }}>
     <SafeAreaView style={styles.editorOverlay}>
-      <KeyboardAvoidingView style={styles.editorCenter} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardViewport style={styles.editorCenter}
         aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}>
         <View role="dialog" accessibilityLabel="Sửa công" accessibilityViewIsModal style={[ui.panel, styles.editorPanel]}>
           <View style={ui.listHeader}>
@@ -357,7 +349,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
               onPress={() => { setError(''); setConfirmDelete(true); }} />}
             <PopupCloseButton label="Đóng sửa công" onPress={onClose} disabled={pending || confirmDelete} />
           </View>
-          <ScrollView style={styles.editorScroll} contentContainerStyle={ui.stack} keyboardShouldPersistTaps="handled">
+          <KeyboardScrollView style={styles.editorScroll} contentContainerStyle={ui.stack} keyboardShouldPersistTaps="handled">
             <View style={styles.scheduleDetails}>
               {details.map(([label, value]) => <Text key={label} style={styles.scheduleText}>
                 <Text style={styles.scheduleLabel}>{label}: </Text>{value}
@@ -379,9 +371,9 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
             {!!error && !confirmDelete && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
             <Button label={pending && !confirmDelete ? 'Đang lưu…' : 'Lưu điều chỉnh'}
               disabled={pending || confirmDelete} onPress={() => void submit(false)} />
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
       {confirmDelete && <ConfirmDialog label="Xác nhận xóa bản ghi chấm công" title="Xóa bản ghi chấm công?"
         message={`Bản ghi của ${member.name} ngày ${formatVietnamDateWithWeekday(date)} sẽ bị xóa vĩnh viễn.`}
         action="Xác nhận xóa" pendingAction="Đang xóa…" pending={pending} error={error}
@@ -405,13 +397,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   scheduleText: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   scheduleLabel: { color: colors.metadataLabel, fontWeight: '700' },
   monthPicker: { width: 148, flexShrink: 1 },
-  alertDetail: { color: colors.danger, fontSize: 14, fontWeight: '700' },
   clockGroup: { gap: 6 },
   clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
   workingTag: { alignSelf: 'center', color: colors.success, backgroundColor: colors.successSoft },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  metric: { flexGrow: 1, flexBasis: '45%', backgroundColor: colors.accentSoft, borderRadius: 10, padding: 10 },
-  metricInlineDetail: { fontWeight: '400' },
   missedPunches: { gap: 4 },
   editorOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   editorCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },

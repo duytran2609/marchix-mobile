@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { KeyboardViewport } from '../components/KeyboardViewport';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { PopupCloseButton } from '../components/PopupCloseButton';
@@ -47,13 +49,13 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
   return <Modal transparent animationType="fade" statusBarTranslucent navigationBarTranslucent
     onRequestClose={() => { if (!busy) onBack(); }}>
     <SafeAreaView style={styles.overlay}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.center}>
+      <KeyboardViewport style={styles.center}>
         <View role="dialog" accessibilityLabel="Chi tiết phê duyệt công việc" accessibilityViewIsModal style={styles.popup}>
           <View style={styles.header}>
             <Text style={screenStyles.cardTitle}>Chi tiết phê duyệt công việc</Text>
             <PopupCloseButton label="Đóng chi tiết phê duyệt" onPress={onBack} disabled={!!busy} />
           </View>
-          <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, screenStyles.stack]}
+          <KeyboardScrollView style={styles.scroll} contentContainerStyle={[styles.content, screenStyles.stack]}
             keyboardShouldPersistTaps="handled">
             <View style={screenStyles.panel}>
               <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
@@ -97,9 +99,9 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
                   disabled={!!busy || !note.trim()} onPress={() => void decide('rework')} />
               </View>
             )}
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardViewport>
       <ToastLayer safeAreaApplied />
     </SafeAreaView>
   </Modal>;

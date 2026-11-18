@@ -4,6 +4,7 @@ import { Bytes } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Modal, Platform, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AttachmentLabel } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
@@ -73,7 +74,9 @@ export function AttachmentPreview({ file, onClose, projectFile = false }: {
 
   return <Modal visible animationType="slide" onRequestClose={saving ? () => undefined : onClose}>
     <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
-      <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
+      <AttachmentLabel file={file}>
+        <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
+      </AttachmentLabel>
       {previewError || file.kind === 'file'
         ? <Text style={styles.muted}>{previewError ? (projectFile ? 'Không hiển thị được tệp.' : 'Không hiển thị được chứng từ.')
           : 'Định dạng này cần ứng dụng phù hợp để mở.'}</Text>
@@ -123,7 +126,7 @@ export function CashProofs({ cashId, files }: { cashId: string; files: CashAttac
   return <View style={styles.stack}>
     <Text style={styles.label}>Chứng từ đính kèm</Text>
     {files.map(file => <View key={file.id} style={styles.detailRow}>
-      <Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text>
+      <AttachmentLabel file={file}><Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
       <Button label={opening === file.id ? 'Đang mở…' : `Xem ${file.name}`}
         secondary onPress={() => void open(file)} disabled={!!opening} />
     </View>)}

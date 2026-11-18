@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bytes } from 'firebase/firestore';
 import { Image, Modal, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AttachmentLabel, FileTypeIcon } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
@@ -39,7 +40,9 @@ export function RecordAttachmentPreview({ file, onClose, embedded, downloadable 
   }
   const content = (
     <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
-      <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
+      <AttachmentLabel file={file}>
+        <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
+      </AttachmentLabel>
       {failed ? <Text accessibilityRole="alert" style={styles.error}>Không hiển thị được nội dung tệp.</Text>
         : pdf ? <CashPdf {...file} onError={fail} />
           : imageUri ? <Image accessibilityLabel={file.name} source={{ uri: imageUri }} resizeMode="contain"
@@ -89,6 +92,7 @@ export function RecordAttachmentButton({ recordId, fileId, fileName, disabled, o
   }
   return <>
     <Button label={busy ? 'Đang tải tệp…' : fileName || 'Xem tệp đã lưu'} secondary disabled={busy || disabled}
+      leading={<FileTypeIcon name={fileName ?? ''} />}
       onPress={() => void open()} />
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {preview && <RecordAttachmentPreview downloadable file={preview} onClose={() => setPreview(undefined)} />}

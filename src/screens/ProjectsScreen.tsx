@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
+import { Metric, useMetricStyles } from '../components/Metric';
 import { ProjectEditor } from '../features/projects/ProjectEditor';
 import type { ProjectExpenseSeed } from '../features/projects/financeStore';
 import { ProjectFinance } from '../features/projects/ProjectFinance';
@@ -29,6 +30,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
   canReadCash: boolean; tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void;
 }) {
   const styles = useScreenStyles();
+  const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectError, setProjectError] = useState(false);
@@ -130,7 +132,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
               else onRetryTasks();
             }} />
           </View> : !projectTasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc dự án" color={colors.accent} />
-            : section === 'overview' ? <View style={local.metrics}>
+            : section === 'overview' ? <View style={metricStyles.grid}>
               <Metric label={pilotMode && isAdmin ? 'Tiến độ thực hiện' : 'Tiến độ việc tôi được xem'}
                 value={metrics.progress === null ? '–' : `${metrics.progress}%`} />
               <Metric label="Việc đã duyệt / tổng việc" value={`${metrics.done}/${projectTasks.length}`} />
@@ -167,14 +169,6 @@ function Detail({ label, value }: { label: string; value?: string }) {
   </Text>;
 }
 
-function Metric({ label, value }: { label: string; value: number | string }) {
-  const styles = useScreenStyles();
-  return <View style={[styles.panel, local.metric]}>
-    <Text style={styles.muted}>{label}</Text>
-    <Text style={styles.heading}>{value}</Text>
-  </View>;
-}
-
 const local = StyleSheet.create({
   projectTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   projectTitle: { flex: 1, minWidth: 0 },
@@ -186,6 +180,4 @@ const local = StyleSheet.create({
   tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   metadata: { gap: 4 },
   metaLabel: { fontWeight: '700' },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metric: { flexBasis: 132, flexGrow: 1, padding: 14, gap: 4 },
 });

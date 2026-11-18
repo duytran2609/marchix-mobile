@@ -1,6 +1,7 @@
 import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { Button } from '../components/Button';
 import { CardChevron } from '../components/CardChevron';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -69,7 +70,7 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
     : emulatorMode ? 'Đăng nhập Google (mô phỏng)' : 'Đăng nhập bằng Google';
 
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
+    <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
       <View style={styles.card}>
         <View style={styles.title}>
           <View style={styles.mark}>
@@ -120,7 +121,7 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
             </View>}
           </>}
       </View>
-    </ScrollView>
+    </KeyboardScrollView>
   );
 }
 
