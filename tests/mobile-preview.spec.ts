@@ -14,6 +14,22 @@ async function openTasks(page: import('@playwright/test').Page) {
   await page.getByRole('dialog').getByRole('button', { name: 'Công việc', exact: true }).click();
 }
 
+// Personal attendance defaults to five days per page. These workflows assert
+// changes to today's row, so select the whole month through the real UI first.
+async function showFullPersonalAttendanceMonth(page: import('@playwright/test').Page, date: string) {
+  const dayHeaders = page.getByRole('table').getByRole('rowheader');
+  await expect(dayHeaders).toHaveCount(5);
+  await expect(dayHeaders.first()).toContainText('01/' + date.slice(5, 7));
+  await page.getByRole('button', { name: 'Trang sau', exact: true }).click();
+  await expect(dayHeaders.first()).toContainText('06/' + date.slice(5, 7));
+  await page.getByRole('button', { name: 'Số dòng mỗi trang: 5 dòng', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Số dòng mỗi trang', exact: true })
+    .getByRole('radio', { name: '50 dòng', exact: true }).click();
+  const [year, month] = date.split('-').map(Number);
+  await expect(dayHeaders).toHaveCount(new Date(year, month, 0).getDate());
+  await expect(dayHeaders.first()).toContainText('01/' + date.slice(5, 7));
+}
+
 test('Người giao trả lời trao đổi và người thực hiện thấy trích dẫn', async ({ page, browser }) => {
   const sender = await browser.newPage({ ...devices['iPhone 13'] });
   await acknowledgeStartupReminder(sender);
@@ -255,6 +271,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+    await showFullPersonalAttendanceMonth(page, today);
     const attendanceRow = page.getByRole('table').getByRole('row')
       .filter({ hasText: ' · ' + today.slice(8) + '/' + today.slice(5, 7) });
     const workedCell = attendanceRow.getByRole('cell').nth(2);
@@ -364,6 +381,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     // A fresh document starts a new geolocation request after the denied one.
     await page.reload();
     await openAttendance(page);
+    await showFullPersonalAttendanceMonth(page, local);
     await expect.poll(() => page.evaluate(async () =>
       (await navigator.permissions.query({ name: 'geolocation' })).state)).toBe('granted');
 
