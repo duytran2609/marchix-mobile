@@ -6,6 +6,7 @@ import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { PageHeader } from '../components/PageHeader';
+import { OverviewGreeting } from '../components/OverviewGreeting';
 import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
@@ -14,6 +15,8 @@ import { pendingRequest, watchRequests } from '../features/requests/requests';
 import type { StaffRequest } from '../features/requests/requests';
 import { formatDue, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
+import { taskStatusSummary } from '../features/tasks/taskStatusSummary';
+import { statusTone } from '../features/tasks/TaskProgress';
 import { mondayOf, suggestWeekTasks } from '../features/weekly-plan/weeklyPlan';
 import type { WorkspaceRoute } from '../navigation/workspaceRoutes';
 import { pilotMode } from '../services/firebase/firebase';
@@ -22,7 +25,6 @@ import { createThemedStyles, lightColors, useTheme } from '../theme/theme';
 
 type Load<T> = T[] | 'error' | null;
 type Entry = { label: string; detail?: string; route: WorkspaceRoute };
-const groups = ['Quá hạn', 'Đang vướng', 'Hạn trong 7 ngày', 'Chờ duyệt', 'Đang mở khác'];
 const decisionFilters = [
   { value: 'all', label: 'Tất cả' }, { value: 'cho-duyet', label: 'Công việc' },
   { value: 'don-tu', label: 'Đơn từ' }, { value: 'thu-chi', label: 'Thu chi' }, { value: 'du-an', label: 'Dự án' },
@@ -39,7 +41,7 @@ function TaskRing({ counts, colors }: { counts: number[]; colors: string[] }) {
   const total = counts.reduce((sum, count) => sum + count, 0);
   let start = 0;
 
-  return <View accessible accessibilityLabel={`${total} việc đang mở`} style={styles.ring}>
+  return <View accessible accessibilityLabel={`${total} công việc`} style={styles.ring}>
     <View aria-hidden style={StyleSheet.absoluteFill}>
       {counts.map((count, index) => {
         if (!count) return null;
@@ -59,14 +61,15 @@ function TaskRing({ counts, colors }: { counts: number[]; colors: string[] }) {
     </View>
     <View style={styles.ringCenter} aria-hidden>
       <Text style={styles.total}>{total}</Text>
-      <Text style={styles.ringCaption}>việc đang mở</Text>
+      <Text style={styles.ringCaption}>công việc</Text>
     </View>
   </View>;
 }
 
 export function OverviewScreen({
-  email, isAdmin, canReadCash, canReviewCash, canReviewRequests, personalTasks, tasksError, onRetryTasks, onNavigate,
+  email, name, isAdmin, canReadCash, canReviewCash, canReviewRequests, personalTasks, tasksError, onRetryTasks, onNavigate,
 }: CashAccess & {
+  name: string;
   canReviewRequests: boolean;
   personalTasks: Task[] | null;
   tasksError: boolean;
@@ -82,7 +85,7 @@ export function OverviewScreen({
   const [requests, setRequests] = useState<Load<StaffRequest>>(null);
   const [overviewTasks, setOverviewTasks] = useState<Load<Task>>(null);
   const [retry, setRetry] = useState(0);
-  const [group, setGroup] = useState<number | null>(null);
+  const [group, setGroup] = useState<string | null>(null);
   const [showDecisions, setShowDecisions] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
   const [showDebt, setShowDebt] = useState(false);
@@ -119,14 +122,11 @@ export function OverviewScreen({
   const nextWeek = shiftDay(today, 7);
   const weekEnd = shiftDay(mondayOf(today), 6);
   const myWeekTasks = Array.isArray(tasks) ? suggestWeekTasks(tasks, email, today, weekEnd) : [];
-  const open = (Array.isArray(tasks) ? tasks : []).filter(task => task.status !== 'Xong');
-  const grouped = groups.map(() => [] as Task[]);
-  for (const task of open) {
-    const index = task.status === 'Chờ duyệt' ? 3 : task.due && task.due < today ? 0
-      : task.status === 'Vướng' ? 1 : task.due && task.due <= nextWeek ? 2 : 4;
-    grouped[index].push(task);
-  }
-  const groupColors = [colors.danger, colors.warning, colors.success, colors.accent, colors.muted];
+  const summary = taskStatusSummary(Array.isArray(tasks) ? tasks : []);
+  const groups = summary.map(bucket => bucket.status);
+  const grouped = summary.map(bucket => bucket.tasks);
+  const selectedGroup = summary.find(bucket => bucket.status === group);
+  const groupColors = groups.map(status => statusTone(status, colors).text);
   const ledger = Array.isArray(cash) ? cash : [];
   const scheduled = ledger.filter(row => waiting(row) && verifiedCash(row));
   const upcoming = scheduled.filter(row => row.dueDate >= today && row.dueDate <= nextWeek);
@@ -221,6 +221,7 @@ export function OverviewScreen({
 
   return <>
     <PageHeader title="Tổng quan" />
+    <OverviewGreeting name={name} email={email} />
     {isAdmin && <View style={screen.choices}>
       <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
         onPress={() => setShowDecisions(value => !value)} />
@@ -274,21 +275,22 @@ export function OverviewScreen({
         </Pressable>
       </>), { primary: true })}
       {card('Tình trạng công việc', state(tasks, <>
+        <Text style={screen.muted}>Công việc tôi nhận hoặc giao, gồm cả việc đã xong.</Text>
         <View style={styles.taskSummary}>
           <TaskRing counts={grouped.map(items => items.length)} colors={groupColors} />
           <View style={styles.taskLegend}>
             {grouped.map((items, index) => <Pressable key={groups[index]} accessibilityRole="button"
-              accessibilityState={{ expanded: group === index, disabled: !items.length }} disabled={!items.length}
-              onPress={() => setGroup(group === index ? null : index)} style={styles.legendRow}>
+              accessibilityState={{ expanded: group === groups[index], disabled: !items.length }} disabled={!items.length}
+              onPress={() => setGroup(group === groups[index] ? null : groups[index])} style={styles.legendRow}>
               <View aria-hidden style={[styles.dot, { backgroundColor: groupColors[index] }]} />
               <Text style={[screen.label, styles.grow]}>{groups[index]}</Text>
               <Text style={screen.label}>{items.length}</Text>
             </Pressable>)}
           </View>
         </View>
-        {group !== null && grouped[group].length > 0 && <View style={screen.stack}>
-          <Text accessibilityRole="header" style={screen.cardTitle}>{groups[group]}</Text>
-          {[...grouped[group]].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+        {selectedGroup && selectedGroup.tasks.length > 0 && <View style={screen.stack}>
+          <Text accessibilityRole="header" style={screen.cardTitle}>{selectedGroup.status}</Text>
+          {[...selectedGroup.tasks].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
             .slice(0, 8).map(task => row({ label: task.title, detail: formatDue(task.due), route: taskRoute(task) }, task.id))}
           <Button secondary label="Mở Công việc" onPress={() => onNavigate({ screen: 'cong-viec' })} />
         </View>}

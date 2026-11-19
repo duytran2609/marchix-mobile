@@ -64,10 +64,10 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     const openTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : [])
       .filter(fields => fields.status?.stringValue !== 'Xong');
     expect(numberFrom(open ?? '') + numberFrom(pending ?? '')).toBe(openTasks.length);
-    const personalOpen = openTasks.filter(fields =>
+    const personalTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : []).filter(fields =>
       fields.assigneeEmail?.stringValue === admin || fields.assignedBy?.stringValue === admin);
-    await expect(page.getByLabel(`${personalOpen.length} việc đang mở`)).toBeVisible();
-    const blocked = button(page, /^Đang vướng \d+$/);
+    await expect(page.getByLabel(`${personalTasks.length} công việc`)).toBeVisible();
+    const blocked = button(page, /^Vướng \d+$/);
     const blockedBefore = numberFrom(await blocked.innerText());
     await blocked.click();
     await expect(button(page, new RegExp(task))).toBeVisible();
@@ -78,7 +78,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await source.getByRole('radio', { name: 'Đang làm', exact: true }).click();
     await source.getByLabel('Tiến độ (%)').fill('65');
     await button(source, 'Lưu tiến độ').click();
-    await expect(button(page, `Đang vướng ${blockedBefore - 1}`)).toBeVisible();
+    await expect(button(page, `Vướng ${blockedBefore - 1}`)).toBeVisible();
     await expect(button(page, new RegExp(task))).toHaveCount(0);
     await expect(projectRow).toContainText('65%');
     await navigate(source, 'Dự án');

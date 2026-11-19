@@ -653,9 +653,9 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
 
   try {
     await openOverview(page, 'Đăng nhập Google (mô phỏng)');
-    const taskRing = page.getByLabel(/\d+ việc đang mở/);
+    const taskRing = page.getByLabel(/\d+ công việc/);
     await expect(taskRing).toBeVisible();
-    const legendRow = page.getByRole('button', { name: /Đang mở khác/ });
+    const legendRow = page.getByRole('button', { name: /^Đang làm \d+$/ });
     const ringBox = (await taskRing.boundingBox())!;
     const legendBox = (await legendRow.boundingBox())!;
     expect(ringBox.y + ringBox.height).toBeLessThan(legendBox.y);

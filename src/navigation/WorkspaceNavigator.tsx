@@ -76,7 +76,7 @@ export function WorkspaceNavigator({
   if (route.screen === 'ca-nhan') return <ProfileScreen email={email} name={name} photoURL={photoURL} isAdmin={isAdmin} />;
   if (route.screen === 'tong-quan') return <OverviewScreen
     key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, canReviewRequests])}
-    email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
+    email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
     canReviewRequests={canReviewRequests} personalTasks={tasksComplete ? tasks : null}
     tasksError={error || sentError} onRetryTasks={retryTasks} onNavigate={setRoute} />;
   if (route.screen === 'luong') return <PayrollScreen key={JSON.stringify([email, isAdmin, route.month])}
