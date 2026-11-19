@@ -26,6 +26,10 @@ test('Tổng quan chào theo tên, cập nhật trực tiếp và không tràn m
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(greeting).toBeVisible();
+      await expect(greeting).toHaveCSS('font-weight', '400');
+      const highlightedName = greeting.getByText(longName, { exact: true });
+      await expect(highlightedName).toHaveCSS('color', 'rgb(96, 65, 189)');
+      await expect(highlightedName).toHaveCSS('font-weight', '700');
       const bounds = await greeting.boundingBox();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
