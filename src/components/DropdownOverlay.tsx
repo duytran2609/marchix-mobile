@@ -1,11 +1,12 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { ComponentRef, ReactNode } from 'react';
-import { Keyboard, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { LayoutRectangle, StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollViewportContext } from './KeyboardScrollView';
 import { KeyboardViewport } from './KeyboardViewport';
 import { ToastLayer } from './Toast';
+import { attachedMenuPosition } from './dropdownPosition';
 
 export function useDropdownAnchor(menuHeight = 0) {
   const trigger = useRef<ComponentRef<typeof Pressable>>(null);
@@ -25,7 +26,10 @@ export function useDropdownAnchor(menuHeight = 0) {
       const measure = () => button.measureInWindow((x, y, width, height) => {
         if (trigger.current === button) setAnchor({ x, y, width, height });
       });
-      if (menuHeight && revealBelow) releaseSpace.current = revealBelow(button, menuHeight + 12, measure);
+      // Native scrolling completes asynchronously: measuring immediately after scrollTo
+      // can retain the old coordinates. Keep the native trigger still and open above
+      // it when the viewport has insufficient room below.
+      if (Platform.OS === 'web' && menuHeight && revealBelow) releaseSpace.current = revealBelow(button, menuHeight + 12, measure);
       else measure();
     },
     close() {
@@ -62,7 +66,10 @@ export function DropdownOverlay({ anchor, onClose, triggerContent, triggerStyle,
   const left = Math.min(Math.max(leftEdge, anchor.x), right - menuWidth);
   // Move the open control inside the overlay when the menu needs more room below it.
   const triggerTop = keepAttached ? anchor.y : Math.max(topEdge, Math.min(anchor.y, bottom - minHeight - gap - anchor.height));
-  const menuTop = triggerTop + anchor.height + gap;
+  const attached = keepAttached && Platform.OS !== 'web' ? attachedMenuPosition({
+    anchorTop: anchor.y, anchorHeight: anchor.height, top: topEdge, bottom, gap, maxHeight,
+  }) : undefined;
+  const menuTop = attached?.top ?? triggerTop + anchor.height + gap;
   const moved = Math.abs(triggerTop - anchor.y) >= 1;
 
   return <Modal transparent statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
@@ -75,8 +82,10 @@ export function DropdownOverlay({ anchor, onClose, triggerContent, triggerStyle,
             width: Math.min(anchor.width, menuWidth), height: anchor.height }]}>
           {triggerContent}
         </View>}
-        <View style={[panelStyle, { position: 'absolute', top: menuTop, left, width: menuWidth,
-          maxHeight: Math.min(maxHeight, Math.max(0, bottom - menuTop)) }]}>
+        <View style={[panelStyle, { position: 'absolute',
+          ...(attached?.opensAbove ? { bottom: (overlay?.height ?? height) - anchor.y + gap } : { top: menuTop }),
+          left, width: menuWidth,
+          maxHeight: attached?.height ?? Math.min(maxHeight, Math.max(0, bottom - menuTop)) }]}>
           {children}
         </View>
       </View>

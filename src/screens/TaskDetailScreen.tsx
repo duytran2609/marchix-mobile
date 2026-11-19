@@ -11,6 +11,7 @@ import { PopupCloseButton } from '../components/PopupCloseButton';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
+import { taskEditBlockReason } from '../features/tasks/taskEditAccess';
 import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskDiscussion } from '../features/tasks/TaskDiscussion';
 import { TaskPriority } from '../features/tasks/TaskPriority';
@@ -97,7 +98,8 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const reportBlockReason = lockedProgress
     ? checkedCount < checklist.length && 'Đánh dấu xong tất cả việc con để báo hoàn thành.'
     : liveTask.progress !== 100 && 'Đặt và lưu tiến độ 100% để báo hoàn thành.';
-  const canEditAssignment = taskAssignmentEnabled && liveTask.status !== 'Xong' && liveTask.assignedBy === email;
+  const editBlockReason = taskEditBlockReason(liveTask, email, taskAssignmentEnabled);
+  const canEditAssignment = !editBlockReason;
   const canRemind = canEditAssignment && editableStatus(liveTask.status) &&
     !!liveTask.assigneeEmail && !isAssignee;
   const [assignmentDraft, setAssignmentDraft] = useState<Task>();
@@ -204,13 +206,15 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     <View style={screenStyles.stack}>
       {onBack && <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />}
       <View style={[screenStyles.panel, !onBack && styles.popupContent]}>
-        {(onBack || canEditAssignment) && <View style={styles.taskDetailHeader}>
+        <View style={styles.taskDetailHeader}>
           {onBack && <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>}
-          {canEditAssignment ? <Button label="Chỉnh sửa" secondary disabled={!!busy} onPress={() => {
+          <Button label="Chỉnh sửa" secondary disabled={!!busy || !canEditAssignment} onPress={() => {
+            if (!canEditAssignment) return;
             setSavedAssignment(undefined);
             setAssignmentDraft(liveTask);
-          }} /> : null}
-        </View>}
+          }} />
+        </View>
+        {editBlockReason && <Text style={screenStyles.muted}>{editBlockReason}</Text>}
         <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
         <SegmentedButtons label="Chi tiết công việc" choices={detailTabs} value={tab} onChange={setTab} />
         {tab === 'description' && <View style={screenStyles.stack}>

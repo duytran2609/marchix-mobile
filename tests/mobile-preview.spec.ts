@@ -1550,7 +1550,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const firstTick = receiverPage.getByLabel('Trục thời gian công việc').getByText(/^\d{2}\/\d{2}$/).first();
     await expect(firstTick.locator('..')).toHaveCSS('align-items', 'center');
     await received.click();
-    await expect(receiverPage.getByRole('button', { name: 'Chỉnh sửa', exact: true })).toHaveCount(0);
+    await expect(receiverPage.getByRole('button', { name: 'Chỉnh sửa', exact: true })).toBeDisabled();
+    await expect(receiverPage.getByText('Chỉ người giao việc mới được chỉnh sửa công việc này.', { exact: true })).toBeVisible();
     const detail = receiverPage.getByText('CHI TIẾT CÔNG VIỆC', { exact: true }).locator('../..');
     const metadataValue = (label: string, value: string) => detail
       .getByText(label, { exact: true })
