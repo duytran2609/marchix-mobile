@@ -6,6 +6,7 @@ import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
 import { PageHeader } from '../components/PageHeader';
+import { OverviewGreeting } from '../components/OverviewGreeting';
 import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
@@ -65,8 +66,9 @@ function TaskRing({ counts, colors }: { counts: number[]; colors: string[] }) {
 }
 
 export function OverviewScreen({
-  email, isAdmin, canReadCash, canReviewCash, canReviewRequests, personalTasks, tasksError, onRetryTasks, onNavigate,
+  email, name, isAdmin, canReadCash, canReviewCash, canReviewRequests, personalTasks, tasksError, onRetryTasks, onNavigate,
 }: CashAccess & {
+  name: string;
   canReviewRequests: boolean;
   personalTasks: Task[] | null;
   tasksError: boolean;
@@ -221,6 +223,7 @@ export function OverviewScreen({
 
   return <>
     <PageHeader title="Tổng quan" />
+    <OverviewGreeting name={name} email={email} />
     {isAdmin && <View style={screen.choices}>
       <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
         onPress={() => setShowDecisions(value => !value)} />
