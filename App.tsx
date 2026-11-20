@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardSafeAreaView } from './src/components/KeyboardViewport';
+import { OfflineBanner } from './src/components/OfflineBanner';
 import { ToastProvider } from './src/components/Toast';
 import { useSession } from './src/features/auth/useSession';
 import { StartupReminder } from './src/features/notifications/StartupReminder';
@@ -26,6 +27,7 @@ export default function App() {
         <ToastProvider>
           <KeyboardSafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
             <StatusBar style={dark ? 'light' : 'dark'} />
+            <OfflineBanner />
             {!configError && session.kind === 'member'
               ? <><MemberWorkspace key={session.email} email={session.email} name={session.name}
                   photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant}

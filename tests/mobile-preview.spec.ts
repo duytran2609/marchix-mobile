@@ -30,6 +30,64 @@ async function showFullPersonalAttendanceMonth(page: import('@playwright/test').
   await expect(dayHeaders.first()).toContainText('01/' + date.slice(5, 7));
 }
 
+test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab Chung', async ({ page, request }) => {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const id = `task-popup-height-${Date.now()}`;
+  const url = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/${id}`;
+  const headers = { Authorization: 'Bearer owner' };
+  const title = `Kiểm thử chiều cao ${id}`;
+  const email = 'quantri@example.test';
+  const note = (size: number) => Array.from({ length: size }, (_, i) => `Mô tả công việc dòng ${i + 1}`).join('\n');
+  async function update(size: number) {
+    const comments = Array.from({ length: size }, (_, i) => ({ mapValue: { fields: {
+      by: { stringValue: email }, at: { stringValue: new Date(Date.UTC(2025, 0, 1, 0, i)).toISOString() },
+      text: { stringValue: `Nội dung trao đổi ${i + 1}` },
+    } } }));
+    expect((await request.patch(url, { headers, data: { fields: {
+      title: { stringValue: title }, assignedBy: { stringValue: email }, assigneeEmail: { stringValue: email },
+      status: { stringValue: 'Xong' }, progress: { integerValue: '100' }, note: { stringValue: note(size) },
+      comments: { arrayValue: { values: comments } },
+    } } })).ok()).toBe(true);
+  }
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await update(1);
+    await page.goto(previewUrl);
+    await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
+    await openTasks(page);
+    await page.getByRole('textbox', { name: 'Tìm tên công việc' }).fill(title);
+    await page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+    const content = dialog.getByTestId('task-detail-scroll');
+    const tab = (name: string) => dialog.getByRole('button', { name, exact: true });
+    const height = () => dialog.evaluate(element => element.getBoundingClientRect().height);
+    await expect(dialog.getByText('Hạn chót', { exact: true })).toBeVisible();
+    const generalHeight = await height();
+    const shortHeights = new Map<string, number>();
+    for (const name of ['Mô tả', 'Trao đổi & tài liệu']) {
+      await tab(name).click();
+      await expect.poll(height).toBeLessThan(generalHeight);
+      shortHeights.set(name, await height());
+      expect(await content.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+    }
+
+    await update(36);
+    for (const name of ['Mô tả', 'Trao đổi & tài liệu']) {
+      await tab(name).click();
+      await expect.poll(height).toBeCloseTo(generalHeight, 0);
+      expect(await height()).toBeGreaterThan(shortHeights.get(name)!);
+      await expect.poll(() => content.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(40);
+      const tabY = (await tab(name).boundingBox())!.y;
+      await content.evaluate(element => { element.scrollTop = element.scrollHeight; });
+      await expect.poll(() => content.evaluate(element => element.scrollTop)).toBeGreaterThan(40);
+      expect((await tab(name).boundingBox())!.y).toBeCloseTo(tabY);
+    }
+  } finally {
+    await request.delete(url, { headers });
+  }
+});
+
 test('Người giao trả lời trao đổi và người thực hiện thấy trích dẫn', async ({ page, browser }) => {
   const sender = await browser.newPage({ ...devices['iPhone 13'] });
   await acknowledgeStartupReminder(sender);
@@ -43,10 +101,11 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
     for (const view of [page, sender]) {
       await openTasks(view);
       await view.getByRole('button', { name: `Mở công việc: ${task}` }).click();
-      await view.getByRole('button', { name: 'Mô tả', exact: true }).click();
-      await expect(view.getByRole('heading', { name: 'Mô tả / Yêu cầu bàn giao' })).toBeVisible();
-      await expect(view.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeHidden();
-      await view.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
+      const detail = view.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+      await detail.getByRole('button', { name: 'Mô tả', exact: true }).click();
+      await expect(detail.getByRole('heading', { name: 'Mô tả / Yêu cầu bàn giao' })).toBeVisible();
+      await expect(detail.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeHidden();
+      await detail.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     }
     await page.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill(original);
     await page.getByRole('button', { name: 'Gửi trao đổi' }).click();
@@ -135,6 +194,9 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
 
   try {
     await openRequests(page, 'Đăng nhập Google (mô phỏng)');
+    for (const label of ['Đơn chờ duyệt', 'Đơn đã duyệt']) {
+      await expect(page.getByText(label, { exact: true }).locator('..')).toHaveCSS('background-color', 'rgb(240, 234, 253)');
+    }
     await page.getByRole('button', { name: '+ Tạo đơn' }).click();
     const popup = page.getByRole('dialog', { name: 'Tạo đơn' });
     await expect(popup).toBeVisible();
@@ -148,26 +210,31 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
       await expect(typeButton).toHaveCSS('background-color', neutralBackground);
     }
     const today = todayInVietnam();
-    await popup.getByLabel('Số ngày').fill('2,5');
+    const days = popup.getByRole('textbox', { name: 'Số ngày', exact: true });
+    await days.fill('2,5');
+    await popup.getByRole('button', { name: 'Tăng số ngày', exact: true }).click();
+    await expect(days).toHaveValue('3,5');
+    await popup.getByRole('button', { name: 'Giảm số ngày', exact: true }).click();
+    await expect(days).toHaveValue('2,5');
     await expect(popup.getByRole('button', { name: 'Đến ngày, ' + formatTaskDate(shiftDay(today, 2)) })).toBeVisible();
     const dateButton = popup.getByRole('button', { name: /^Đến ngày,/ });
     await dateButton.scrollIntoViewIfNeeded();
-    const daysY = (await popup.getByLabel('Số ngày').boundingBox())!.y;
+    const daysY = (await days.boundingBox())!.y;
     await dateButton.click();
     const dateCalendar = page.getByRole('dialog', { name: 'Đến ngày', exact: true });
     await expect(dateCalendar.getByRole('button', { name: 'Tháng sau', exact: true })).toBeVisible();
-    expect((await popup.getByLabel('Số ngày').boundingBox())!.y).toBeCloseTo(daysY);
+    expect((await days.boundingBox())!.y).toBeCloseTo(daysY);
     if (today.slice(0, 7) !== shiftDay(today, 2).slice(0, 7)) {
       await dateCalendar.getByRole('button', { name: 'Tháng trước', exact: true }).click();
     }
     await dateCalendar.getByRole('button', { name: 'Ngày ' + formatTaskDate(today), exact: true }).click();
-    await expect(popup.getByLabel('Số ngày')).toHaveValue('1');
+    await expect(days).toHaveValue('1');
     await selectType('Công tác');
     await expect(popup.getByLabel('Địa điểm công tác')).toBeVisible();
     await selectType('Làm thêm giờ');
     await expect(popup.getByRole('button', { name: /^Ngày,/ })).toBeVisible();
     await expect(popup.getByRole('button', { name: /^Đến ngày,/ })).toHaveCount(0);
-    const hours = popup.getByLabel('Số giờ làm thêm');
+    const hours = popup.getByRole('textbox', { name: 'Số giờ làm thêm', exact: true });
     await hours.pressSequentially('2,5');
     await expect(hours).toHaveValue('2,5');
     await hours.fill('1.25');
@@ -467,7 +534,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
     await expect(companyTable.getByRole('columnheader', { name: 'HỌ TÊN' })).toBeVisible();
     const monthPicker = admin.getByRole('button', { name: /^Chọn tháng:/ });
     const monthOptions = admin.getByRole('radiogroup', { name: 'Chọn tháng' }).getByRole('radio');
-    const currentMonth = 'Tháng ' + local.slice(5, 7) + '/' + local.slice(0, 4);
+    const currentMonth = local.slice(5, 7) + '/' + local.slice(0, 4);
     await expect(monthPicker).toHaveAccessibleName('Chọn tháng: ' + currentMonth);
     await monthPicker.click();
     await monthOptions.nth(1).click();
@@ -599,9 +666,13 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(page.getByRole('heading', { name: 'DỰ ÁN', exact: true })).toBeVisible();
   await expect(list.getByRole('heading', { name: 'DỰ ÁN', exact: true })).toHaveCount(0);
   await expect(profile.getByRole('heading', { name: 'Marchix Mobile · Demo' })).toBeVisible();
-  await expect(profile).toContainText('Mã dự án: DA-marchix-mobile-demo');
-  await expect(profile).toContainText('Thời gian: 10/11/2026 → 30/11/2026');
-  await expect(profile).toContainText('Người phụ trách: Người giao việc demo');
+  const projectInfo = profile.getByText('Mã dự án', { exact: true }).locator('../..');
+  await expect(projectInfo).toHaveCSS('border-top-width', '1px');
+  await expect(projectInfo.getByText('DA-marchix-mobile-demo', { exact: true })).toBeVisible();
+  await expect(projectInfo.getByText('Thời gian', { exact: true }).locator('..'))
+    .toContainText('10/11/2026 → 30/11/2026');
+  await expect(projectInfo.getByText('Người phụ trách', { exact: true }).locator('..'))
+    .toContainText('Người giao việc demo');
   const overview = page.getByRole('region', { name: 'Tổng quan', exact: true });
   await expect(overview).toContainText('Mục tiêu / kết quả bàn giao: Bàn giao bản thử trên điện thoại.');
   await expect(overview).toContainText('Giai đoạn hiện tại: Kiểm thử nội bộ');
@@ -711,11 +782,13 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await expect(page.getByText('Nhân viên', { exact: true })).toBeVisible();
   await expect(page.getByText('nhanvien@example.test', { exact: true })).toHaveCSS('text-align', 'right');
   const chooseAvatar = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Đổi ảnh đại diện' }).click();
+  const changeAvatar = page.getByRole('button', { name: 'Đổi ảnh đại diện' });
+  await changeAvatar.click();
   await (await chooseAvatar).setFiles('assets/marchix-mark.png');
   await expect(page.getByText('Đã cập nhật ảnh đại diện.')).toBeVisible();
   const avatarImage = page.locator('img[src^="data:image/png;base64,"]');
   await expect(avatarImage).toHaveCount(1);
+  await expect(changeAvatar.locator('..').getByText('ND', { exact: true })).toHaveCount(0);
 
   await openMenu.click();
   await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toHaveAttribute('aria-current', 'page');
@@ -811,7 +884,7 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
     await target.getByRole('button', { name: 'Mở menu' }).click();
     await target.getByRole('dialog').getByRole('button', { name: 'KPI', exact: true }).click();
     await target.getByRole('button', { name: /^Tháng:/ }).click();
-    await target.getByRole('radio', { name: 'Tháng 03/2025', exact: true }).click();
+    await target.getByRole('radio', { name: '03/2025', exact: true }).click();
   }
 
   const admin = await browser.newPage({ ...devices['iPhone 13'] });
@@ -823,7 +896,19 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
     })));
     for (const response of seeded) expect(response.ok()).toBe(true);
     await openKpi(page, 'Đăng nhập Google (mô phỏng)');
-    await expect(page.getByText('Điểm đã chốt tự động ngày 01/04/2025.')).toBeVisible();
+    const rules = page.getByRole('button', { name: /^Cách tính KPI/ });
+    const rulesFrame = rules.locator('..');
+    await expect(rulesFrame).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(rulesFrame).toHaveCSS('border-top-width', '1px');
+    await rules.click();
+    const explanation = rulesFrame.getByRole('heading', { name: 'Công việc được tính' });
+    await expect(explanation).toBeVisible();
+    await expect(rulesFrame.getByRole('heading', { name: 'Điểm từng công việc' })).toBeVisible();
+    await expect(rulesFrame.getByRole('heading', { name: 'Điểm KPI và xếp loại' })).toBeVisible();
+    await expect(rulesFrame.getByText(/KPI \(%\) = Tổng điểm đạt được/)).toBeVisible();
+    await rules.click();
+    await expect(explanation).toHaveCount(0);
+    await expect(page.getByText('Điểm đã chốt tự động: 07:00 01/04/2025.')).toBeVisible();
     await expect(page.getByText('92%', { exact: true })).toBeVisible();
     const pendingReview = page.getByText('Chờ duyệt', { exact: true }).locator('..');
     const completed = page.getByText('Xong', { exact: true }).locator('..');
@@ -1090,6 +1175,17 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     expect((await fetch(`${base}/recurring/${recurringId}`, { headers })).status).toBe(404);
 
     await openTab(labels[3]);
+    const gpsToggle = page.getByRole('switch', { name: 'Chỉ cho chấm công tại văn phòng (GPS)', exact: true });
+    const thumb = gpsToggle.getByTestId('settings-switch-thumb');
+    await expect(gpsToggle).toBeVisible();
+    const initialGps = (await gpsToggle.getAttribute('aria-checked')) === 'true';
+    await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(thumb).toHaveCSS('border-top-width', '1px');
+    await gpsToggle.click();
+    await expect(gpsToggle).toHaveAttribute('aria-checked', String(!initialGps));
+    await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await gpsToggle.press('Space');
+    await expect(gpsToggle).toHaveAttribute('aria-checked', String(initialGps));
     await page.getByRole('button', { name: /^Giờ vào ca – Giờ:/ }).click();
     await page.getByRole('radio', { name: '08', exact: true }).click();
     await page.getByRole('button', { name: /^Giờ vào ca – Phút:/ }).click();
@@ -1231,16 +1327,29 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await expect(page.getByRole('radiogroup', { name: 'Lọc theo trạng thái' })).toBeVisible();
   expect((await results.boundingBox())!.y).toBeCloseTo(resultsTop);
   await page.getByRole('radio', { name: 'Xong', exact: true }).click();
-  await expect(page.getByText('Không có việc phù hợp')).toBeVisible();
+  const emptyMessage = page.getByText('Không có việc phù hợp', { exact: true });
+  const emptyState = emptyMessage.locator('..');
+  const emptyIcon = emptyState.locator('img');
+  await expect(emptyMessage).toBeVisible();
+  await expect(emptyMessage).toHaveCSS('color', 'rgb(114, 114, 114)');
+  await expect(emptyState).toHaveCSS('opacity', '0.9');
+  await expect(emptyIcon).toHaveAttribute('src', /search\.png/);
+  const iconBounds = (await emptyIcon.locator('..').boundingBox())!;
+  expect(iconBounds.y + iconBounds.height).toBeLessThan((await emptyMessage.boundingBox())!.y);
   await expect(status).toHaveAccessibleName('Trạng thái: Xong');
   await expect(status).toHaveAttribute('aria-expanded', 'false');
   await status.click();
   await page.getByRole('radio', { name: 'Chưa làm', exact: true }).click();
   await kanban.click();
+  await card.scrollIntoViewIfNeeded();
+  const cardBefore = (await card.boundingBox())!;
   await card.click();
-  await expect(page.getByRole('heading', { name: task })).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeVisible();
-  await page.getByRole('button', { name: 'Danh sách công việc' }).click();
+  const taskPopup = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+  await expect(taskPopup.getByRole('heading', { name: task })).toBeVisible();
+  await expect(taskPopup.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeVisible();
+  await taskPopup.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
+  await expect(taskPopup).toBeHidden();
+  expect((await card.boundingBox())!.y).toBeCloseTo(cardBefore.y, 0);
   await expect(search).toHaveValue('cap nhat huong dan');
   await expect(status).toHaveAccessibleName('Trạng thái: Chưa làm');
   await expect(assignee).toHaveAccessibleName('Người thực hiện: Nhân viên demo');
@@ -1259,7 +1368,14 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await page.getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
   await expect(projectCard).toBeVisible();
   await expect(card).toHaveCount(0);
+  await projectCard.click();
+  await expect(taskPopup.getByRole('heading', { name: 'Kiểm tra giao diện trên điện thoại' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(taskPopup).toBeHidden();
   await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
+  const ganttRow = (await projectCard.boundingBox())!;
+  const ganttProgress = (await projectCard.getByText(/^\d+%$/).boundingBox())!;
+  expect(Math.abs(ganttProgress.y + ganttProgress.height / 2 - (ganttRow.y + ganttRow.height / 2))).toBeLessThan(1);
   const range = page.getByRole('button', { name: /^Khung thời gian:/ });
   const ganttCount = range.locator('../..').getByRole('heading', { name: /^\d+ công việc$/ });
   const countBox = (await ganttCount.boundingBox())!;
@@ -1279,6 +1395,10 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await expect(range).toHaveCSS('background-color', rangeBackground);
   const monday = mondayOf(todayInVietnam());
   await expect(ganttDates).toHaveText(Array.from({ length: 7 }, (_, index) => formatTaskDate(shiftDay(monday, index)).slice(0, 5)));
+  await projectCard.click();
+  await expect(taskPopup.getByRole('heading', { name: 'Kiểm tra giao diện trên điện thoại' })).toBeVisible();
+  await taskPopup.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
+  await expect(range).toHaveAccessibleName('Khung thời gian: Theo tuần');
   await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
   await expect(range).toHaveCount(0);
   await category.click();
@@ -1307,7 +1427,10 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
     await page.goto(previewUrl);
     await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
     await openTasks(page);
-    await page.getByRole('textbox', { name: 'Tìm tên công việc' }).fill('Kiểm tra giao diện Kanban');
+    const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
+    const placeholderColor = await search.evaluate(input => getComputedStyle(input, '::placeholder').color);
+    expect(placeholderColor).toBe('rgb(114, 114, 114)');
+    await search.fill('Kiểm tra giao diện Kanban');
     const card = page.getByRole('button', { name: `Mở công việc: ${title}` });
     for (const mode of ['Danh sách', 'Bảng Kanban']) {
       await page.getByRole('button', { name: mode, exact: true }).click();
@@ -1449,16 +1572,34 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
 
     await form.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
     const initialProgress = form.getByRole('textbox', { name: 'Tiến độ ban đầu (%)' });
+    const increaseProgress = form.getByRole('button', { name: 'Tăng tiến độ ban đầu (%)', exact: true });
+    const decreaseProgress = form.getByRole('button', { name: 'Giảm tiến độ ban đầu (%)', exact: true });
+    await expect(decreaseProgress).toBeDisabled();
+    await increaseProgress.click();
+    await expect(initialProgress).toHaveValue('1');
+    await decreaseProgress.click();
+    await expect(initialProgress).toHaveValue('0');
     await initialProgress.fill('101');
     await expect(initialProgress).toHaveValue('0');
     await initialProgress.fill('2a%');
     await expect(initialProgress).toHaveValue('0');
     await initialProgress.fill('100');
     await expect(initialProgress).toHaveValue('100');
+    await expect(increaseProgress).toBeDisabled();
     await form.getByRole('radio', { name: 'Hằng tuần', exact: true }).click();
     await form.getByRole('checkbox', { name: 'Mốc bàn giao dự án' }).click();
-    await form.getByRole('button', { name: /^Người theo dõi:/ }).click();
+    const watcherTrigger = form.getByRole('button', { name: /^Người theo dõi:/ });
+    await watcherTrigger.scrollIntoViewIfNeeded();
+    const watcherTriggerBefore = await watcherTrigger.boundingBox();
+    await watcherTrigger.click();
     const watcherPicker = page.getByRole('dialog', { name: 'Người theo dõi', exact: true });
+    await expect(watcherPicker).toBeVisible();
+    const pickerBounds = (await watcherPicker.boundingBox())!;
+    const viewport = page.viewportSize()!;
+    expect(pickerBounds.x + pickerBounds.width / 2).toBeCloseTo(viewport.width / 2, 0);
+    expect(pickerBounds.y + pickerBounds.height / 2).toBeCloseTo(viewport.height / 2, 0);
+    const coveredTrigger = page.getByRole('button', { name: /^Người theo dõi:/, includeHidden: true });
+    expect((await coveredTrigger.boundingBox())?.y).toBeCloseTo(watcherTriggerBefore!.y, 0);
     await watcherPicker.getByRole('textbox', { name: 'Tìm người theo dõi' }).fill('nhan vien');
     const watcher = watcherPicker.getByRole('checkbox', { name: 'Nhân viên demo', exact: true });
     await watcher.click();
@@ -1499,7 +1640,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
       expect(fields.approverEmail.stringValue).toBe('quantri@example.test');
       if (fields.assigneeEmail.stringValue === 'nhanvien@example.test') {
         const local = new Date(Date.parse(fields.createdAt.stringValue) + 7 * 60 * 60 * 1000).toISOString();
-        assignmentTime = `${local.slice(0, 10).split('-').reverse().join('/')} ${local.slice(11, 16)}`;
+        assignmentTime = `${local.slice(11, 16)} ${local.slice(0, 10).split('-').reverse().join('/')}`;
       }
       const [comment] = fields.comments.arrayValue.values;
       const files = comment.mapValue.fields.files.arrayValue.values;
@@ -1537,7 +1678,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const senderDownload = await senderDownloadEvent;
     expect(senderDownload.suggestedFilename()).toBe(attachment.name);
     expect((await readFile((await senderDownload.path())!)).equals(attachment.buffer)).toBeTruthy();
-    await page.getByRole('button', { name: 'Danh sách công việc' }).click();
+    await page.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
     await expect(assignee).toHaveAccessibleName('Người thực hiện: Nhân viên demo');
     await expect(received.getByText(`Hạn chót: ${deadline}`, { exact: true })).toBeVisible();
     await expect(received.getByText('Mức độ ưu tiên: Cao', { exact: true })).toBeVisible();
@@ -1551,7 +1692,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(firstTick.locator('..')).toHaveCSS('align-items', 'center');
     await received.click();
     await expect(receiverPage.getByRole('button', { name: 'Chỉnh sửa', exact: true })).toHaveCount(0);
-    const detail = receiverPage.getByText('CHI TIẾT CÔNG VIỆC', { exact: true }).locator('../..');
+    const detail = receiverPage.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
     const metadataValue = (label: string, value: string) => detail
       .getByText(label, { exact: true })
       .locator('..').getByText(value, { exact: true });
@@ -1727,9 +1868,19 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
     await Promise.all([openTasks(page), openTasks(otherPage)]);
     await expect(page.getByRole('heading', { name: 'CÔNG VIỆC', exact: true })).toBeVisible();
     await expect(page.getByText('Việc riêng của đồng nghiệp')).toHaveCount(0);
+    await Promise.all([page, otherPage].map(target =>
+      target.getByRole('textbox', { name: 'Tìm tên công việc' }).fill(task)));
     await Promise.all([openTask(page).click(), openTask(otherPage).click()]);
-    const progress = page.getByLabel('Tiến độ (%)');
+    const detail = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+    const otherDetail = otherPage.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+    const progress = detail.getByRole('textbox', { name: 'Tiến độ (%)', exact: true });
     const previous = await progress.inputValue();
+    await progress.fill('50');
+    await detail.getByRole('button', { name: 'Tăng tiến độ (%)', exact: true }).click();
+    await expect(progress).toHaveValue('51');
+    await detail.getByRole('button', { name: 'Giảm tiến độ (%)', exact: true }).click();
+    await expect(progress).toHaveValue('50');
+    await progress.fill(previous);
     await progress.fill('101');
     await expect(progress).toHaveValue(previous);
     await progress.fill('9.5');
@@ -1737,36 +1888,36 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
     await progress.fill('a%');
     await expect(progress).toHaveValue(previous);
     await progress.clear();
-    await page.getByRole('button', { name: 'Lưu tiến độ' }).click();
+    await detail.getByRole('button', { name: 'Lưu tiến độ', exact: true }).click();
     const errorToast = page.getByRole('alert').filter({ hasText: 'Nhập số nguyên từ 0 đến 100.' });
     await expect(errorToast).toBeVisible();
     await expect(errorToast.locator('..').getByText('\u26A0\uFE0E')).toHaveCSS('color', 'rgb(158, 52, 43)');
     await progress.fill('75');
     await page.getByRole('radio', { name: 'Vướng' }).click();
-    await page.getByRole('button', { name: 'Lưu tiến độ' }).click();
+    await detail.getByRole('button', { name: 'Lưu tiến độ', exact: true }).click();
     const toast = page.getByText('Đã lưu tiến độ.', { exact: true });
     await expect(toast).toBeVisible();
     const toastContainer = toast.locator('..');
     await expect(toastContainer.getByText('✓')).toHaveCSS('color', 'rgb(11, 97, 85)');
-    await expect(page.getByRole('heading', { name: task, exact: true })).toBeVisible();
+    await expect(detail.getByRole('heading', { name: task, exact: true })).toBeVisible();
     await expect(progress).toHaveValue('75');
     const bounds = (await toastContainer.boundingBox())!;
     const viewport = page.viewportSize()!;
     expect(bounds.x + bounds.width / 2).toBeCloseTo(viewport.width / 2, 0);
     expect(viewport.height - (bounds.y + bounds.height)).toBeLessThan(48);
     await expect(toast).toBeHidden({ timeout: 4000 });
-    await expect(page.getByRole('heading', { name: task, exact: true })).toBeVisible();
+    await expect(detail.getByRole('heading', { name: task, exact: true })).toBeVisible();
     await progress.fill('80');
-    await page.getByRole('button', { name: 'Lưu tiến độ' }).click();
+    await detail.getByRole('button', { name: 'Lưu tiến độ', exact: true }).click();
     await expect(toast).toBeVisible();
-    await expect(page.getByRole('heading', { name: task, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Danh sách công việc' }).click();
+    await expect(detail.getByRole('heading', { name: task, exact: true })).toBeVisible();
+    await detail.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
     await expect(openTask(page)).toContainText('80%');
     await expect(openTask(page)).toContainText('Vướng');
-    await otherPage.getByLabel('Tiến độ (%)').fill('90');
-    await otherPage.getByRole('button', { name: 'Lưu tiến độ' }).click();
+    await otherDetail.getByRole('textbox', { name: 'Tiến độ (%)', exact: true }).fill('90');
+    await otherDetail.getByRole('button', { name: 'Lưu tiến độ', exact: true }).click();
     await expect(otherPage.getByRole('alert')).toContainText('Công việc vừa thay đổi');
-    await otherPage.getByRole('button', { name: 'Danh sách công việc' }).click();
+    await otherDetail.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
     await expect(openTask(otherPage)).toContainText('80%');
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Đăng xuất', exact: true }).click();

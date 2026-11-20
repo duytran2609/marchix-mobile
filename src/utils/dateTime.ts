@@ -1,6 +1,10 @@
 const vietnamWeekday = new Intl.DateTimeFormat('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh', weekday: 'short',
 });
+
+export function formatMonthLabel(month: string) {
+  return `${month.slice(5)}/${month.slice(0, 4)}`;
+}
 const vietnamDate = new Intl.DateTimeFormat('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric',
 });
@@ -16,11 +20,11 @@ const vietnamDateTime = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
 
-export function formatVietnamDateTime(value: string, order: 'date-first' | 'time-first' = 'date-first') {
-  const timestamp = Date.parse(value);
+export function formatVietnamDateTime(value?: string | Date | null) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value.split('-').reverse().join('/');
+  const timestamp = typeof value === 'string' ? Date.parse(value) : value.getTime();
   if (!Number.isFinite(timestamp)) return '';
-  if (order === 'date-first') return vietnamDateTime.format(timestamp).replace(',', '');
-
   const parts = Object.fromEntries(vietnamDateTime.formatToParts(timestamp).map(({ type, value }) => [type, value]));
   return `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}`;
 }

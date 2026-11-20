@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
+import { TextInput } from '../../components/TextInput';
+import { NumberStepper } from '../../components/NumberStepper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
@@ -60,31 +62,14 @@ function WeightField({ label, value, disabled, onChange, onSubmit }: {
   label: string; value: string; disabled: boolean; onChange: (value: string) => void; onSubmit?: () => void;
 }) {
   const styles = useStyles();
-  const weight = checklistWeight(Number(value));
   return (
     <View style={styles.weightField}>
       <Text style={styles.weightLabel}>Khối lượng</Text>
-      <View style={styles.weightFrame}>
-        <TextInput accessibilityLabel={label} style={styles.weightInput} value={value} placeholder="1"
-          editable={!disabled} inputMode="numeric" maxLength={15}
-          onChangeText={next => { if (/^\d*$/.test(next)) onChange(next); }}
-          onSubmitEditing={onSubmit} returnKeyType={onSubmit ? 'done' : undefined}
-          submitBehavior={onSubmit ? 'submit' : undefined} blurOnSubmit={onSubmit ? false : undefined} />
-        <View style={styles.weightArrows}>
-          {([1, -1] as const).map(step => {
-            const blocked = disabled || (step === 1 ? weight >= maxChecklistWeight : weight <= 1);
-            return (
-              <Pressable key={step} accessibilityRole="button"
-                accessibilityLabel={`${step === 1 ? 'Tăng' : 'Giảm'} ${label.toLocaleLowerCase('vi')}`}
-                accessibilityState={{ disabled: blocked }} disabled={blocked}
-                onPress={() => onChange(String(weight + step))}
-                style={({ pressed }) => [styles.weightArrow, (blocked || pressed) && styles.saving]}>
-                <Text style={styles.weightArrowText}>{step === 1 ? '▴' : '▾'}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      <NumberStepper accessibilityLabel={label} style={styles.weightInput} value={value} placeholder="1"
+        editable={!disabled} inputMode="numeric" maxLength={15} min={1} max={maxChecklistWeight} emptyValue={1}
+        onChangeText={next => { if (/^\d*$/.test(next)) onChange(next); }}
+        onSubmitEditing={onSubmit} returnKeyType={onSubmit ? 'done' : undefined}
+        submitBehavior={onSubmit ? 'submit' : undefined} blurOnSubmit={onSubmit ? false : undefined} />
     </View>
   );
 }
@@ -392,7 +377,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                         ? 'Tự tính theo khối lượng việc con.'
                         : 'Nhập khối lượng hợp lệ để tính tiến độ.'}</Text>
                       : workflowLocked ? <Text style={styles.muted}>{task.progress ?? 0}%</Text>
-                      : <TextInput accessibilityLabel={task ? 'Tiến độ (%)' : 'Tiến độ ban đầu (%)'} inputMode="numeric" style={styles.input}
+                      : <NumberStepper accessibilityLabel={task ? 'Tiến độ (%)' : 'Tiến độ ban đầu (%)'} inputMode="numeric" style={styles.input} max={100}
                           value={progressText} editable={!saving} onChangeText={value => {
                             if (value === '' || parseTaskProgress(value) !== undefined) setProgressText(value);
                           }} />}
@@ -509,13 +494,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   itemNameInput: { height: 42, minHeight: 42, paddingVertical: 0, borderWidth: 1.5 },
   weightField: { width: 84, gap: 3 },
   weightLabel: { color: colors.muted, fontSize: 11 },
-  weightFrame: { height: 42, flexDirection: 'row', borderWidth: 1.5, borderRadius: 9,
-    borderColor: colors.line, overflow: 'hidden' },
-  weightInput: { flex: 1, minWidth: 0, paddingHorizontal: 2, textAlign: 'center',
-    color: colors.ink, fontSize: 15, fontWeight: '700' },
-  weightArrows: { width: 28, borderLeftWidth: 1, borderColor: colors.line, backgroundColor: colors.accentSoft },
-  weightArrow: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  weightArrowText: { color: colors.accent, fontSize: 15, lineHeight: 17 },
+  weightInput: { height: 42, borderWidth: 1, borderRadius: 9, borderColor: colors.line, paddingLeft: 5,
+    textAlign: 'center', color: colors.ink, fontSize: 15, fontWeight: '700' },
   itemControls: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   deleteItem: { height: 42, justifyContent: 'center' },
   back: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 9,

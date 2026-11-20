@@ -63,15 +63,15 @@ export function TaskGantt({ tasks, today, range, onOpen }: {
           <Pressable key={task.id} accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
             accessibilityHint={hint}
             onPress={() => onOpen(task)} style={({ pressed }) => [styles.nameRow, pressed && styles.pressed]}>
-            <View style={styles.taskHeading}>
+            <View style={styles.taskDetails}>
               <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-              <Text style={styles.progressValue}>{progress}%</Text>
+              {startDate ? <Text style={styles.dateLabel}>Bắt đầu: {startDate}</Text> : null}
+              {deadline ? <Text style={styles.dateLabel}>
+                <Text style={styles.deadlineLabel}>Hạn chót: </Text>{deadline}
+              </Text> : null}
+              {!startDate && !deadline ? <Text style={styles.dateLabel}>Chưa đặt lịch</Text> : null}
             </View>
-            {startDate ? <Text style={styles.dateLabel}>Bắt đầu: {startDate}</Text> : null}
-            {deadline ? <Text style={styles.dateLabel}>
-              <Text style={styles.deadlineLabel}>Hạn chót: </Text>{deadline}
-            </Text> : null}
-            {!startDate && !deadline ? <Text style={styles.dateLabel}>Chưa đặt lịch</Text> : null}
+            <Text style={styles.progressValue}>{progress}%</Text>
           </Pressable>
         ))}
       </View>
@@ -128,11 +128,11 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   nameHeader: { height: headerHeight, justifyContent: 'center', paddingHorizontal: 10,
     backgroundColor: colors.surfaceMuted, borderBottomWidth: 1, borderColor: colors.line },
   heading: { color: colors.ink, fontWeight: '800', fontSize: 13 },
-  nameRow: { height: rowHeight, justifyContent: 'center', gap: 2, paddingHorizontal: 10,
+  nameRow: { height: rowHeight, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
     borderBottomWidth: 1, borderColor: colors.line },
   pressed: { backgroundColor: colors.accentSoft },
-  taskHeading: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  taskTitle: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 13, fontWeight: '700' },
+  taskDetails: { flex: 1, minWidth: 0, gap: 2 },
+  taskTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   progressValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   dateLabel: { color: colors.muted, fontSize: 11 },
   deadlineLabel: { fontWeight: '700' },

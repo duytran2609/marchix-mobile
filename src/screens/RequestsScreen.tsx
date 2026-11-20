@@ -1,14 +1,19 @@
+import { EmptyState } from '../components/EmptyState';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { TextInput } from '../components/TextInput';
+import { NumberStepper } from '../components/NumberStepper';
+import type { NumberStepBounds } from '../components/NumberStepper';
 import type { TextInputProps } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
+import { Metric, useMetricStyles } from '../components/Metric';
 import { Dropdown } from '../components/Dropdown';
 import { TimeFields } from '../components/TimeFields';
 import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
@@ -27,6 +32,7 @@ import { shiftDay, todayInVietnam } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
+import { formatVietnamDateTime } from '../utils/dateTime';
 
 type Member = Awaited<ReturnType<typeof loadRequestMembers>>[number];
 type RequestTasks = { tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void };
@@ -60,6 +66,7 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
   const { email, isAdmin, canReviewRequests } = access;
   const shared = useScreenStyles();
   const styles = useStyles();
+  const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const [rows, setRows] = useState<StaffRequest[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -119,21 +126,15 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
           <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
         </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn từ" color={colors.accent} />
           : <>
-          <View style={shared.choices}>
-            <View style={styles.metric}>
-              <Text style={shared.muted}>Đơn chờ duyệt</Text>
-              <Text style={shared.cardTitle}>{rows.filter(row => row.status === pendingRequest).length}</Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={shared.muted}>Đơn đã duyệt</Text>
-              <Text style={shared.cardTitle}>{rows.filter(row => row.status === 'Đã duyệt').length}</Text>
-            </View>
+          <View style={metricStyles.grid}>
+            <Metric label="Đơn chờ duyệt" value={rows.filter(row => row.status === pendingRequest).length} />
+            <Metric label="Đơn đã duyệt" value={rows.filter(row => row.status === 'Đã duyệt').length} />
           </View>
           <Text style={shared.muted}>Đơn tạm ứng được duyệt sẽ tạo đề nghị chi trong Thu chi.</Text>
         </>}
       </View>
       {!error && rows !== null && <View style={shared.stack}>
-        {!rows.length && <Text style={shared.muted}>Chưa có đơn nào.</Text>}
+        {!rows.length && <EmptyState icon="approval" message="Chưa có đơn nào." />}
         <PaginatedList items={rows}>
         {pageItems => pageItems.map(row => {
           const canDelete = canActOnRequest(row, 'delete', access);
@@ -143,7 +144,7 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
               <ClickableCardHeader trailing={<RequestStatus status={row.status} />}>
                 <Text style={shared.cardTitle}>{row.type}</Text>
               </ClickableCardHeader>
-              <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{displayDate(row.createdAt)}</Text>
+              <Text style={[shared.muted, canDelete && styles.dateWithDelete]}><Text style={shared.metadataLabel}>Ngày tạo: </Text>{formatVietnamDateTime(row.createdAt) || '—'}</Text>
             </Pressable>
             {canDelete && <View style={styles.deleteRequest}>
               <DeleteIconButton label={`Xóa đơn ${row.type} ngày ${displayDate(row.createdAt)}`}
@@ -170,7 +171,7 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
             <Text accessibilityRole="alert" style={shared.error}>Không tải được đơn.</Text>
             <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
           </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn" color={colors.accent} />
-            : <Text style={shared.muted}>Không tìm thấy đơn hoặc bạn không còn quyền xem.</Text>}
+            : <EmptyState icon="approval" message="Không tìm thấy đơn hoặc bạn không còn quyền xem." />}
         </View>
       </SafeAreaView>
     </Modal>}
@@ -309,14 +310,15 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
 
   function input(label: string, value: string, onChangeText: (value: string) => void,
     options: Pick<TextInputProps, 'keyboardType' | 'inputMode' | 'multiline' | 'maxLength' | 'placeholder'> &
-      { required?: boolean; requiredFor?: string }) {
-    const { required, requiredFor, ...inputOptions } = options;
+      { required?: boolean; requiredFor?: string; stepBounds?: NumberStepBounds }) {
+    const { required, requiredFor, stepBounds, ...inputOptions } = options;
+    const Input = stepBounds ? NumberStepper : TextInput;
     return <View style={styles.field}>
       <FieldLabel style={shared.label} required={required || !!requiredFor}>
         {requiredFor ? `${label} (${requiredFor})` : label}
       </FieldLabel>
-      <TextInput accessibilityLabel={label} style={[shared.input, inputOptions.multiline && shared.messageInput]}
-        placeholderTextColor={colors.muted} editable={!busy} value={value} onChangeText={onChangeText} {...inputOptions} />
+      <Input accessibilityLabel={label} style={[shared.input, inputOptions.multiline && shared.messageInput]}
+        editable={!busy} value={value} onChangeText={onChangeText} {...inputOptions} {...stepBounds} />
     </View>;
   }
 
@@ -353,7 +355,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             </View>
             {row && <>
               <RequestStatus status={row.status} />
-              {!!row.decidedBy && detail('Người xử lý', `${memberName(row.decidedBy)} · ${displayDate(row.decidedAt)}`)}
+              {!!row.decidedBy && detail('Người xử lý', [memberName(row.decidedBy), formatVietnamDateTime(row.decidedAt)].filter(Boolean).join(' · '))}
             </>}
             {editable ? <>
               <View style={styles.dateRow}>
@@ -379,12 +381,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </> : <>
                 {dateField('from', overtime ? 'Ngày' : 'Từ ngày', from)}
                 {overtime ? <>
-                  {input('Số giờ làm thêm', hours, setHours, { inputMode: 'decimal', placeholder: 'Ví dụ: 2,5', maxLength: 12, required: true })}
+                  {input('Số giờ làm thêm', hours, setHours, { inputMode: 'decimal', placeholder: 'Ví dụ: 2,5', maxLength: 12,
+                    required: true, stepBounds: { min: Number.MIN_VALUE, max: 24 } })}
                   <FieldLabel style={shared.label} required>Công việc phụ trách · Đã chọn {selectedTasks.length}</FieldLabel>
                   {tasksError ? <Button label="Tải lại công việc" secondary disabled={busy} onPress={onRetryTasks} />
                     : tasks === null && <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />}
                   {(tasks !== null || taskChoices.length > 0) && <SearchableChoiceDropdown
-                    title="Công việc phụ trách" placeholder="Chọn công việc" multiple showAvatar={false}
+                    title="Công việc phụ trách" placeholder="Chọn công việc" multiple showAvatar={false} emptyIcon="tasks"
                     label="Tìm công việc phụ trách" items={taskChoices.map(item => ({ id: item.id, name: item.title }))}
                     selected={selectedTasks.map(item => item.id)} disabled={busy} emptyMessage="Không có công việc phù hợp."
                     onToggle={id => {
@@ -401,7 +404,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                     }} />}
                 </> : <>
                   {dateField('to', 'Đến ngày', to)}
-                  {input('Số ngày', days, changeDays, { keyboardType: 'numeric', maxLength: 5, required: type !== 'Đề xuất khác' })}
+                  {input('Số ngày', days, changeDays, { inputMode: 'decimal', maxLength: 5, required: type !== 'Đề xuất khác',
+                    stepBounds: { min: type === 'Đề xuất khác' ? 0 : 0.5, max: 366 } })}
                 </>}
                 {trip && <>
                   {input('Địa điểm công tác', destination, setDestination, { maxLength: 250, required: true })}
@@ -500,7 +504,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   dropdown: { flex: 1 },
   picker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   pickerIcon: { color: colors.accent, fontSize: 20 },
-  metric: { flexGrow: 1, flexBasis: 130, gap: 4, borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12 },
   pending: { color: colors.warning, backgroundColor: colors.warningSoft },
   approved: { color: colors.success, backgroundColor: colors.successSoft },
   rejected: { color: colors.danger, backgroundColor: colors.dangerSoft },

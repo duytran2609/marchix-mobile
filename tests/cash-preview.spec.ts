@@ -141,7 +141,9 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
       await expect(approver).toBeVisible();
       await expect(dialog.getByText('Chỉ định sau')).toHaveCount(0);
       await search.fill('khong co ten nay');
-      await expect(picker.getByText('Không có người duyệt phù hợp.')).toBeVisible();
+      const emptyApprovers = picker.getByText('Không có người duyệt phù hợp.');
+      await expect(emptyApprovers).toBeVisible();
+      await expect(emptyApprovers.locator('..').locator('img')).toHaveAttribute('src', /people\.png/);
       await search.fill('nguoi giao viec');
       await approver.click();
       const selectedApprover = dialog.getByRole('button', { name: 'Người duyệt: Người giao việc demo', exact: true });

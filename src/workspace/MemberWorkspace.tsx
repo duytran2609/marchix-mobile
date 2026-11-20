@@ -10,7 +10,10 @@ import { notificationTaskTarget } from '../features/notifications/notifications'
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { useWorkspacePush } from '../features/notifications/workspacePush';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
+import { WorkspaceBottomNav } from '../navigation/WorkspaceBottomNav';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
+import { maxPinnedTabs, usePinnedTabs } from '../navigation/usePinnedTabs';
+import type { PinnableTab } from '../navigation/usePinnedTabs';
 import { workflowRouteForLink, workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
 import { auth } from '../services/firebase/firebase';
@@ -22,6 +25,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
+  const pinnedTabs = usePinnedTabs(email);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [route, setRoute] = useState<WorkspaceRoute>({ screen: 'tong-quan' });
@@ -30,10 +34,11 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const avatar = customAvatar ?? photoURL;
   const unregisterPush = useWorkspacePush(email, openNote);
+  const activeTab = route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen;
 
   useEffect(() => watchMemberAvatar(email, setCustomAvatar), [email]);
 
-  const scrollRoute = route.screen === 'cho-duyet' ? route.screen : route;
+  const scrollRoute = route.screen === 'cho-duyet' || route.screen === 'cong-viec' ? route.screen : route;
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [scrollRoute]);
@@ -47,6 +52,18 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     setMenuOpen(false);
     setShowAssignment(false);
     setRoute(current => current.screen === tab ? current : { screen: tab });
+  }
+
+  function togglePin(tab: PinnableTab) {
+    if (!pinnedTabs.ready) return;
+    const pins = pinnedTabs.value;
+    const pinned = pins.includes(tab);
+    if (!pinned && pins.length >= maxPinnedTabs) {
+      showToast('Chỉ ghim được tối đa 3 tab. Bỏ ghim một tab để thêm tab khác.', 'neutral');
+      return;
+    }
+    const next = pinned ? pins.filter(item => item !== tab) : [...pins, tab];
+    void pinnedTabs.save(next).catch(() => showToast('Chưa lưu được thay đổi ghim. Vui lòng thử lại.', 'error'));
   }
 
   function openNote(note: WorkspaceNotification) {
@@ -103,8 +120,10 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
             onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} />
         </View>
       </KeyboardScrollView>
-      <WorkspaceDrawer open={menuOpen} activeTab={route.screen === 'task-detail' ? route.backTo ?? 'cong-viec' : route.screen}
+      <WorkspaceBottomNav pins={pinnedTabs.value} activeTab={activeTab} isAdmin={isAdmin} onSelect={selectTab} />
+      <WorkspaceDrawer open={menuOpen} activeTab={activeTab}
         isAdmin={isAdmin} name={name} photoURL={avatar}
+        pins={pinnedTabs.value} pinsReady={pinnedTabs.ready} onTogglePin={togglePin}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
     </>
   );

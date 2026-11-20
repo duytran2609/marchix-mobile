@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import type { ComponentRef } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { EmptyState } from '../components/EmptyState';
+import { TextInput } from '../components/TextInput';
+import { NumberStepper } from '../components/NumberStepper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
@@ -88,6 +92,10 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const information = useInformationStyles();
   const showToast = useToast();
   const [tab, setTab] = useState<typeof detailTabs[number]['value']>('general');
+  const [generalHeight, setGeneralHeight] = useState<number>();
+  const scroll = useRef<ComponentRef<typeof KeyboardScrollView>>(null);
+  const inPopup = !onBack;
+  const isGeneral = tab === 'general';
   const checklist = liveTask.checklist ?? [];
   const checkedCount = checklist.filter(item => item.done === true).length;
   const lockedProgress = checklist.length > 0;
@@ -200,116 +208,141 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     }
   }
 
-  return (
-    <View style={screenStyles.stack}>
-      {onBack && <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />}
-      <View style={[screenStyles.panel, !onBack && styles.popupContent]}>
-        {(onBack || canEditAssignment) && <View style={styles.taskDetailHeader}>
-          {onBack && <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>}
-          {canEditAssignment ? <Button label="Chỉnh sửa" secondary disabled={!!busy} onPress={() => {
-            setSavedAssignment(undefined);
-            setAssignmentDraft(liveTask);
-          }} /> : null}
-        </View>}
-        <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
-        <SegmentedButtons label="Chi tiết công việc" choices={detailTabs} value={tab} onChange={setTab} />
-        {tab === 'description' && <View style={screenStyles.stack}>
-          <Text accessibilityRole="header" style={screenStyles.cardTitle}>Mô tả / Yêu cầu bàn giao</Text>
-          <View style={[information.panel, styles.taskNote]}>
-            {liveTask.note ? <Text selectable style={screenStyles.body}>{liveTask.note}</Text>
-              : <Text style={screenStyles.muted}>Chưa có mô tả hoặc yêu cầu bàn giao.</Text>}
-          </View>
-        </View>}
-        {tab === 'general' && <>
-          <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
-          <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} variant="detail" />
-          {canRemind && <Button secondary
-            label={busy === 'reminder' ? 'Đang tạo thông báo…' : reminderSent ? 'Đã nhắc việc' : 'Nhắc việc'}
-            disabled={!!busy || reminderSent} onPress={() => void sendReminder()} />}
-          {canEdit ? <>
-            <Text style={screenStyles.label}>Trạng thái</Text>
-            <View style={screenStyles.choices}>
-              {editableStatuses.map(value => (
-                <Pressable key={value} accessibilityRole="radio"
-                  accessibilityState={{ checked: value === status, disabled: !!busy }}
-                  onPress={() => setProgressDraft(draft => ({ ...draft, status: value }))}
-                  disabled={!!busy}
-                  style={[screenStyles.choice, value === status && screenStyles.selected]}>
-                  <Text style={screenStyles.label}>{value}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {!lockedProgress && <>
-              <FieldLabel style={screenStyles.label} required>Tiến độ (%)</FieldLabel>
-              <TextInput accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input}
-                  value={progress} editable={!busy} onChangeText={value => {
-                    if (value === '' || parseTaskProgress(value) !== undefined) {
-                      setProgressDraft(draft => ({ ...draft, progress: value }));
-                    }
-                  }} />
-            </>}
-            <Button label={busy === 'progress' ? 'Đang lưu…' : 'Lưu tiến độ'} onPress={save} disabled={!!busy} />
-          </> : null}
-        </>}
+  const header = <>
+    {(onBack || canEditAssignment) && <View style={styles.taskDetailHeader}>
+      {onBack && <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>}
+      {canEditAssignment ? <Button label="Chỉnh sửa" secondary disabled={!!busy} onPress={() => {
+        setSavedAssignment(undefined);
+        setAssignmentDraft(liveTask);
+      }} /> : null}
+    </View>}
+    <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
+    <SegmentedButtons label="Chi tiết công việc" choices={detailTabs} value={tab} onChange={next => {
+      if (next !== tab) scroll.current?.scrollTo({ y: 0, animated: false });
+      setTab(next);
+    }} />
+  </>;
+  const description = tab === 'description' && <View style={screenStyles.stack}>
+    <Text accessibilityRole="header" style={screenStyles.cardTitle}>Mô tả / Yêu cầu bàn giao</Text>
+    <View style={[information.panel, styles.taskNote]}>
+      {liveTask.note ? <Text selectable style={screenStyles.body}>{liveTask.note}</Text>
+        : <EmptyState icon="note" message="Chưa có mô tả hoặc yêu cầu bàn giao." />}
+    </View>
+  </View>;
+  const general = isGeneral && <>
+    <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
+    <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} variant="detail" />
+    {canRemind && <Button secondary
+      label={busy === 'reminder' ? 'Đang tạo thông báo…' : reminderSent ? 'Đã nhắc việc' : 'Nhắc việc'}
+      disabled={!!busy || reminderSent} onPress={() => void sendReminder()} />}
+    {canEdit ? <>
+      <Text style={screenStyles.label}>Trạng thái</Text>
+      <View style={screenStyles.choices}>
+        {editableStatuses.map(value => (
+          <Pressable key={value} accessibilityRole="radio"
+            accessibilityState={{ checked: value === status, disabled: !!busy }}
+            onPress={() => setProgressDraft(draft => ({ ...draft, status: value }))}
+            disabled={!!busy}
+            style={[screenStyles.choice, value === status && screenStyles.selected]}>
+            <Text style={screenStyles.label}>{value}</Text>
+          </Pressable>
+        ))}
       </View>
-      {tab === 'general' && <>
-        {lockedProgress ? (
-          <View style={screenStyles.panel}>
-            <View style={styles.taskDetailHeader}>
-              <Text accessibilityRole="header" style={screenStyles.cardTitle}>Việc con</Text>
-              <Text accessibilityLiveRegion="polite" style={screenStyles.muted}>{checkedCount}/{checklist.length} đã xong</Text>
-            </View>
-            {checklist.map((item, index) => {
-              const label = item.t || item.text || '';
-              const checked = item.done === true;
-              const disabled = !!busy || !canReport;
-              return (
-                <Pressable key={index} accessibilityRole="checkbox" accessibilityState={{ checked, disabled }}
-                  aria-checked={checked} aria-disabled={disabled}
-                  accessibilityLabel={label || `Việc con ${index + 1}`} disabled={disabled}
-                  style={styles.checklistRow} onPress={() => void changeWorkflow('checklist', () =>
-                    setTaskChecklistItem({ taskId: liveTask.id, index, label, done: !checked }))}>
-                  <View style={[styles.checkbox, checked && screenStyles.selected]}>
-                    <Text style={screenStyles.label}>{checked ? '✓' : ''}</Text>
-                  </View>
-                  <Text style={[screenStyles.body, styles.grow]}>{label || `Việc con ${index + 1}`}</Text>
-                  <Text style={screenStyles.muted}>
-                    <Text style={[screenStyles.metadataLabel, { fontWeight: '700' }]}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            {busy === 'checklist' ? <Text style={screenStyles.muted}>Đang cập nhật checklist…</Text> : null}
-          </View>
-        ) : null}
-        {canReport ? (
-          <View style={screenStyles.panel}>
-            <Text accessibilityRole="header" style={screenStyles.cardTitle}>Báo hoàn thành</Text>
-            {reportBlockReason
-              ? <Text style={screenStyles.muted}>{reportBlockReason}</Text>
-              : <>
-                <FieldLabel style={screenStyles.label} required={reportNoteRequired}>Kết quả thực hiện</FieldLabel>
-                <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
-                  style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
-                  value={reportNote} onChangeText={setReportNote} editable={!busy} />
-              </>}
-            <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
-              disabled={!!busy || !!reportBlockReason}
-              onPress={() => void changeWorkflow('report', () =>
-                reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />
-          </View>
-        ) : null}
-        {liveTask.rating || liveTask.reviewNote ? (
-          <View style={screenStyles.panel}>
-            <Text accessibilityRole="header" style={screenStyles.cardTitle}>Kết quả duyệt</Text>
-            {liveTask.rating ? <Text style={screenStyles.label}>{liveTask.rating}</Text> : null}
-            {liveTask.reviewNote ? <Text style={screenStyles.body}>{liveTask.reviewNote}</Text> : null}
-          </View>
-        ) : null}
+      {!lockedProgress && <>
+        <FieldLabel style={screenStyles.label} required>Tiến độ (%)</FieldLabel>
+        <NumberStepper accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input} max={100}
+            value={progress} editable={!busy} onChangeText={value => {
+              if (value === '' || parseTaskProgress(value) !== undefined) {
+                setProgressDraft(draft => ({ ...draft, progress: value }));
+              }
+            }} />
       </>}
-      <View style={tab !== 'discussion' && styles.hidden}>
-        <TaskDiscussion task={liveTask} email={email} name={name} members={members} />
+      <Button label={busy === 'progress' ? 'Đang lưu…' : 'Lưu tiến độ'} onPress={save} disabled={!!busy} />
+    </> : null}
+  </>;
+  const generalActions = isGeneral && <>
+    {lockedProgress ? (
+      <View style={screenStyles.panel}>
+        <View style={styles.taskDetailHeader}>
+          <Text accessibilityRole="header" style={screenStyles.cardTitle}>Việc con</Text>
+          <Text accessibilityLiveRegion="polite" style={screenStyles.muted}>{checkedCount}/{checklist.length} đã xong</Text>
+        </View>
+        {checklist.map((item, index) => {
+          const label = item.t || item.text || '';
+          const checked = item.done === true;
+          const disabled = !!busy || !canReport;
+          return (
+            <Pressable key={index} accessibilityRole="checkbox" accessibilityState={{ checked, disabled }}
+              aria-checked={checked} aria-disabled={disabled}
+              accessibilityLabel={label || `Việc con ${index + 1}`} disabled={disabled}
+              style={styles.checklistRow} onPress={() => void changeWorkflow('checklist', () =>
+                setTaskChecklistItem({ taskId: liveTask.id, index, label, done: !checked }))}>
+              <View style={[styles.checkbox, checked && screenStyles.selected]}>
+                <Text style={screenStyles.label}>{checked ? '✓' : ''}</Text>
+              </View>
+              <Text style={[screenStyles.body, styles.grow]}>{label || `Việc con ${index + 1}`}</Text>
+              <Text style={screenStyles.muted}>
+                <Text style={[screenStyles.metadataLabel, { fontWeight: '700' }]}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {busy === 'checklist' ? <Text style={screenStyles.muted}>Đang cập nhật checklist…</Text> : null}
       </View>
+    ) : null}
+    {canReport ? (
+      <View style={screenStyles.panel}>
+        <Text accessibilityRole="header" style={screenStyles.cardTitle}>Báo hoàn thành</Text>
+        {reportBlockReason
+          ? <Text style={screenStyles.muted}>{reportBlockReason}</Text>
+          : <>
+            <FieldLabel style={screenStyles.label} required={reportNoteRequired}>Kết quả thực hiện</FieldLabel>
+            <TextInput accessibilityLabel="Kết quả thực hiện" placeholder="Ghi kết quả thực hiện"
+              style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
+              value={reportNote} onChangeText={setReportNote} editable={!busy} />
+          </>}
+        <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
+          disabled={!!busy || !!reportBlockReason}
+          onPress={() => void changeWorkflow('report', () =>
+            reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />
+      </View>
+    ) : null}
+    {liveTask.rating || liveTask.reviewNote ? (
+      <View style={screenStyles.panel}>
+        <Text accessibilityRole="header" style={screenStyles.cardTitle}>Kết quả duyệt</Text>
+        {liveTask.rating ? <Text style={screenStyles.label}>{liveTask.rating}</Text> : null}
+        {liveTask.reviewNote ? <Text style={screenStyles.body}>{liveTask.reviewNote}</Text> : null}
+      </View>
+    ) : null}
+  </>;
+  const discussion = <View style={tab !== 'discussion' && styles.hidden}>
+    <TaskDiscussion task={liveTask} email={email} name={name} members={members} />
+  </View>;
+
+  return (
+    <View style={inPopup ? styles.popupBody : screenStyles.stack}>
+      {inPopup ? <>
+        <View style={[styles.popupSection, styles.popupTabs]}>{header}</View>
+        <KeyboardScrollView ref={scroll} testID="task-detail-scroll"
+          style={[styles.popupScroll, !isGeneral && { maxHeight: generalHeight }]}
+          contentContainerStyle={[screenStyles.stack, styles.popupScrollContent]}
+          onContentSizeChange={isGeneral ? (_, height) => setGeneralHeight(height) : undefined}
+          keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+          {general && <View style={styles.popupSection}>{general}</View>}
+          {generalActions}
+          {description}
+          {discussion}
+        </KeyboardScrollView>
+      </> : <>
+        <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />
+        <View style={screenStyles.panel}>
+          {header}
+          {general}
+          {description}
+        </View>
+        {generalActions}
+        {discussion}
+      </>}
       {canEditAssignment && assignmentDraft ? <TaskAssignmentForm email={email} task={assignmentDraft}
         onClose={() => setAssignmentDraft(undefined)} onSaved={() => {
           setAssignmentDraft(undefined);
@@ -344,8 +377,8 @@ export function LinkedTaskDetail({ id, email, name, onBack, backLabel }: {
   return <TaskDetailScreen liveTask={task} email={email} name={name} onBack={onBack} backLabel={backLabel} />;
 }
 
-export function TaskDetailPopup({ id, email, name, onClose }: {
-  id: string; email: string; name: string; onClose: () => void;
+export function TaskDetailPopup({ id, task, email, name, onClose }: {
+  id: string; task?: Task; email: string; name: string; onClose: () => void;
 }) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
@@ -357,9 +390,8 @@ export function TaskDetailPopup({ id, email, name, onClose }: {
             <Text style={screenStyles.cardTitle}>Chi tiết công việc</Text>
             <PopupCloseButton label="Đóng chi tiết công việc" onPress={onClose} />
           </View>
-          <KeyboardScrollView style={styles.popupScroll} contentContainerStyle={styles.popupScrollContent} keyboardShouldPersistTaps="handled">
-            <LinkedTaskDetail id={id} email={email} name={name} />
-          </KeyboardScrollView>
+          {task ? <TaskDetailScreen liveTask={task} email={email} name={name} />
+            : <LinkedTaskDetail id={id} email={email} name={name} />}
         </View>
       </KeyboardViewport>
       <ToastLayer safeAreaApplied />
@@ -374,9 +406,11 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popup: { width: '100%', maxWidth: 560, flexShrink: 1, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.paper },
   popupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
-  popupScroll: { flexShrink: 1, minHeight: 0 },
-  popupScrollContent: { padding: 16 },
-  popupContent: { borderWidth: 0, padding: 0 },
+  popupBody: { flexShrink: 1, minHeight: 0, paddingTop: 16, gap: 14 },
+  popupTabs: { marginHorizontal: 16, flexShrink: 0 },
+  popupSection: { gap: 14 },
+  popupScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
+  popupScrollContent: { paddingHorizontal: 16, paddingBottom: 16 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskNote: { paddingVertical: 20 },
   hidden: { display: 'none' },

@@ -1,6 +1,8 @@
+import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import type { ReactNode } from 'react';
 import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
@@ -36,34 +38,58 @@ const taskRoute = (task: Task): WorkspaceRoute => ({
   screen: 'task-detail', task: { id: task.id, direct: true }, backTo: 'tong-quan',
 });
 
-function TaskRing({ counts, colors }: { counts: number[]; colors: string[] }) {
-  const styles = useStyles();
-  const total = counts.reduce((sum, count) => sum + count, 0);
-  let start = 0;
+const ringRadius = 60;
+const ringCenterRadius = 45;
 
-  return <View accessible accessibilityLabel={`${total} công việc`} style={styles.ring}>
-    <View aria-hidden style={StyleSheet.absoluteFill}>
-      {counts.map((count, index) => {
-        if (!count) return null;
-        const sweep = 360 * count / total;
-        const angle = start;
-        start += sweep;
-        // Each clipped semicircle covers up to 180 degrees on native and web.
-        return [0, 180].filter(offset => offset < sweep).map(offset =>
-          <View key={`${index}-${offset}`} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${angle + offset}deg` }] }]}>
+function TaskRing({ segments, selected, onSelect }: {
+  segments: { status: string; count: number; color: string }[];
+  selected?: string;
+  onSelect: (status: string) => void;
+}) {
+  const styles = useStyles();
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  let start = 0;
+  const sectors = segments.filter(segment => segment.count > 0).map(segment => {
+    const sweep = 360 * segment.count / total;
+    const angle = start;
+    start += sweep;
+    return { ...segment, angle, sweep };
+  });
+
+  function selectSector({ nativeEvent }: GestureResponderEvent) {
+    // Web presses use mouse offsets. Native presses use coordinates relative to the ring.
+    const { locationX, locationY, offsetX, offsetY } = nativeEvent as GestureResponderEvent['nativeEvent'] &
+      { offsetX?: number; offsetY?: number };
+    const x = (offsetX ?? locationX) - ringRadius;
+    const y = (offsetY ?? locationY) - ringRadius;
+    const distance = Math.hypot(x, y);
+    if (distance < ringCenterRadius || distance > ringRadius) return;
+    const angle = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+    const sector = sectors.find(item => angle >= item.angle && angle < item.angle + item.sweep);
+    if (sector) onSelect(sector.status);
+  }
+
+  return <Pressable accessible accessibilityLabel={`${total} công việc`} focusable={false}
+    style={styles.ring} onPress={selectSector}>
+    <View aria-hidden pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {sectors.map(({ status, color, angle, sweep }) => <View key={status} testID={`task-ring-sector-${status}`}
+        style={[StyleSheet.absoluteFill, selected && selected !== status && styles.dimmed]}>
+        {/* Each clipped semicircle covers up to 180 degrees on native and web. */}
+        {[0, 180].filter(offset => offset < sweep).map(offset =>
+          <View key={offset} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${angle + offset}deg` }] }]}>
             <View style={styles.ringWindow}>
               <View style={[styles.ringSweep, { transform: [{ rotate: `${Math.min(sweep - offset, 180)}deg` }] }]}>
-                <View style={[styles.ringHalf, { backgroundColor: colors[index] }]} />
+                <View style={[styles.ringHalf, { backgroundColor: color }]} />
               </View>
             </View>
-          </View>);
-      })}
+          </View>)}
+      </View>)}
     </View>
-    <View style={styles.ringCenter} aria-hidden>
+    <View style={styles.ringCenter} aria-hidden pointerEvents="none">
       <Text style={styles.total}>{total}</Text>
       <Text style={styles.ringCaption}>công việc</Text>
     </View>
-  </View>;
+  </Pressable>;
 }
 
 export function OverviewScreen({
@@ -123,10 +149,12 @@ export function OverviewScreen({
   const weekEnd = shiftDay(mondayOf(today), 6);
   const myWeekTasks = Array.isArray(tasks) ? suggestWeekTasks(tasks, email, today, weekEnd) : [];
   const summary = taskStatusSummary(Array.isArray(tasks) ? tasks : []);
-  const groups = summary.map(bucket => bucket.status);
-  const grouped = summary.map(bucket => bucket.tasks);
-  const selectedGroup = summary.find(bucket => bucket.status === group);
-  const groupColors = groups.map(status => statusTone(status, colors).text);
+  const selectedGroup = summary.find(bucket => bucket.status === group && bucket.tasks.length > 0);
+  const selectedStatus = selectedGroup?.status;
+  const taskSegments = summary.map(({ status, tasks }) => ({
+    status, count: tasks.length, color: statusTone(status, colors).text,
+  }));
+  const toggleStatus = (status: string) => setGroup(current => current === status ? null : status);
   const ledger = Array.isArray(cash) ? cash : [];
   const scheduled = ledger.filter(row => waiting(row) && verifiedCash(row));
   const upcoming = scheduled.filter(row => row.dueDate >= today && row.dueDate <= nextWeek);
@@ -233,7 +261,7 @@ export function OverviewScreen({
         onChange={setDecisionFilter} />
       {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
       <PaginatedList items={entries} resetKey={decisionFilter}>{pageItems => pageItems.map(row)}</PaginatedList>
-      {!entries.length && !incomplete && <Text style={screen.muted}>Không có mục cần xử lý.</Text>}
+      {!entries.length && !incomplete && <EmptyState icon="approval" message="Không có mục cần xử lý." />}
     </View>}
     <View style={styles.grid}>
       {canReadCash && card('Dòng tiền thực tế', state(cash, <>
@@ -269,7 +297,7 @@ export function OverviewScreen({
         {cashMonth.income || cashMonth.expense ? <View style={screen.choices} accessibilityLiveRegion="polite">
           <Text style={screen.body}>Đã thu {vnd.format(cashMonth.income)}</Text>
           <Text style={screen.body}>Đã chi {vnd.format(cashMonth.expense)}</Text>
-        </View> : <Text style={screen.muted} accessibilityLiveRegion="polite">Chưa ghi nhận khoản đã thu hoặc đã chi trong kỳ.</Text>}
+        </View> : <EmptyState icon="wallet" message="Chưa ghi nhận khoản đã thu hoặc đã chi trong kỳ." announce />}
         <Pressable accessibilityRole="button" style={styles.sectionAction} onPress={() => onNavigate({ screen: 'thu-chi' })}>
           <Text style={styles.sectionActionLabel}>Mở sổ Thu chi</Text>
         </Pressable>
@@ -277,18 +305,19 @@ export function OverviewScreen({
       {card('Tình trạng công việc', state(tasks, <>
         <Text style={screen.muted}>Công việc tôi nhận hoặc giao, gồm cả việc đã xong.</Text>
         <View style={styles.taskSummary}>
-          <TaskRing counts={grouped.map(items => items.length)} colors={groupColors} />
+          <TaskRing segments={taskSegments} selected={selectedStatus} onSelect={toggleStatus} />
           <View style={styles.taskLegend}>
-            {grouped.map((items, index) => <Pressable key={groups[index]} accessibilityRole="button"
-              accessibilityState={{ expanded: group === groups[index], disabled: !items.length }} disabled={!items.length}
-              onPress={() => setGroup(group === groups[index] ? null : groups[index])} style={styles.legendRow}>
-              <View aria-hidden style={[styles.dot, { backgroundColor: groupColors[index] }]} />
-              <Text style={[screen.label, styles.grow]}>{groups[index]}</Text>
-              <Text style={screen.label}>{items.length}</Text>
+            {taskSegments.map(({ status, count, color }) => <Pressable key={status} accessibilityRole="button"
+              aria-expanded={selectedStatus === status} disabled={!count}
+              onPress={() => toggleStatus(status)}
+              style={[styles.legendRow, selectedStatus && selectedStatus !== status && styles.dimmed]}>
+              <View aria-hidden style={[styles.dot, { backgroundColor: color }]} />
+              <Text style={[screen.label, styles.grow]}>{status}</Text>
+              <Text style={screen.label}>{count}</Text>
             </Pressable>)}
           </View>
         </View>
-        {selectedGroup && selectedGroup.tasks.length > 0 && <View style={screen.stack}>
+        {selectedGroup && <View style={screen.stack}>
           <Text accessibilityRole="header" style={screen.cardTitle}>{selectedGroup.status}</Text>
           {[...selectedGroup.tasks].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
             .slice(0, 8).map(task => row({ label: task.title, detail: formatDue(task.due), route: taskRoute(task) }, task.id))}
@@ -296,7 +325,7 @@ export function OverviewScreen({
         </View>}
       </>))}
       {card('Tiến độ dự án', state(projects, <>
-        {!activeProjects.length && <Text style={[screen.muted, styles.empty]}>Chưa có dự án đang theo dõi.</Text>}
+        {!activeProjects.length && <EmptyState icon="project" message="Chưa có dự án đang theo dõi." />}
         {activeProjects.slice(0, 4).map(({ project, metrics, count, risk }) => {
           const { progress, done } = metrics;
           const progressText = projectTasks === 'error' ? 'Không tải được' : !projectTasks ? 'Đang tải…' : progress === null
@@ -331,7 +360,7 @@ export function OverviewScreen({
       </>))}
       {card('Việc của tôi tuần này', state(tasks, <>
         {myWeekTasks.length === 0
-          ? <Text style={screen.muted}>Bạn không có việc cần làm đến hạn từ hôm nay đến hết tuần.</Text>
+          ? <EmptyState icon="calendar" message="Bạn không có việc cần làm đến hạn từ hôm nay đến hết tuần." />
           : myWeekTasks.slice(0, 3).map(task => row({
             label: task.title,
             detail: task.status === 'Vướng' ? `Đang vướng · ${formatDue(task.due)}` : formatDue(task.due),
@@ -342,11 +371,6 @@ export function OverviewScreen({
           <Text style={styles.sectionActionLabel}>Mở kế hoạch tuần</Text>
         </Pressable>
       </>), { primary: true })}
-      {card('Truy cập nhanh', <>
-        {row({ label: 'Chấm công', detail: 'Ghi giờ vào, giờ ra hoặc xem bảng công', route: { screen: 'cham-cong' } }, 'attendance')}
-        {row({ label: 'Đơn từ', detail: 'Tạo đơn hoặc theo dõi đơn đã gửi', route: { screen: 'don-tu' } }, 'requests')}
-        {row({ label: 'KPI', detail: 'Xem kết quả công việc theo tháng', route: { screen: 'kpi' } }, 'kpi')}
-      </>)}
     </View>
   </>;
 }
@@ -379,15 +403,15 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   taskSummary: { alignItems: 'center', gap: 14 },
   taskLegend: { alignSelf: 'stretch' },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
-  ring: { width: 120, height: 120, borderRadius: 60, overflow: 'hidden', backgroundColor: colors.line,
+  dimmed: { opacity: 0.38 },
+  ring: { width: ringRadius * 2, height: ringRadius * 2, borderRadius: ringRadius, overflow: 'hidden', backgroundColor: colors.line,
     alignItems: 'center', justifyContent: 'center' },
-  ringWindow: { position: 'absolute', left: 60, top: 0, width: 60, height: 120, overflow: 'hidden' },
-  ringSweep: { position: 'absolute', left: -60, top: 0, width: 120, height: 120 },
-  ringHalf: { width: 60, height: 120 },
-  ringCenter: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.paper,
+  ringWindow: { position: 'absolute', left: ringRadius, top: 0, width: ringRadius, height: ringRadius * 2, overflow: 'hidden' },
+  ringSweep: { position: 'absolute', left: -ringRadius, top: 0, width: ringRadius * 2, height: ringRadius * 2 },
+  ringHalf: { width: ringRadius, height: ringRadius * 2 },
+  ringCenter: { width: ringCenterRadius * 2, height: ringCenterRadius * 2, borderRadius: ringCenterRadius, backgroundColor: colors.paper,
     alignItems: 'center', justifyContent: 'center' },
   ringCaption: { color: colors.muted, fontSize: 11 },
-  empty: { textAlign: 'center', padding: 16, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line },
   track: { height: 7, backgroundColor: colors.surfaceMuted, borderRadius: 8, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 8 },
   dot: { width: 9, height: 9, borderRadius: 5 },

@@ -76,11 +76,12 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
 
     await button(source, `Mở công việc: ${task}`).click();
     await source.getByRole('radio', { name: 'Đang làm', exact: true }).click();
-    await source.getByLabel('Tiến độ (%)').fill('65');
+    await source.getByRole('textbox', { name: 'Tiến độ (%)', exact: true }).fill('65');
     await button(source, 'Lưu tiến độ').click();
     await expect(button(page, `Vướng ${blockedBefore - 1}`)).toBeVisible();
     await expect(button(page, new RegExp(task))).toHaveCount(0);
     await expect(projectRow).toContainText('65%');
+    await button(source, 'Đóng chi tiết công việc').click();
     await navigate(source, 'Dự án');
     await button(source, /^Chọn dự án:/).click();
     await source.getByRole('radiogroup', { name: 'Chọn dự án' })

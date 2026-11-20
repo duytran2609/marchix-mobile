@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { EmptyState } from '../../components/EmptyState';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { useScreenStyles } from '../../theme/screenStyles';
+import { formatVietnamDateTime } from '../../utils/dateTime';
 import { taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { TaskAssignmentForm } from '../tasks/TaskAssignmentForm';
 import { ProjectFormPopup } from './ProjectFormPopup';
@@ -16,7 +18,7 @@ import { pinProjectPost, postKinds, publishProjectComment, publishProjectPost, r
 import type { CollaborationMember, PostKind, ProjectComment, ProjectPost } from './projectCollaborationStore';
 import type { Project } from './projects';
 
-const dateLabel = (stamp?: ProjectPost['createdAt']) => stamp?.toDate?.().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) || '';
+const dateLabel = (stamp?: ProjectPost['createdAt']) => formatVietnamDateTime(stamp?.toDate?.());
 type DiscussionProps = {
   project: Project; email: string; isAdmin: boolean; team: CollaborationMember[]; tasks: Task[];
   memberName: (id: string) => string; openFile: (file: TaskAttachment) => void; onOpenTask: (task: Task) => void;
@@ -58,7 +60,7 @@ export function ProjectDiscussion(props: DiscussionProps) {
       <CollaborationFeedback error="Không tải được trao đổi dự án." />
       <Button label="Tải lại trao đổi" secondary onPress={() => { setLoadError(false); setRetry(value => value + 1); }} />
     </> : !shown ? <Text style={styles.muted}>Đang tải trao đổi…</Text>
-      : !shown.length ? <Text style={styles.muted}>Chưa có trao đổi khớp bộ lọc.</Text>
+      : !shown.length ? <EmptyState icon="search" message="Chưa có trao đổi khớp bộ lọc." />
         : shown.map(post => <ProjectPostCard key={post.id} {...props} post={post} onCreateTask={() => setTaskSource(post)} />)}
     {!loadError && (posts?.length ?? 0) >= count && count < 100 && <Button label="Tải thêm trao đổi" secondary
       onPress={() => setCount(value => value + 20)} />}
@@ -189,7 +191,7 @@ function ProjectComments({ projectId, postId, email, memberName, openFile }: {
       <CollaborationFeedback error="Không tải được bình luận." />
       <Button label="Tải lại bình luận" secondary onPress={() => { setLoadError(false); setRetry(value => value + 1); }} />
     </> : !comments ? <Text style={styles.muted}>Đang tải bình luận…</Text>
-      : !comments.length && <Text style={styles.muted}>Chưa có bình luận.</Text>}
+      : !comments.length && <EmptyState icon="chat" message="Chưa có bình luận." />}
     {comments?.map(comment => <View key={comment.id} style={[styles.detailRow, comment.replyTo && { marginLeft: 12 }]}>
       <Text style={styles.muted}>{[memberName(comment.createdBy), dateLabel(comment.createdAt)].filter(Boolean).join(' · ')}</Text>
       {!!comment.replyTo && <Text style={styles.muted}>Trả lời bình luận</Text>}

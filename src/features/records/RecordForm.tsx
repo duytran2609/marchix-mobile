@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bytes } from 'firebase/firestore';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
@@ -73,7 +74,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       <FieldLabel style={styles.label} required={required}>{label}</FieldLabel>
       <TextInput accessibilityLabel={label} style={[styles.input, multiline && styles.messageInput]}
         editable={!busy} value={value} onChangeText={change} maxLength={maxLength}
-        placeholder={placeholder} placeholderTextColor={colors.muted} multiline={multiline} />
+        placeholder={placeholder} multiline={multiline} />
     </View>;
   }
 

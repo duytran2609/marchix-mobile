@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
@@ -113,7 +114,7 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
     return <View style={styles.stack}>
       <PageHeader title="Phiếu lương của bạn" />
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      {!data.slips.length && <View style={styles.panel}><Text style={styles.muted}>Chưa có phiếu lương nào được chốt.</Text></View>}
+      {!data.slips.length && <View style={styles.panel}><EmptyState icon="wallet" message="Chưa có phiếu lương nào được chốt." /></View>}
       {selectedMonth && <Dropdown label="Chọn tháng" value={selectedMonth} onChange={setHistoryMonth}
         choices={months.map(value => ({ value, label: monthLabel(value) }))} />}
       <PaginatedList items={data.slips.filter(slip => slip.month === selectedMonth)} resetKey={selectedMonth}>
@@ -179,7 +180,7 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
       {employees.length ? <>
         <Text style={styles.muted}>Vuốt ngang để xem đủ các cột. Chạm vào họ tên để sửa hồ sơ.</Text>
         <EmployeeTable employees={employees} onEdit={id => { setError(''); setEditor({ kind: 'employee', id }); }} />
-      </> : <View style={styles.panel}><Text style={styles.muted}>Chưa có hồ sơ nhân sự.</Text></View>}
+      </> : <View style={styles.panel}><EmptyState icon="people" message="Chưa có hồ sơ nhân sự." /></View>}
     </> : <>
       <View style={styles.panel}>
         <View style={styles.listHeader}>
@@ -217,7 +218,7 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
         {!!unpaid.length && !canRequestPayment && <Text style={styles.muted}>
           Cần chốt bảng lương và đợi nhân viên xác nhận các phiếu chưa trả.
         </Text>}
-        {!displayRows.length && <Text style={styles.muted}>Chưa có dòng lương trong kỳ này.</Text>}
+        {!displayRows.length && <EmptyState icon="wallet" message="Chưa có dòng lương trong kỳ này." />}
       </View>
       {!!displayRows.length && <>
         <Text style={styles.muted}>Vuốt ngang để xem đủ các cột. Chạm vào họ tên để mở dòng lương.</Text>

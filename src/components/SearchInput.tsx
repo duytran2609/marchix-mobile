@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { ComponentRef } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from './TextInput';
 import type { TextInputProps } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 

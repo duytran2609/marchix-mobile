@@ -1,4 +1,5 @@
 import { PaginatedList } from '../../components/PaginatedList';
+import { EmptyState } from '../../components/EmptyState';
 import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ClickableCardHeader } from '../../components/CardChevron';
@@ -219,7 +220,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
             onChange={value => onOptionsChange({ ...options, project: value === 0 ? null : value })} />}
         </View>
         <SearchInput accessibilityLabel="Tìm tên công việc" placeholder="Tìm tên công việc"
-          placeholderTextColor={colors.muted} style={styles.search} value={search} returnKeyType="search"
+          style={styles.search} value={search} returnKeyType="search"
           onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <SegmentedButtons label="Kiểu xem công việc" value={view}
           choices={[{ value: 'list', label: 'Danh sách' }, { value: 'kanban', label: 'Bảng Kanban' },
@@ -237,11 +238,10 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
           onChange={ganttRange => onOptionsChange({ ...options, ganttRange })} />}
       </View>
       {visibleTasks.length === 0 ? <View style={styles.card}>
-        <Text accessibilityLiveRegion="polite" style={styles.cardTitle}>
-          {showNoMatch ? 'Không có việc phù hợp' : showTeamTasks ? 'Chưa có công việc' : 'Chưa có công việc được giao'}
-        </Text>
-        {showNoMatch ? <Text style={styles.muted}>Thử đổi từ khóa hoặc xóa bộ lọc.</Text> :
-          !showTeamTasks ? <Text style={styles.muted}>Việc mới sẽ xuất hiện ở đây khi được giao cho bạn.</Text> : null}
+        <EmptyState icon={showNoMatch ? 'search' : 'tasks'} message={showNoMatch ? 'Không có việc phù hợp'
+          : showTeamTasks ? 'Chưa có công việc' : 'Chưa có công việc được giao'}
+          detail={showNoMatch ? 'Thử đổi từ khóa hoặc xóa bộ lọc.'
+            : showTeamTasks ? undefined : 'Việc mới sẽ xuất hiện ở đây khi được giao cho bạn.'} announce />
       </View> : view === 'list' ? <PaginatedList items={visibleTasks} resetKey={JSON.stringify(options)}>
         {pageItems => pageItems.map(task => renderTaskCard(task, onOpen))}
       </PaginatedList> : view === 'gantt' ? (
@@ -281,7 +281,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
   dueRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center', columnGap: 6 },
   metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
-  muted: { color: colors.muted, fontSize: 13 },
   metadataText: { color: colors.muted, fontSize: 13, lineHeight: 22, fontWeight: '400' },
   danger: { color: colors.danger, fontWeight: '700' },
   overdueTag: { maxWidth: '100%', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.dangerSoft },

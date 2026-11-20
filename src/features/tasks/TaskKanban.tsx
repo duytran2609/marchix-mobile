@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentRef, ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { GestureResponderEvent, ViewProps } from 'react-native';
+import { EmptyState } from '../../components/EmptyState';
 import { pilotMode, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { editableStatus, editableStatuses, saveProgress } from './tasks';
 import type { EditableStatus, Task } from './tasks';
@@ -250,7 +251,7 @@ export function TaskKanban({ columns, columnWidth, email, columnColor, renderCar
                 </View>
                 {column.tasks.length ? column.tasks.map(task => (
                   <View key={task.id} {...handlers(task)}>{renderCard(task, open)}</View>
-                )) : <Text style={styles.muted}>Chưa có việc</Text>}
+                )) : <EmptyState icon="tasks" message="Chưa có việc" />}
               </View>
             );
           })}

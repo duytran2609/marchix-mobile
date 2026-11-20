@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/EmptyState';
 import { PaginatedList } from '../../components/PaginatedList';
 import { useMemo, useRef } from 'react';
 import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -27,7 +28,7 @@ export function CompanyAttendanceTable({ rows, onEdit, month }: {
   const onNativeScroll = useMemo(() => Platform.OS === 'web' ? undefined :
     Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true }), [scrollX]);
   const pinnedName = Platform.OS === 'web' ? stickyNameOnWeb : { transform: [{ translateX: scrollX }] };
-  if (!rows.length) return <Text style={styles.legend}>Chưa có thành viên.</Text>;
+  if (!rows.length) return <EmptyState icon="people" message="Chưa có thành viên." />;
   const days = rows[0].month.days;
   const tableWidth = nameWidth + days.length * dayWidth + summaryWidths.reduce((sum, width) => sum + width, 0);
   return <>

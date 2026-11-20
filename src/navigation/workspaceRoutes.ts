@@ -44,6 +44,10 @@ export const workspaceTabs = [
 
 export type WorkspaceTab = typeof workspaceTabs[number]['id'];
 
+export function workspaceTabLabel(tab: typeof workspaceTabs[number], isAdmin: boolean) {
+  return tab.id === 'luong' && isAdmin ? 'Nhân sự & lương' : tab.label;
+}
+
 export function workspaceTabForLink(link: string): WorkspaceTab {
   return workspaceTabs.find(tab => `#${tab.id}` === link)?.id ?? 'tong-quan';
 }

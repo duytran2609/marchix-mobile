@@ -30,7 +30,7 @@ test('Sổ thu chi chuyển trang, đổi số dòng và đặt lại trang khi 
     await button('Mở menu').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Thu chi', exact: true }).click();
     await page.getByRole('button', { name: /^Tháng:/ }).click();
-    await page.getByRole('radio', { name: 'Tháng 12/2099', exact: true }).click();
+    await page.getByRole('radio', { name: '12/2099', exact: true }).click();
     const previous = button('Trang trước');
     const next = button('Trang sau');
     await expect(previous).toBeDisabled();

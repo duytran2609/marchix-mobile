@@ -23,18 +23,25 @@ test('Tổng quan chào theo tên, cập nhật trực tiếp và không tràn m
     const longName = 'Nguyễn Thị Hoàng Anh Minh Châu';
     await setName({ stringValue: longName });
     const greeting = page.getByRole('heading', { name: `Xin chào, ${longName}!`, exact: true });
+    const suggestion = greeting.locator('..').getByText('Chọn một việc quan trọng hôm nay và bắt đầu từ bước nhỏ nhất.', { exact: true });
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(greeting).toBeVisible();
+      await expect(suggestion).toBeVisible();
       await expect(greeting).toHaveCSS('font-weight', '400');
+      await expect(greeting.locator('..')).toHaveCSS('background-color', 'rgb(240, 234, 253)');
       const highlightedName = greeting.getByText(longName, { exact: true });
       await expect(highlightedName).toHaveCSS('color', 'rgb(96, 65, 189)');
-      await expect(highlightedName).toHaveCSS('font-weight', '700');
+      await expect(highlightedName).toHaveCSS('font-weight', '800');
       const bounds = await greeting.boundingBox();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      const suggestionBounds = (await suggestion.boundingBox())!;
+      expect(suggestionBounds.x).toBeGreaterThanOrEqual(0);
+      expect(suggestionBounds.x + suggestionBounds.width).toBeLessThanOrEqual(width);
+      expect(suggestionBounds.y).toBeGreaterThan(bounds!.y + bounds!.height);
       const card = await page.getByRole('heading', { name: 'Dòng tiền thực tế', exact: true }).boundingBox();
-      expect(card!.y).toBeGreaterThan(bounds!.y + bounds!.height);
+      expect(card!.y).toBeGreaterThan(suggestionBounds.y + suggestionBounds.height);
     }
     await setName({ stringValue: '' });
     await expect(page.getByRole('heading', { name: 'Xin chào!', exact: true })).toBeVisible();

@@ -1,8 +1,10 @@
+import { EmptyState } from '../components/EmptyState';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../components/TextInput';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AttachmentLabel } from '../components/AttachmentLabel';
@@ -29,6 +31,7 @@ import { DateCalendarField } from '../features/tasks/CalendarDialog';
 import { todayInVietnam } from '../features/tasks/taskDates';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
+import { formatMonthLabel, formatVietnamDateTime } from '../utils/dateTime';
 
 type Option = { id: string; name: string };
 const options = (values: readonly string[]) => values.map(value => ({ id: value, name: value }));
@@ -54,13 +57,12 @@ function Field({ label, value, onChange, limit = 250, numeric = false, placehold
   requiredFor?: string;
 }) {
   const styles = useScreenStyles();
-  const { colors } = useTheme();
   return <View style={{ gap: 6 }}>
     <FieldLabel style={styles.label} required={required || !!requiredFor}>
       {requiredFor ? `${label} (${requiredFor})` : label}
     </FieldLabel>
     <TextInput accessibilityLabel={label} value={value} onChangeText={onChange} style={styles.input}
-      placeholder={placeholder} placeholderTextColor={colors.muted} maxLength={limit}
+      placeholder={placeholder} maxLength={limit}
       keyboardType={numeric ? 'number-pad' : 'default'} autoCapitalize="none" />
   </View>;
 }
@@ -271,8 +273,8 @@ function CashDetail({ row, access, approvers, project, operationLock, onEdit }: 
     ['Hạng mục', row.category], ['Hình thức', row.method], ['Dự án', project],
     ['Đối tượng', [row.partyName, row.partyType].filter(Boolean).join(' · ')], ['Người lập', row.createdBy],
     ['Người duyệt được giao', row.approverEmail || 'Chưa chỉ định'], ['Người xử lý', row.approvedBy],
-    ['Thời điểm duyệt', row.approvedAt && displayDate(row.approvedAt)],
-    ['Ý kiến xử lý', row.approvalNote], ['Người xác nhận', row.paidBy], ['Ngày xác nhận', row.paidAt && displayDate(row.paidAt)],
+    ['Thời điểm duyệt', formatVietnamDateTime(row.approvedAt)],
+    ['Ý kiến xử lý', row.approvalNote], ['Người xác nhận', row.paidBy], ['Ngày xác nhận', formatVietnamDateTime(row.paidAt)],
     ['Hóa đơn / báo giá', row.invoiceRef], ['Mã chứng từ / giao dịch', row.ref], ['Mã hồ sơ', row.id],
   ];
   return <View style={[styles.panel, local.popupContent]}>
@@ -358,7 +360,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
   const base = (rows || []).filter(row => (!month || row.date?.slice(0, 7) === month) && (!project || row.projectId === project));
   const visible = base.filter(row => (!type || row.type === type) && (!status || cashStatus(row) === status));
   const months = [...new Set([currentMonth, ...(rows || []).map(row => row.date?.slice(0, 7)).filter(value => /^\d{4}-\d{2}$/.test(value || ''))])]
-    .sort().reverse().map(id => ({ id, name: `Tháng ${id.slice(5)}/${id.slice(0, 4)}` }));
+    .sort().reverse().map(id => ({ id, name: formatMonthLabel(id) }));
   const totals = cashTotals(base);
   const balance = totals.income - totals.expense;
   const balanceStyle = balance === 0 ? undefined : balance > 0 ? local.positive : local.negative;
@@ -458,7 +460,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
             </View>
             {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
               secondary onPress={() => void download()} disabled={exporting || !base.length} />}
-            {!visible.length && <Text style={styles.muted}>Chưa có khoản nào khớp bộ lọc.</Text>}
+            {!visible.length && <EmptyState icon="search" message="Chưa có khoản nào khớp bộ lọc." />}
             <PaginatedList items={visible} resetKey={JSON.stringify([month, project, type, status])}>
             {pageItems => pageItems.map(row => <Pressable key={row.id} accessibilityRole="button"
               onPress={() => setSelected(row.id)}
@@ -479,7 +481,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
           </View>
           <View style={styles.panel}>
             <Text accessibilityRole="header" style={styles.cardTitle}>Đã chi theo hạng mục</Text>
-            {!totals.categories.length && <Text style={styles.muted}>Chưa có khoản đã chi trong kỳ.</Text>}
+            {!totals.categories.length && <EmptyState icon="wallet" message="Chưa có khoản đã chi trong kỳ." />}
             {totals.categories.map(([category, value]) => <View key={category} style={{ gap: 5 }}>
               <Text style={styles.label}>{category} · {vnd.format(value)}</Text>
               <View style={local.barTrack}><View style={[local.bar, { width: `${value / totals.categories[0][1] * 100}%` }]} /></View>

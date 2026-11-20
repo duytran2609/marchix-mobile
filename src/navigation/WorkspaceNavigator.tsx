@@ -156,15 +156,17 @@ export function WorkspaceNavigator({
     if (liveTask && !error) return <TaskDetailScreen key={liveTask.id} liveTask={liveTask} email={email} name={name} onBack={onBack} />;
   }
 
+  const taskPopupId = route.screen === 'cong-viec' ? route.taskPopupId : undefined;
+  const popupTask = taskPopupId && !isAdmin && !error ? tasks?.find(task => task.id === taskPopupId) : undefined;
+
   return <>
     <TasksScreen key={String(isAdmin)} email={email} name={name} isAdmin={isAdmin}
       tasks={tasks} error={error} sentError={sentError} reminderWindow={reminders.value}
       onRetry={retryTasks} options={options} onOptionsChange={setOptions}
-      onOpenTask={task => setRoute({
-        screen: 'task-detail', task: isAdmin ? { id: task.id, direct: true } : { id: task.id },
-      })}
+      onOpenTask={task => setRoute({ screen: 'cong-viec', taskPopupId: task.id })}
       showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={onDragChange} />
-    {route.screen === 'cong-viec' && route.taskPopupId && <TaskDetailPopup key={route.taskPopupId}
-      id={route.taskPopupId} email={email} name={name} onClose={() => setRoute({ screen: 'cong-viec' })} />}
+    {taskPopupId && <TaskDetailPopup key={taskPopupId} id={taskPopupId} task={popupTask}
+      email={email} name={name} onClose={() => setRoute(current =>
+        current.screen === 'cong-viec' && current.taskPopupId === taskPopupId ? { screen: 'cong-viec' } : current)} />}
   </>;
 }

@@ -32,6 +32,7 @@ function editor(line) {
     'react-native': { Text: 'Text', TextInput: 'TextInput', View: 'View' },
     '../../components/Button': { Button: 'Button' },
     '../../components/Dropdown': { Dropdown: 'Dropdown' },
+    '../../components/NumberStepper': { NumberStepper: 'NumberStepper' },
     '../../theme/screenStyles': { useScreenStyles: () => ({}) },
     '../tasks/CalendarDialog': { DateCalendarField: 'Date' },
     './financeMath': math,

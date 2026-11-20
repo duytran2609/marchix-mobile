@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
+import { NumberStepper } from '../../components/NumberStepper';
+import type { NumberStepBounds } from '../../components/NumberStepper';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
 import { BUDGET_NATURES, formatVndInput, guidedRentLines, lineTotal, parseVndInput, TAX_MODES } from './financeMath';
@@ -11,14 +13,16 @@ const textValue = (value: number | null | undefined) => value == null ? '' : Str
 const optionalNumber = (value: string) => value.trim() ? Number(value.replace(',', '.')) : null;
 export const financeChoices = (values: readonly string[]) => values.map(value => ({ value, label: value }));
 
-export function FinanceInput({ label, value, onChange, maxLength = 120, inputMode }: {
+export function FinanceInput({ label, value, onChange, maxLength = 120, inputMode, stepBounds, disabled }: {
   label: string; value: string; onChange: (value: string) => void; maxLength?: number; inputMode?: 'numeric' | 'decimal';
+  stepBounds?: NumberStepBounds; disabled?: boolean;
 }) {
   const styles = useScreenStyles();
+  const Input = stepBounds ? NumberStepper : TextInput;
   return <View style={{ gap: 4 }}>
     <Text style={styles.label}>{label}</Text>
-    <TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={onChange}
-      maxLength={maxLength} inputMode={inputMode} />
+    <Input accessibilityLabel={label} style={styles.input} value={value} onChangeText={onChange}
+      maxLength={maxLength} inputMode={inputMode} editable={!disabled} {...stepBounds} />
   </View>;
 }
 
@@ -42,8 +46,10 @@ export function BudgetLineEditor({ line, categories, onSave, onCancel, onRemove,
     remainingEstimate: formatVndInput(line?.remainingEstimate ?? null),
   });
   const set = (key: keyof typeof data) => (value: string) => setData(current => ({ ...current, [key]: value }));
-  const input = (key: keyof typeof data, label: string, inputMode?: 'numeric' | 'decimal', maxLength?: number) =>
-    <FinanceInput label={label} value={data[key]} onChange={set(key)} inputMode={inputMode} maxLength={maxLength} />;
+  const input = (key: keyof typeof data, label: string, inputMode?: 'numeric' | 'decimal', maxLength?: number,
+    stepBounds?: NumberStepBounds) =>
+    <FinanceInput label={label} value={data[key]} onChange={set(key)} inputMode={inputMode} maxLength={maxLength}
+      stepBounds={stepBounds} disabled={!!stepBounds && busy} />;
   const date = (key: 'quoteDate' | 'payDate' | 'refundDue' | 'reviewDate', label: string) =>
     <DateCalendarField label={label} value={data[key]} onChange={set(key)} clearLabel="Bỏ ngày" disabled={busy} />;
   function detailedLine() {
@@ -85,7 +91,7 @@ export function BudgetLineEditor({ line, categories, onSave, onCancel, onRemove,
     <Button label={advanced ? 'Nhập số tiền tổng' : 'Nhập chi tiết VAT, báo giá và dự báo'} secondary
       onPress={toggleMode} disabled={busy} />
     {advanced && <>
-      {input('quantity', 'Số lượng', 'decimal', 12)}
+      {input('quantity', 'Số lượng', 'decimal', 12, { min: 0.001, max: 100000 })}
       {input('unitLabel', 'Đơn vị tính', undefined, 80)}
       {input('unit', 'Đơn giá (đ)', 'numeric', 20)}
       {input('fees', 'Phí khác (đ)', 'numeric', 20)}
@@ -99,7 +105,7 @@ export function BudgetLineEditor({ line, categories, onSave, onCancel, onRemove,
       {date('quoteDate', 'Ngày báo giá')}
       {date('payDate', 'Ngày dự kiến chi')}
       {data.nature === 'Cọc có thể thu hồi' && date('refundDue', 'Ngày dự kiến thu hồi cọc')}
-      {data.nature === 'Chi phí trả trước' && input('allocationMonths', 'Số tháng phân bổ', 'numeric', 3)}
+      {data.nature === 'Chi phí trả trước' && input('allocationMonths', 'Số tháng phân bổ', 'numeric', 3, { min: 1, max: 120 })}
       {input('reviewUnit', 'Đơn giá rà soát (đ)', 'numeric', 20)}
       <Dropdown label="Loại căn cứ rà soát" value={data.reviewBasis}
         choices={financeChoices(['Báo giá cập nhật', 'Hóa đơn thực tế'])} onChange={set('reviewBasis')} />
@@ -161,7 +167,8 @@ export function RentEditor({ busy, onCancel, onSave, error }: {
   const [payment, setPayment] = useState('monthly');
   return <View style={styles.stack}>
     <FinanceInput label="Tiền thuê mỗi tháng (đ)" inputMode="numeric" value={monthly} onChange={setMonthly} />
-    <FinanceInput label="Số tháng" inputMode="numeric" maxLength={3} value={months} onChange={setMonths} />
+    <FinanceInput label="Số tháng" inputMode="numeric" maxLength={3} value={months} onChange={setMonths}
+      stepBounds={{ min: 1, max: 120 }} disabled={busy} />
     <Dropdown label="Cách thanh toán" value={payment} choices={[
       { value: 'monthly', label: 'Trả theo tháng' }, { value: 'prepaid', label: 'Trả trước' },
     ]} onChange={setPayment} />

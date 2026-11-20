@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
@@ -131,14 +132,14 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
             <View style={styles.panel}>
               <Text accessibilityRole="header" style={styles.cardTitle}>{recordBooks[book]} · {filtered.length} hồ sơ</Text>
               <SearchInput accessibilityLabel="Tìm văn bản" placeholder="Số, mã hồ sơ, trích yếu, đơn vị"
-                value={term} onChangeText={setTerm} style={styles.input} placeholderTextColor={colors.muted} />
+                value={term} onChangeText={setTerm} style={styles.input} />
               <View style={local.row}>
                 <Dropdown label="Loại văn bản" value={kind} choices={kindChoices} onChange={setKind} style={local.flex} />
                 <Dropdown label="Trạng thái" value={status} onChange={setStatus} style={local.flex}
                   choices={[{ value: '', label: 'Tất cả' }, ...bookStatuses[book].map(value => ({ value, label: recordStates[value] }))]} />
               </View>
-              {!filtered.length && <Text style={styles.muted}>{current.length
-                ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'}</Text>}
+              {!filtered.length && <EmptyState icon={current.length ? 'search' : 'document'} message={current.length
+                ? 'Không có văn bản khớp bộ lọc.' : 'Sổ chưa có văn bản.'} announce />}
             </View>
             <PaginatedList items={filtered} resetKey={JSON.stringify([book, term, status, kind])}>
             {pageItems => pageItems.map(row => (
@@ -212,7 +213,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                   <View style={[styles.detailRow, local.detailInset]}>
                     <Text style={styles.label}>Tài liệu đính kèm</Text>
                     {selected.fileId ? <RecordAttachmentButton key={selected.fileId} recordId={selected.id} fileId={selected.fileId}
-                      fileName={selected.fileName} onPreview={file => openPreview?.(file, true)} /> : <Text style={styles.muted}>Chưa lưu tệp</Text>}
+                      fileName={selected.fileName} onPreview={file => openPreview?.(file, true)} /> : <EmptyState icon="document" message="Chưa lưu tệp" />}
                   </View>
                   {actions(selected).map(action => <Button key={action.status} label={action.label}
                     secondary={action.status === 'void' || action.status === 'draft'}
@@ -262,7 +263,7 @@ function RecordHistory({ rows, names, onSelect }: {
   return <View style={styles.stack}>
     {loading && <Text style={styles.muted}>Đang tải lịch sử…</Text>}
     {error && <Text accessibilityRole="alert" style={styles.error}>Không tải được lịch sử của một số hồ sơ.</Text>}
-    {!loading && !error && !entries.length && <Text style={styles.muted}>Chưa có lịch sử xử lý.</Text>}
+    {!loading && !error && !entries.length && <EmptyState icon="history" message="Chưa có lịch sử xử lý." />}
     <PaginatedList items={entries}>
       {pageItems => pageItems.map(({ row, event }) => (
         <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
@@ -270,7 +271,7 @@ function RecordHistory({ rows, names, onSelect }: {
           <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
           <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
           <Text style={styles.label}>{recordStates[event.to]}</Text>
-          <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at.toISOString())}</Text>
+          <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at)}</Text>
           {!!event.note && <Text style={styles.body}>{event.note}</Text>}
         </Pressable>
       ))}

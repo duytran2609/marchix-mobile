@@ -4,8 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { Dropdown } from '../../components/Dropdown';
 import { FieldLabel } from '../../components/FieldLabel';
+import { NumberStepper } from '../../components/NumberStepper';
+import type { NumberStepBounds } from '../../components/NumberStepper';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { useInformationStyles, useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
@@ -42,7 +45,7 @@ export function PayBreakdown({ pay, employeeName, showTaxable, advances, onOpenA
             {advances?.length ? advances.map(advance => <Button key={advance.requestId} secondary
               label={`Xem đơn tạm ứng: ${advance.reason || advance.requestId} · ${money(advance.amount)}`}
               onPress={() => onOpenAdvance(advance.requestId)} />)
-              : <Text style={styles.muted}>Phiếu này chưa lưu chi tiết đơn tạm ứng.</Text>}
+              : <EmptyState icon="wallet" message="Phiếu này chưa lưu chi tiết đơn tạm ứng." />}
           </View>
         ) : null}
       </View>
@@ -94,12 +97,14 @@ const payFields = [
   ['bonus', 'Thưởng / khoản thêm', 'money'], ['deduction', 'Khấu trừ khác', 'money'],
 ] as const;
 
-function TextField({ label, value, onChange, busy, kind = 'text', required }: {
+function TextField({ label, value, onChange, busy, kind = 'text', required, stepBounds }: {
   label: string; value: string; onChange: (value: string) => void; busy: boolean;
   required?: boolean;
   kind?: 'text' | 'email' | 'integer' | 'decimal' | 'money';
+  stepBounds?: NumberStepBounds;
 }) {
   const styles = useScreenStyles();
+  const Input = stepBounds ? NumberStepper : TextInput;
   const fieldLabel = kind === 'money' ? label + ' (VNĐ)' : label;
   const displayValue = kind === 'money' ? value.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : value;
   const inputMode = kind === 'money' || kind === 'integer' ? 'numeric' : kind;
@@ -113,8 +118,9 @@ function TextField({ label, value, onChange, busy, kind = 'text', required }: {
 
   return <View style={{ gap: 5 }}>
     <FieldLabel style={styles.label} required={required}>{fieldLabel}</FieldLabel>
-    <TextInput style={styles.input} accessibilityLabel={fieldLabel} value={displayValue} onChangeText={change}
-      editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'} maxLength={250} />
+    <Input style={styles.input} accessibilityLabel={fieldLabel} value={displayValue} onChangeText={change}
+      editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'} maxLength={250}
+      {...stepBounds} />
   </View>;
 }
 
@@ -163,7 +169,8 @@ export function EmployeeForm({ employee, busy, onSave }: {
         </Pressable>)}</View>
     </View>
     {employeeNumbers.map(([key, label, kind]) => <TextField key={key} label={label} value={numbers[key]} busy={busy}
-      kind={kind} onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
+      kind={kind} stepBounds={key === 'dependents' ? { min: 0 } : undefined}
+      onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     <Button label="Lưu hồ sơ" disabled={busy} onPress={save} />
   </>;
@@ -190,6 +197,7 @@ export function PayEditor({ employee, month, rates, advances, slip, pay, busy, o
     <Text style={styles.badge}>{slip?.status || 'Nháp'}</Text>
     {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
       required={key === 'workDays' || key === 'standardDays'}
+      stepBounds={key === 'workDays' ? { max: 31 } : key === 'standardDays' ? { min: Number.MIN_VALUE, max: 31 } : undefined}
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
     <PayBreakdown pay={preview} showTaxable advances={advances} onOpenAdvance={onOpenAdvance} />
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}

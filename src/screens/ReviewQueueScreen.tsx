@@ -1,3 +1,6 @@
+import { EmptyState } from '../components/EmptyState';
+import { formatVietnamDateTime } from '../utils/dateTime';
+import type { EmptyStateIcon } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -131,7 +134,7 @@ export function ReviewQueueScreen({
               {rows ? <Text style={screenStyles.badge}>{rows.length}</Text> : null}
             </View>
             {!rows && !error ? <ActivityIndicator accessibilityLabel={`Đang tải: ${title}`} color={colors.accent} /> : null}
-            {rows?.length === 0 && !error ? <Text style={screenStyles.muted}>Không có công việc.</Text> : null}
+            {rows?.length === 0 && !error ? <EmptyState icon="tasks" message="Không có công việc." /> : null}
             <PaginatedList items={rows ?? []}>
               {pageItems => pageItems.map(task => (
                 <Pressable key={task.id} accessibilityRole="button"
@@ -151,17 +154,17 @@ export function ReviewQueueScreen({
           </View>
         );
       })}
-      {(isAdmin || canReviewRequests) && <ApprovalSection title="Đơn từ chờ duyệt" rows={requests}
+      {(isAdmin || canReviewRequests) && <ApprovalSection title="Đơn từ chờ duyệt" rows={requests} emptyIcon="approval"
         onRetry={() => { setRequests(null); setRequestRetry(value => value + 1); }} onOpen={onOpenRequest}
         describe={row => ({
           title: row.reason ? `${row.type}: ${row.reason}` : row.type,
           fields: [
             { label: 'Người gửi', person: personName(row.createdBy), value: 'Chưa rõ' },
-            { label: 'Ngày tạo', value: displayDate(row.createdAt) },
+            { label: 'Ngày tạo', value: formatVietnamDateTime(row.createdAt) || '—' },
             { label: 'Người duyệt', person: personName(row.approverEmail), value: 'Chưa chỉ định' },
           ],
         })} />}
-      {(isAdmin || canReviewCash) && <ApprovalSection title="Thu chi chờ duyệt" rows={Array.isArray(cash)
+      {(isAdmin || canReviewCash) && <ApprovalSection title="Thu chi chờ duyệt" emptyIcon="wallet" rows={Array.isArray(cash)
         ? cash.filter(row => !missingCashApproval(row)) : cash}
         onRetry={() => { setCash(null); setCashRetry(value => value + 1); }} onOpen={onOpenCash}
         describe={row => ({
@@ -172,7 +175,7 @@ export function ReviewQueueScreen({
             { label: 'Người duyệt', person: personName(row.approverEmail), value: 'Chưa chỉ định' },
           ],
         })} />}
-      {isAdmin && <ApprovalSection title="Văn thư chờ duyệt hoặc chờ ký" rows={records}
+      {isAdmin && <ApprovalSection title="Văn thư chờ duyệt hoặc chờ ký" rows={records} emptyIcon="document"
         onRetry={() => { setRecords(null); setRecordRetry(value => value + 1); }} onOpen={onOpenRecord}
         describe={row => ({
           title: row.subject || 'Văn bản đi',
@@ -182,7 +185,7 @@ export function ReviewQueueScreen({
             { label: 'Hạn xử lý', value: row.dueOn ? formatTaskDate(row.dueOn) : 'Chưa đặt' },
           ],
         })} />}
-      {isAdmin && <ApprovalSection title="Thu chi cũ thiếu dấu vết duyệt" rows={Array.isArray(cash)
+      {isAdmin && <ApprovalSection title="Thu chi cũ thiếu dấu vết duyệt" emptyIcon="wallet" rows={Array.isArray(cash)
         ? cash.filter(missingCashApproval) : cash}
         onRetry={() => { setCash(null); setCashRetry(value => value + 1); }} onOpen={onOpenCash}
         describe={row => ({
@@ -218,8 +221,9 @@ function ApprovalMetadata({ fields }: { fields: ApprovalField[] }) {
   </View>;
 }
 
-function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpen, describe }: {
+function ApprovalSection<T extends { id: string }>({ title, rows, emptyIcon, onRetry, onOpen, describe }: {
   title: string; rows: T[] | 'error' | null; onRetry: () => void; onOpen: (id: string) => void;
+  emptyIcon: EmptyStateIcon;
   describe: (row: T) => { title: string; fields: ApprovalField[] };
 }) {
   const { colors } = useTheme();
@@ -234,7 +238,7 @@ function ApprovalSection<T extends { id: string }>({ title, rows, onRetry, onOpe
       : rows === 'error' ? <>
         <Text accessibilityRole="alert" style={screenStyles.error}>Không tải được danh sách.</Text>
         <Button label={`Thử tải lại: ${title}`} secondary onPress={onRetry} />
-      </> : rows.length === 0 ? <Text style={screenStyles.muted}>Không có hồ sơ.</Text>
+      </> : rows.length === 0 ? <EmptyState icon={emptyIcon} message="Không có hồ sơ." />
       : <PaginatedList items={rows}>
         {pageItems => pageItems.map(row => {
           const item = describe(row);

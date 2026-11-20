@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { EmptyState } from '../../components/EmptyState';
+import { TextInput } from '../../components/TextInput';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
@@ -123,7 +125,7 @@ export function TaskDiscussion({ task, email, name, members }: {
         {messages.length > 0 && <Dropdown label="Sắp xếp theo thời gian" hideLabel style={styles.sortControl}
           value={sort} choices={discussionSortChoices} onChange={setSort} highlightSelection={false} />}
       </View>
-      {messages.length === 0 ? <Text style={screenStyles.muted}>Chưa có trao đổi.</Text> : null}
+      {messages.length === 0 ? <EmptyState icon="chat" message="Chưa có trao đổi." /> : null}
       {orderedMessages.map(({ comment, index }) => {
         const member = members.get(comment.by);
         const self = comment.by === email;

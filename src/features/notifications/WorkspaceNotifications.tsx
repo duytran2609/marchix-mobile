@@ -8,6 +8,7 @@ import { db } from '../../services/firebase/firebase';
 import { markNotificationsRead, watchNotifications } from './notifications';
 import type { WorkspaceNotification } from './notifications';
 import { ClickableCardHeader } from '../../components/CardChevron';
+import { EmptyState } from '../../components/EmptyState';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
@@ -139,9 +140,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
             ) : notes === null ? (
               <ActivityIndicator accessibilityLabel="Đang tải thông báo" color={colors.accent} />
             ) : visibleNotes.length === 0 ? (
-              <Text accessibilityLiveRegion="polite" style={styles.muted}>
-                {tab === 'unread' ? 'Không có thông báo chưa đọc.' : 'Chưa có thông báo.'}
-              </Text>
+              <EmptyState icon="bell" message={tab === 'unread' ? 'Không có thông báo chưa đọc.' : 'Chưa có thông báo.'} announce />
             ) : (
               <>
                 {unread.length > 0 ? (
@@ -152,7 +151,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
                 ) : null}
                 <ScrollView key={tab} style={styles.list} contentContainerStyle={styles.listContent}>
                   {visibleNotes.map(note => {
-                    const time = formatVietnamDateTime(note.createdAt, 'time-first');
+                    const time = formatVietnamDateTime(note.createdAt);
                     return (
                       <Pressable key={note.id} accessibilityRole="button"
                         accessibilityLabel={note.read ? note.title : `Chưa đọc: ${note.title}`}

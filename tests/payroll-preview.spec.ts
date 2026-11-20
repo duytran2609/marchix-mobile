@@ -106,8 +106,8 @@ test('Phiếu lương mở trong app, chốt đúng quyền và tạo khoản ch
     await admin.getByRole('button', { name: 'Xem dòng lương Nhân viên lương demo' }).click();
     await expect(admin.getByRole('dialog').getByText('Tạm ứng lương', { exact: true })).toBeVisible();
     await expect(admin.getByRole('button', { name: advanceLabel, exact: true })).toBeVisible();
-    await admin.getByLabel('Ngày công thực tế').fill('13');
-    await admin.getByLabel('Ngày công chuẩn').fill('26');
+    await admin.getByRole('textbox', { name: 'Ngày công thực tế', exact: true }).fill('13');
+    await admin.getByRole('textbox', { name: 'Ngày công chuẩn', exact: true }).fill('26');
     await admin.getByLabel('Thưởng / khoản thêm (VNĐ)').fill('500000');
     await admin.getByLabel('Khấu trừ khác (VNĐ)').fill('200000');
     await admin.getByRole('button', { name: 'Lưu dòng lương' }).click();

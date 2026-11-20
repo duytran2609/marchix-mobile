@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -141,7 +142,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
         <Button secondary label="Tải lại công việc" onPress={onRetryTasks} />
       </> : !tasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} /> : <>
         <Text style={ui.body}><Text style={[ui.label, ui.metadataLabel]}>Việc gợi ý:</Text> {suggested.length}</Text>
-        {suggested.length === 0 && <Text style={ui.muted}>Chưa có công việc đến hạn trong tuần này.</Text>}
+        {suggested.length === 0 && <EmptyState icon="calendar" message="Chưa có công việc đến hạn trong tuần này." />}
         {suggested.map(task => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityHint="Mở chi tiết công việc"
             onPress={() => onOpenTask(task.id)}
@@ -213,7 +214,7 @@ function TeamPlans({ plans }: { plans: WeekPlans | null }) {
         setRetry(value => value + 1);
       }} />
     </> : !team ? <ActivityIndicator accessibilityLabel="Đang tải đội nhóm" color={colors.accent} /> :
-      plans && (team.length === 0 ? <Text style={ui.muted}>Chưa có thành viên đang hoạt động.</Text> :
+      plans && (team.length === 0 ? <EmptyState icon="people" message="Chưa có thành viên đang hoạt động." /> :
         <PaginatedList items={team}>
           {pageItems => pageItems.map(member => {
             const plan = plans.get(member.email);

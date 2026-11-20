@@ -4,17 +4,17 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
+import { EmptyState } from '../components/EmptyState';
 import { Metric, useMetricStyles } from '../components/Metric';
 import { kpiForMonth, kpiGrade, kpiMonths } from '../features/kpi/kpi';
 import type { KpiMember, KpiRow } from '../features/kpi/kpi';
 import { watchKpi } from '../features/kpi/kpiStore';
 import type { KpiData } from '../features/kpi/kpiStore';
-import { formatTaskDate, todayInVietnam } from '../features/tasks/taskDates';
+import { todayInVietnam } from '../features/tasks/taskDates';
 import { taskStatuses } from '../features/tasks/taskStatuses';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
-
-const monthLabel = (month: string) => `Tháng ${month.slice(5)}/${month.slice(0, 4)}`;
+import { formatMonthLabel, formatVietnamDateTime } from '../utils/dateTime';
 
 export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boolean }) {
   const ui = useScreenStyles();
@@ -49,6 +49,7 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
     ...projects.filter(item => item.status !== 'Xong').map(item => ({ id: item.id, label: item.name }))];
   const selectedProject = projectOptions.find(item => item.id === project) ?? projectOptions[0];
   const { rows, locked, lockedAt } = kpiForMonth(selectedMonth, selectedProject.id, today, tasks, snapshots, members);
+  const lockedTime = formatVietnamDateTime(lockedAt);
   const names = new Map(members.map(member => [member.email, member.name]));
 
   return <>
@@ -56,22 +57,22 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
     <View style={ui.panel}>
       <View style={styles.filters}>
         <Dropdown style={styles.filter} label="Tháng" value={selectedMonth}
-          choices={months.map(value => ({ value, label: monthLabel(value) }))} onChange={setMonth} />
+          choices={months.map(value => ({ value, label: formatMonthLabel(value) }))} onChange={setMonth} />
         <Dropdown style={styles.filter} label="Dự án" value={selectedProject.id}
           choices={projectOptions.map(({ id, label }) => ({ value: id, label }))} onChange={setProject} />
       </View>
       <Text style={ui.muted}>{locked
-        ? lockedAt ? `Điểm đã chốt tự động ngày ${formatTaskDate(lockedAt.slice(0, 10))}.` : 'Điểm đã chốt tự động.'
+        ? lockedTime ? `Điểm đã chốt tự động: ${lockedTime}.` : 'Điểm đã chốt tự động.'
         : selectedProject.id ? 'Điểm tạm tính theo công việc của dự án.'
           : 'Điểm tạm tính theo thời gian thực. Hệ thống tự chốt vào ngày 1 tháng sau.'}</Text>
       {locked && <Text style={ui.muted}>Các ô trạng thái phản ánh trạng thái hiện tại của công việc.</Text>}
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showRules }}
-        onPress={() => setShowRules(value => !value)} style={styles.rulesButton}>
-        <Text style={styles.rulesLabel}>Cách tính KPI {showRules ? '▴' : '▾'}</Text>
-      </Pressable>
-      {showRules && <Text style={ui.muted}>
-        {'Tính theo hạn công việc trong tháng. Xong đúng hạn được đủ điểm, xong trễ được nửa điểm, quá hạn chưa xong được 0 điểm. Việc chưa tới hạn hoặc thiếu giờ xong chưa được tính.\n\nTrọng số theo ưu tiên: Cao 3, Trung bình 2, Thấp 1. Hệ số đánh giá: Xuất sắc và Tốt 100%, Khá 90%, Trung bình 75%, Kém 50%.\n\nXếp loại A từ 90%, B từ 75%, C từ 60%, D dưới 60%.'}
-      </Text>}
+      <View style={[styles.rulesFrame, showRules && styles.rulesExpanded]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: showRules }}
+          onPress={() => setShowRules(value => !value)} style={styles.rulesButton}>
+          <Text style={styles.rulesLabel}>Cách tính KPI {showRules ? '▴' : '▾'}</Text>
+        </Pressable>
+        {showRules && <KpiRules />}
+      </View>
     </View>
     {rows.length ? <PaginatedList items={rows} resetKey={JSON.stringify([month, project])}>
       {pageItems => pageItems.map(row => {
@@ -80,12 +81,50 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
         return <KpiCard key={row.email} row={row} label={label} legacy={legacy} />;
       })}
     </PaginatedList> : <View style={ui.panel}>
-      <Text style={ui.body}>Chưa có việc nào có hạn trong tháng này.</Text>
+      <EmptyState icon="chart" message="Chưa có việc nào có hạn trong tháng này." />
     </View>}
     {isAdmin && rows.some(row => row.email.startsWith('ten:')) && <View style={ui.panel}>
       <Text style={ui.muted}>Một số việc chỉ có tên người làm. Hãy gắn tài khoản có email khi chọn người làm để KPI hiển thị đúng cho nhân viên.</Text>
     </View>}
   </>;
+}
+
+const ruleGroups = [
+  {
+    title: 'Công việc được tính',
+    formula: null,
+    items: ['Công việc có hạn chót trong tháng đã chọn.',
+      'Việc Xong hoặc Chờ duyệt cần có thời điểm hoàn thành. Việc chưa hoàn thành chỉ được tính khi đã qua hạn.'],
+  },
+  {
+    title: 'Điểm từng công việc',
+    formula: 'Điểm đạt được = Trọng số ưu tiên × Hệ số đúng hạn × Hệ số đánh giá.',
+    items: ['Trọng số ưu tiên: Cao 3 điểm, Trung bình 2 điểm, Thấp 1 điểm. Việc chưa đặt mức ưu tiên dùng trọng số 2.',
+      'Hệ số đúng hạn: Hoàn thành đúng hạn 100%, hoàn thành trễ hạn 50%, quá hạn chưa hoàn thành 0%.',
+      'Hệ số đánh giá: Xuất sắc hoặc Tốt 100%, Khá 90%, Trung bình 75%, Kém 50%. Việc chưa được đánh giá dùng hệ số 100%.'],
+  },
+  {
+    title: 'Điểm KPI và xếp loại',
+    formula: 'KPI (%) = Tổng điểm đạt được ÷ Tổng trọng số của các việc được tính × 100.',
+    items: ['Kết quả được làm tròn đến số nguyên.',
+      'A: từ 90%. B: từ 75% đến dưới 90%. C: từ 60% đến dưới 75%. D: dưới 60%.',
+      'Nếu có việc trong tháng nhưng chưa việc nào đủ điều kiện tính điểm, KPI hiển thị dấu “–”.'],
+  },
+] as const;
+
+function KpiRules() {
+  const ui = useScreenStyles();
+  const styles = useStyles();
+  return <View style={styles.rulesContent}>
+    {ruleGroups.map(({ title, items, formula }) => <View key={title} style={styles.ruleGroup}>
+      <Text accessibilityRole="header" style={styles.rulesLabel}>{title}</Text>
+      {formula && <Text style={[ui.body, styles.formula]}>{formula}</Text>}
+      {items.map(item => <View key={item} style={styles.ruleItem}>
+        <Text aria-hidden style={ui.body}>•</Text>
+        <Text style={[ui.body, styles.ruleText]}>{item}</Text>
+      </View>)}
+    </View>)}
+  </View>;
 }
 
 function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: boolean }) {
@@ -122,8 +161,15 @@ function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: b
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' },
   filter: { flexGrow: 1, flexBasis: 125 },
-  rulesButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
-  rulesLabel: { color: colors.accent, fontWeight: '700' },
+  rulesFrame: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 22, borderColor: colors.accent },
+  rulesExpanded: { alignSelf: 'stretch' },
+  rulesButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
+  rulesContent: { paddingHorizontal: 14, paddingBottom: 14, gap: 12 },
+  ruleGroup: { gap: 6, borderTopWidth: 1, borderColor: colors.line, paddingTop: 10 },
+  ruleItem: { flexDirection: 'row', gap: 8 },
+  ruleText: { flex: 1 },
+  formula: { fontWeight: '700' },
+  rulesLabel: { color: colors.ink, fontWeight: '700' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
   person: { flexShrink: 1, gap: 4 },
   score: { alignItems: 'flex-end' },

@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/EmptyState';
 import { PaginatedList } from '../../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -219,7 +220,7 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
           () => closeFinanceBudget(project.id, email, editor.draft, reason, editor.adjustment), 'Đã chốt dự toán.')} />
         <Button label="Hủy" secondary disabled={busy} onPress={() => { setEditor(undefined); setError(''); }} />
       </View>}
-      {!control.rows.length && !plan.lines.length && <Text style={styles.muted}>Chưa có khoản dự toán.</Text>}
+      {!control.rows.length && !plan.lines.length && <EmptyState icon="chart" message="Chưa có khoản dự toán." />}
       <PaginatedList items={control.rows}>
         {pageItems => pageItems.map(row => {
           const draftLine = draftByCode.get(row.code);
@@ -301,7 +302,8 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
 
     {cashReady && <>
       <Text accessibilityRole="header" style={styles.cardTitle}>Đề nghị chi & thực chi</Text>
-      <Text style={styles.muted}>{relevantCash.length ? relevantCash.length + ' chứng từ' : 'Chưa có đề nghị chi.'}</Text>
+      {relevantCash.length ? <Text style={styles.muted}>{relevantCash.length} chứng từ</Text>
+        : <EmptyState icon="wallet" message="Chưa có đề nghị chi." />}
       {ready && !!control.unmatched.length && <Text style={styles.muted}>{control.unmatched.length} chứng từ chưa khớp mã khoản, vẫn tính trong tổng chi dự án.</Text>}
       <PaginatedList items={relevantCash}>
         {pageItems => pageItems.map(row => <View key={row.id} style={styles.detailRow}>

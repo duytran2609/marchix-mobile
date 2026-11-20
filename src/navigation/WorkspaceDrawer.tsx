@@ -8,30 +8,21 @@ import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { createThemedStyles } from '../theme/theme';
 
-import { workspaceTabs } from './workspaceRoutes';
+import { workspaceTabLabel, workspaceTabs } from './workspaceRoutes';
 import type { WorkspaceTab } from './workspaceRoutes';
+import type { PinnableTab } from './usePinnedTabs';
+import { workspaceTabIcons } from './workspaceTabIcons';
 
-const sidebarIcons = {
-  'tong-quan': require('../../assets/sidebar/overview.png'),
-  'cong-viec': require('../../assets/sidebar/tasks.png'),
-  'ke-hoach-tuan': require('../../assets/sidebar/weekly-plan.png'),
-  'cho-duyet': require('../../assets/sidebar/approval.png'),
-  'kpi': require('../../assets/sidebar/kpi.png'),
-  'cham-cong': require('../../assets/sidebar/attendance.png'),
-  'thu-chi': require('../../assets/sidebar/cash.png'),
-  'don-tu': require('../../assets/sidebar/requests.png'),
-  'luong': require('../../assets/sidebar/payroll.png'),
-  'du-an': require('../../assets/sidebar/projects.png'),
-  'van-thu': require('../../assets/sidebar/records.png'),
-  'cai-dat': require('../../assets/sidebar/settings.png'),
-} satisfies Record<WorkspaceTab, number>;
-
-export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onClose, onSelect, onOpenWeb, onLogout }: {
+export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins, pinsReady, onTogglePin,
+  onClose, onSelect, onOpenWeb, onLogout }: {
   open: boolean;
   activeTab: WorkspaceTab | 'ca-nhan';
   isAdmin: boolean;
   name: string;
   photoURL: string | null;
+  pins: readonly PinnableTab[];
+  pinsReady: boolean;
+  onTogglePin: (tab: PinnableTab) => void;
   onClose: () => void;
   onSelect: (tab: WorkspaceTab | 'ca-nhan') => void;
   onOpenWeb: () => void;
@@ -104,18 +95,31 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, onCl
               <Button label="Web Quản lý Marchix ↗" secondary disabled={confirming} onPress={onOpenWeb} />
             </View>
             <ScrollView contentContainerStyle={styles.list}>
+              <Text style={styles.pinHint}>Nhấn giữ một mục để ghim hoặc bỏ ghim khỏi thanh dưới.</Text>
               {workspaceTabs.map(item => {
                 const selected = item.id === activeTab;
-                const label = item.id === 'luong' && isAdmin ? 'Nhân sự & lương' : item.label;
+                const label = workspaceTabLabel(item, isAdmin);
+                const id = item.id;
+                const pinned = id !== 'tong-quan' && pins.includes(id);
+                const togglePin = id !== 'tong-quan' && pinsReady ? () => onTogglePin(id) : undefined;
+                const pinActionLabel = pinned ? 'Bỏ ghim khỏi thanh dưới' : 'Ghim vào thanh dưới';
                 return (
-                  <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={label}
-                    accessibilityState={{ selected }} disabled={confirming} onPress={() => onSelect(item.id)}
+                  <Pressable key={id} accessibilityRole="button" accessibilityLabel={label}
+                    accessibilityHint={togglePin ? `Nhấn giữ để ${pinActionLabel.toLocaleLowerCase('vi')}.` : undefined}
+                    accessibilityActions={togglePin ? [{ name: 'togglePin', label: pinActionLabel }] : undefined}
+                    onAccessibilityAction={event => {
+                      if (!confirming && event.nativeEvent.actionName === 'togglePin') togglePin?.();
+                    }}
+                    accessibilityState={{ selected }} disabled={confirming} onPress={() => onSelect(id)}
+                    onLongPress={togglePin}
                     style={({ pressed }) => [styles.item, selected && styles.selected, pressed && styles.pressed]}>
                     <View aria-hidden style={[styles.iconTile, selected && styles.selectedIconTile]}>
-                      <Image source={sidebarIcons[item.id]} resizeMode="contain"
+                      <Image source={workspaceTabIcons[id]} resizeMode="contain"
                         style={[styles.icon, selected && styles.selectedIcon]} />
                     </View>
-                    <Text style={[styles.label, selected && styles.selectedLabel]}>{label}</Text>
+                    <Text selectable={false} style={[styles.label, selected && styles.selectedLabel]}>{label}</Text>
+                    {pinned && <Image source={require('../../assets/sidebar/pin.png')} resizeMode="contain"
+                      aria-hidden style={styles.pinIcon} />}
                   </Pressable>
                 );
               })}
@@ -175,6 +179,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   logoutButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background },
   list: { padding: 12, gap: 4 },
+  pinHint: { color: colors.muted, fontSize: 12, lineHeight: 17, paddingHorizontal: 10, paddingBottom: 4 },
   item: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10,
     paddingVertical: 6, borderRadius: 10 },
   selected: { backgroundColor: colors.accentSoft },
@@ -184,7 +189,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   selectedIconTile: { backgroundColor: colors.accent },
   icon: { width: 22, height: 22, tintColor: colors.muted },
   selectedIcon: { tintColor: colors.onAccent },
-  label: { flexShrink: 1, color: colors.ink, fontSize: 15, fontWeight: '600' },
+  label: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 15, fontWeight: '600' },
+  pinIcon: { width: 16, height: 16, tintColor: colors.accent },
   selectedLabel: { color: colors.accent, fontWeight: '800' },
   footer: { padding: 12, backgroundColor: colors.background,
     borderTopWidth: 1, borderTopColor: colors.line },

@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { createThemedStyles } from '../theme/theme';
 import { searchByName } from '../utils/search';
 import { MemberAvatar } from './MemberAvatar';
 import { PeopleSummary } from './PeopleSummary';
 import { SearchInput } from './SearchInput';
 import { Button } from './Button';
-import { DropdownOverlay, useDropdownAnchor } from './DropdownOverlay';
+import { EmptyState } from './EmptyState';
+import type { EmptyStateIcon } from './EmptyState';
+import { KeyboardSafeAreaView } from './KeyboardViewport';
+import { ToastLayer } from './Toast';
 
 export type SearchableChoice = { id: string; name: string; photoURL?: string | null; self?: boolean };
 
@@ -14,41 +17,43 @@ type ChoiceListProps = {
   items: SearchableChoice[]; selected: string[]; disabled: boolean; label: string; emptyMessage: string;
   onToggle: (id: string) => void;
   showAvatar?: boolean;
+  emptyIcon?: EmptyStateIcon;
 };
 
 export function SearchableChoiceDropdown(props: ChoiceListProps & { title: string; multiple?: boolean; placeholder?: string }) {
   const { title, multiple, items, selected, disabled, placeholder = 'Chưa chọn' } = props;
   const styles = useStyles();
-  const { trigger, anchor, open, close } = useDropdownAnchor();
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
   const selectedItems = selected.map<SearchableChoice>(id => items.find(item => item.id === id) ?? { id, name: id })
     .filter(item => item.name);
   const summary = selectedItems.map(item => item.name).join(', ') || placeholder;
-  const triggerContent = <>
-    {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} decorative />
-      : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
-    <Text aria-hidden style={styles.selected}>▾</Text>
-  </>;
   return <>
-    <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={!!anchor}
-      disabled={disabled} onPress={open} style={styles.trigger}>
-      {triggerContent}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={open && !disabled}
+      disabled={disabled} onPress={() => { Keyboard.dismiss(); setOpen(true); }} style={styles.trigger}>
+      {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} decorative />
+        : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
+      <Text aria-hidden style={styles.selected}>›</Text>
     </Pressable>
-    {anchor && !disabled && <DropdownOverlay anchor={anchor} onClose={close} triggerStyle={styles.trigger}
-      triggerContent={triggerContent} minWidth={240} minHeight={220} maxHeight={420} panelStyle={styles.popup}>
-      <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
-        <Text accessibilityRole="header" style={styles.panelTitle}>{title}</Text>
-        <SearchableChoiceList {...props} scrollable onToggle={id => {
-          props.onToggle(id);
-          if (!multiple) close();
-        }} />
-        <Button label="Xong" onPress={close} />
-      </View>
-    </DropdownOverlay>}
+    {open && !disabled && <Modal transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+      <KeyboardSafeAreaView style={styles.overlay}>
+        <Pressable accessible={false} aria-hidden tabIndex={-1} style={StyleSheet.absoluteFill} onPress={close} />
+        <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
+          <Text accessibilityRole="header" style={styles.panelTitle}>{title}</Text>
+          <SearchableChoiceList {...props} scrollable onToggle={id => {
+            props.onToggle(id);
+            if (!multiple) close();
+          }} />
+          <Button label="Xong" onPress={close} />
+        </View>
+        <ToastLayer safeAreaApplied />
+      </KeyboardSafeAreaView>
+    </Modal>}
   </>;
 }
 
 export function SearchableChoiceList({ items, selected, disabled, label, emptyMessage, onToggle, showAvatar = true,
-  scrollable = false }: ChoiceListProps & { scrollable?: boolean }) {
+  emptyIcon = 'people', scrollable = false }: ChoiceListProps & { scrollable?: boolean }) {
   const styles = useStyles();
   const [search, setSearch] = useState('');
   const matches = searchByName(items, search, item => item.name);
@@ -65,7 +70,7 @@ export function SearchableChoiceList({ items, selected, disabled, label, emptyMe
         <Text aria-hidden style={[styles.mark, checked && styles.markChecked]}>{checked ? '✓' : ''}</Text>
       </Pressable>;
     })}
-    {!visible.length && <Text accessibilityLiveRegion="polite" style={styles.muted}>{emptyMessage}</Text>}
+    {!visible.length && <EmptyState icon={emptyIcon} message={emptyMessage} announce />}
     {matches.length > visible.length && <Text style={styles.muted}>Tìm theo tên để xem thêm.</Text>}
     {hiddenSelected.length > 0 && <View style={styles.chips}>
       {hiddenSelected.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Bỏ chọn ${item.name}`}
@@ -87,8 +92,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   list: { gap: 7 },
   shrink: { flexShrink: 1, minHeight: 0 },
   results: { flexGrow: 0, flexShrink: 1, maxHeight: 280 },
-  popup: { maxWidth: 420 },
-  panel: { flexShrink: 1, padding: 14, gap: 10,
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: 'rgba(33, 25, 53, 0.4)' },
+  panel: { width: '100%', maxWidth: 420, maxHeight: '100%', flexShrink: 1, padding: 14, gap: 10,
     borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
   panelTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   trigger: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12,

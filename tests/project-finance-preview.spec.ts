@@ -62,7 +62,13 @@ test('Dự toán giữ số tiền và chi tiết khi đổi chế độ nhập'
   await budget.getByRole('textbox', { name: 'Số tiền tổng (đ)' }).fill('500000');
   await budget.getByRole('button', { name: 'Nhập chi tiết VAT, báo giá và dự báo' }).click();
   await expect(budget.getByRole('textbox', { name: 'Đơn giá (đ)', exact: true })).toHaveValue('500000');
-  await budget.getByRole('textbox', { name: 'Số lượng', exact: true }).fill('2');
+  const quantity = budget.getByRole('textbox', { name: 'Số lượng', exact: true });
+  await quantity.fill('2,5');
+  await budget.getByRole('button', { name: 'Tăng số lượng', exact: true }).click();
+  await expect(quantity).toHaveValue('3,5');
+  await budget.getByRole('button', { name: 'Giảm số lượng', exact: true }).click();
+  await expect(quantity).toHaveValue('2,5');
+  await quantity.fill('2');
   await budget.getByRole('textbox', { name: 'Căn cứ báo giá', exact: true }).fill('Báo giá kiểm thử');
   await budget.getByRole('button', { name: 'Nhập số tiền tổng', exact: true }).click();
   await expect(budget.getByRole('textbox', { name: 'Số tiền tổng (đ)' })).toHaveValue('1.000.000');

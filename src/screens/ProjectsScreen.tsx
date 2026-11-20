@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
@@ -15,7 +16,7 @@ import { formatTaskDate } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
 import type { ProjectRoute } from '../navigation/workspaceRoutes';
 import { pilotMode } from '../services/firebase/firebase';
-import { useScreenStyles } from '../theme/screenStyles';
+import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
 const sections = [
@@ -30,6 +31,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
   canReadCash: boolean; tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void;
 }) {
   const styles = useScreenStyles();
+  const information = useInformationStyles();
   const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -70,7 +72,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
         <Text accessibilityRole="alert" style={styles.error}>Không tải được danh sách dự án.</Text>
         <Button label="Thử lại" secondary onPress={() => { setProjectError(false); setProjectRetry(value => value + 1); }} />
       </> : projects === null ? <ActivityIndicator accessibilityLabel="Đang tải dự án" color={colors.accent} />
-        : !projects.length ? <Text style={styles.muted}>Chưa có dự án.</Text>
+        : !projects.length ? <EmptyState icon="project" message="Chưa có dự án." />
         : <Dropdown label="Chọn dự án" hideLabel value={project?.id ?? ''}
           choices={projects.map(item => ({ value: item.id, label: item.name }))}
           onChange={projectId => {
@@ -90,16 +92,16 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
             onPress={() => setEditor(project)} />}
         </View>
         <Text style={styles.badge}>{project.status || 'Chưa cập nhật trạng thái'}</Text>
-        <View style={local.metadata}>
-          <Text selectable style={styles.muted}><Text style={[local.metaLabel, styles.metadataLabel]}>Mã dự án: </Text>DA-{project.id}</Text>
-          <Text selectable style={styles.muted}>
-            <Text style={[local.metaLabel, styles.metadataLabel]}>Thời gian: </Text>
-            {project.startDate ? formatTaskDate(project.startDate) : 'Chưa có ngày bắt đầu'} → {
-              project.deadline ? formatTaskDate(project.deadline) : 'Chưa có ngày kết thúc'}
-          </Text>
-          <Text selectable style={styles.muted}>
-            <Text style={[local.metaLabel, styles.metadataLabel]}>Người phụ trách: </Text>{project.owner || project.ownerEmail || 'Chưa có'}
-          </Text>
+        <View style={information.panel}>
+          {[
+            ['Mã dự án', 'DA-' + project.id],
+            ['Thời gian', (project.startDate ? formatTaskDate(project.startDate) : 'Chưa có ngày bắt đầu') + ' → ' +
+              (project.deadline ? formatTaskDate(project.deadline) : 'Chưa có ngày kết thúc')],
+            ['Người phụ trách', project.owner || project.ownerEmail || 'Chưa có'],
+          ].map(([label, value], index) => <View key={label} style={[information.row, index > 0 && information.divider]}>
+            <Text style={information.label}>{label}</Text>
+            <Text selectable style={information.value}>{value}</Text>
+          </View>)}
         </View>
         <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
           style={[local.tabs, { backgroundColor: colors.surfaceMuted }]}>
@@ -141,7 +143,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
               <Metric label="Việc đang vướng" value={metrics.blocked} />
             </View> : <View style={styles.stack}>
               <Text accessibilityRole="header" style={styles.cardTitle}>Việc trong dự án</Text>
-              {projectTasks.length === 0 ? <Text style={styles.muted}>Chưa có việc trong phạm vi truy cập.</Text>
+              {projectTasks.length === 0 ? <EmptyState icon="tasks" message="Chưa có việc trong phạm vi truy cập." />
                 : <TaskBoard tasks={projectTasks} member={{ email, name }}
                   options={route.kanban ? board : { ...board, view: 'list' }}
                   onOptionsChange={next => {

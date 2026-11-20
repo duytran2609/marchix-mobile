@@ -1,4 +1,7 @@
 import { todayInVietnam } from '../tasks/taskDates';
+import { formatMonthLabel as monthLabel } from '../../utils/dateTime';
+
+export { monthLabel };
 
 export const contracts = ['HĐLĐ không xác định thời hạn', 'HĐLĐ xác định thời hạn', 'Thử việc', 'Cộng tác viên / khoán việc'];
 export const employeeStatuses = ['Đang làm', 'Đã nghỉ'];
@@ -37,7 +40,6 @@ export function recordedAdvanceRequests(slip: Payslip) {
   return requests;
 }
 
-export const monthLabel = (month: string) => month.slice(5) + '/' + month.slice(0, 4);
 export const validMonth = (month: unknown): month is string => typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
 export const amount = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const formatter = new Intl.NumberFormat('vi-VN');

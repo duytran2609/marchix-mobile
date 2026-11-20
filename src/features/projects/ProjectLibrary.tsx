@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/EmptyState';
 import { PaginatedList } from '../../components/PaginatedList';
 import { Bytes } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -78,7 +79,7 @@ export function ProjectLibrary({ id, email, isAdmin, memberName, openFile }: {
       <Button label="Tải lại thư viện" secondary onPress={() => { setLoadError(false); setFiles(undefined); setRetry(value => value + 1); }} />
     </> : <>
       <CollaborationInput label="Tìm tệp" value={term} onChange={setTerm} limit={160} />
-      {!shown ? <Text style={styles.muted}>Đang tải tệp…</Text> : !shown.length && <Text style={styles.muted}>Chưa có tệp khớp thư mục hoặc từ khóa.</Text>}
+      {!shown ? <Text style={styles.muted}>Đang tải tệp…</Text> : !shown.length && <EmptyState icon="document" message="Chưa có tệp khớp thư mục hoặc từ khóa." />}
       <PaginatedList items={shown ?? []} resetKey={JSON.stringify([id, folder, term])}>
         {pageItems => pageItems.map(file => <View key={file.id} style={styles.detailRow}>
           <CollaborationFiles files={[file]} open={openFile} />

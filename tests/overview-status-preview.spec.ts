@@ -10,11 +10,12 @@ test('Tình trạng công việc đếm đúng trạng thái, gồm Xong và kh�
   const base = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
   const headers = { Authorization: 'Bearer owner' };
   const id = `overview-status-${Date.now()}`;
+  const blockedId = `${id}-blocked`;
   const email = 'quantri@example.test';
   const title = `Kiểm thử trạng thái ${id}`;
-  async function change(status: string) {
-    expect((await request.patch(`${base}/tasks/${id}`, { headers, data: { fields: {
-      title: { stringValue: title }, assigneeEmail: { stringValue: email }, assignedBy: { stringValue: email },
+  async function change(status: string, taskId = id) {
+    expect((await request.patch(`${base}/tasks/${taskId}`, { headers, data: { fields: {
+      title: { stringValue: taskId === id ? title : 'Việc đang vướng' }, assigneeEmail: { stringValue: email }, assignedBy: { stringValue: email },
       status: { stringValue: status }, due: { stringValue: '2000-01-01' },
     } } })).ok()).toBe(true);
   }
@@ -32,16 +33,49 @@ test('Tình trạng công việc đếm đúng trạng thái, gồm Xong và kh�
       const key = taskStatuses.some(value => value === status) ? status : 'Khác';
       counts.set(key, (counts.get(key) || 0) + 1);
     }
-    await expect(page.getByLabel(`${own.length} công việc`, { exact: true })).toBeVisible();
+    const ring = page.getByLabel(`${own.length} công việc`, { exact: true });
+    await expect(ring).toBeVisible();
     for (const [status, count] of counts) {
       await expect(page.getByRole('button', { name: `${status} ${count}`, exact: true })).toBeVisible();
     }
     await expect(page.getByRole('button', { name: /^Đang mở khác/ })).toHaveCount(0);
+    return { counts, ring, total: own.length };
   }
   try {
     await change('Chưa làm');
+    await change('Vướng', blockedId);
     await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Truy cập nhanh', exact: true })).toHaveCount(0);
+    const { counts, ring, total } = await check();
+    const position = (status: string) => {
+      let offset = 0;
+      for (const [key, count] of counts) {
+        if (key === status) {
+          const angle = 2 * Math.PI * (offset + count / 2) / total;
+          return { x: 60 + 52 * Math.sin(angle), y: 60 - 52 * Math.cos(angle) };
+        }
+        offset += count;
+      }
+      throw new Error(`Không có trạng thái ${status}`);
+    };
+    const legend = (status: string) => page.getByRole('button', { name: `${status} ${counts.get(status)}`, exact: true });
+    const sector = (status: string) => page.getByTestId(`task-ring-sector-${status}`);
+    await ring.tap({ position: position('Chưa làm') });
+    await expect(legend('Chưa làm')).toHaveAttribute('aria-expanded', 'true');
+    await expect(legend('Vướng')).toHaveCSS('opacity', '0.38');
+    await expect(sector('Chưa làm')).toHaveCSS('opacity', '1');
+    await expect(sector('Vướng')).toHaveCSS('opacity', '0.38');
+    await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible();
+    await ring.click({ position: position('Vướng') });
+    await expect(legend('Vướng')).toHaveAttribute('aria-expanded', 'true');
+    await expect(legend('Chưa làm')).toHaveCSS('opacity', '0.38');
+    await expect(sector('Vướng')).toHaveCSS('opacity', '1');
+    await expect(sector('Chưa làm')).toHaveCSS('opacity', '0.38');
+    await ring.tap({ position: position('Vướng') });
+    await expect(legend('Vướng')).toHaveAttribute('aria-expanded', 'false');
+    await expect(legend('Chưa làm')).toHaveCSS('opacity', '1');
+    await expect(sector('Chưa làm')).toHaveCSS('opacity', '1');
     for (const status of [...taskStatuses, 'Trạng thái cũ', '']) {
       await change(status);
       await check();
@@ -50,5 +84,6 @@ test('Tình trạng công việc đếm đúng trạng thái, gồm Xong và kh�
     await check();
   } finally {
     await request.delete(`${base}/tasks/${id}`, { headers });
+    await request.delete(`${base}/tasks/${blockedId}`, { headers });
   }
 });

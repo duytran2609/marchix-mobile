@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../components/TextInput';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PageHeader } from '../components/PageHeader';
@@ -21,7 +22,7 @@ import { punch, removeAttendance, saveAdjustment, saveAttendanceNote, watchAtten
 import type { AttendanceData, AttendanceMember } from '../features/attendance/attendanceStore';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
-import { formatVietnamDateWithWeekday } from '../utils/dateTime';
+import { formatMonthLabel, formatVietnamDateWithWeekday } from '../utils/dateTime';
 
 const isTime = (value: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
@@ -197,7 +198,6 @@ function AttendanceClock() {
 function DailyNoteEditor({ email, date, savedNote }: { email: string; date: string; savedNote: string }) {
   const ui = useScreenStyles();
   const styles = useStyles();
-  const { colors } = useTheme();
   const toast = useToast();
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -224,13 +224,12 @@ function DailyNoteEditor({ email, date, savedNote }: { email: string; date: stri
     <Text style={ui.label}>Ghi chú</Text>
     <TextInput accessibilityLabel="Ghi chú hôm nay" value={draft ?? savedNote} onChangeText={setDraft} editable={!saving}
       multiline numberOfLines={3} maxLength={1000} placeholder="Nhập ghi chú cho hôm nay"
-      placeholderTextColor={colors.muted + 'C9'} style={[ui.input, styles.noteInput]} />
+      style={[ui.input, styles.noteInput]} />
     <Button label={saving ? 'Đang lưu…' : 'Lưu ghi chú'} disabled={saving || text === savedNote}
       style={styles.saveNoteAction} onPress={() => void save()} />
   </>;
 }
 
-const formatMonth = (month: string) => 'Tháng ' + month.slice(5) + '/' + month.slice(0, 4);
 
 function AttendanceMonthPicker({ first, current, selected, onSelect }: {
   first: string; current: string; selected: string; onSelect: (month: string) => void;
@@ -245,8 +244,8 @@ function AttendanceMonthPicker({ first, current, selected, onSelect }: {
   }, [current, first]);
 
   return <Dropdown label="Chọn tháng" hideLabel singleLineValue highlightSelection={false} value={selected} style={styles.monthPicker}
-    choices={options.map(value => ({ value, label: formatMonth(value) }))}
-    fallbackLabel={formatMonth(selected)} onChange={onSelect} />;
+    choices={options.map(value => ({ value, label: formatMonthLabel(value) }))}
+    fallbackLabel={formatMonthLabel(selected)} onChange={onSelect} />;
 }
 
 function TableAction({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {

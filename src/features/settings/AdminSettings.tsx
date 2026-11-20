@@ -1,13 +1,15 @@
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { PaginatedList } from '../../components/PaginatedList';
+import { EmptyState } from '../../components/EmptyState';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
 import { Button } from '../../components/Button';
 import { FieldLabel } from '../../components/FieldLabel';
+import { NumberStepper } from '../../components/NumberStepper';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
@@ -48,11 +50,26 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   const inputValue = isMoneyInput ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : String(value);
   const highlightSelection = !isRole && !isWorkday &&
     !(isRecurring && ['category', 'partyType'].includes(field.key));
+  const checked = value === true;
   if (typeof field.initial === 'boolean') return (
     <View style={ui.listHeader}>
       <Text style={[ui.label, ui.listHeading]}>{field.label}</Text>
-      <Switch accessibilityLabel={field.label} value={value === true} disabled={disabled}
-        trackColor={{ true: colors.accent, false: colors.line }} onValueChange={onChange} />
+      <Pressable accessibilityRole="switch" accessibilityLabel={field.label} aria-checked={checked}
+        disabled={disabled} onPress={() => onChange(!checked)}
+        onKeyDown={Platform.OS === 'web' ? event => {
+          const { key, repeat } = event as typeof event & { key?: string; repeat?: boolean };
+          if (key !== ' ' || disabled) return;
+          event.preventDefault();
+          if (!repeat) onChange(!checked);
+        } : undefined}
+        style={[fieldStyles.toggle, disabled && fieldStyles.toggleDisabled]}>
+        <View aria-hidden pointerEvents="none" style={[fieldStyles.toggleTrack, {
+          backgroundColor: checked ? colors.accent : colors.line,
+          alignItems: checked ? 'flex-end' : 'flex-start',
+        }]}>
+          <View testID="settings-switch-thumb" style={[fieldStyles.toggleThumb, { borderColor: colors.placeholder }]} />
+        </View>
+      </Pressable>
     </View>
   );
   if (field.time) {
@@ -78,10 +95,14 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
         choices={field.choices.map(([value, label]) => ({ value, label }))} onChange={onChange} />
     </View>
   );
+  const stepBounds = ['grace', 'gpsRadius', 'ngayCongChuan'].includes(field.key)
+    ? { min: field.min, max: field.max }
+    : undefined;
+  const Input = stepBounds ? NumberStepper : TextInput;
   return (
     <View style={fieldStyles.plain}>
       <FieldLabel style={ui.label} required={required}>{label}</FieldLabel>
-      <TextInput accessibilityLabel={label} editable={!disabled} value={inputValue} style={ui.input}
+      <Input accessibilityLabel={label} editable={!disabled} value={inputValue} style={ui.input} {...stepBounds}
         autoCapitalize={field.key === 'email' ? 'none' : undefined}
         inputMode={digitsOnly ? 'numeric' : field.key === 'email' ? 'email' :
           typeof field.initial === 'number' && field.min !== undefined && field.min >= 0 ? 'decimal' : 'text'}
@@ -290,7 +311,8 @@ export function AdminSettings({ tab, email, onScrollTop }: {
   return (
     <View style={ui.stack}>
       <Button label={`+ ${addTitle}`} onPress={() => setEdit(emptyRow)} />
-      {!rows.length && <Text style={ui.muted}>{tab === 'members' ? 'Chưa có tài khoản.' : 'Chưa có khoản chi cố định.'}</Text>}
+      {!rows.length && <EmptyState icon={tab === 'members' ? 'people' : 'wallet'}
+        message={tab === 'members' ? 'Chưa có tài khoản.' : 'Chưa có khoản chi cố định.'} />}
       {tab === 'recurring' ? <RecurringExpenseTable rows={rows} onEdit={setEdit}
         onRemove={row => { setRemoveError(''); setRemoveTarget(row); }} /> : <PaginatedList items={rows}>
         {pageItems => pageItems.map(row => {
@@ -328,6 +350,10 @@ export function AdminSettings({ tab, email, onScrollTop }: {
 
 const fieldStyles = StyleSheet.create({
   plain: { gap: 5 },
+  toggle: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  toggleDisabled: { opacity: 0.5 },
+  toggleTrack: { width: 40, height: 14, borderRadius: 7, justifyContent: 'center' },
+  toggleThumb: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#FFFFFF' },
   clockRow: { flexDirection: 'row', gap: 8 },
   clockPart: { flex: 1 },
   workdayRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

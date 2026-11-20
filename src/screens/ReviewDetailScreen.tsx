@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../components/TextInput';
+import { EmptyState } from '../components/EmptyState';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardViewport } from '../components/KeyboardViewport';
@@ -71,7 +73,8 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
               ))}
               <View style={screenStyles.detailRow}>
                 <Text style={screenStyles.label}>Kết quả nhân viên gửi</Text>
-                <Text style={result?.text ? screenStyles.body : screenStyles.muted}>{result?.text || 'Không có ghi chú kết quả.'}</Text>
+                {result?.text ? <Text style={screenStyles.body}>{result.text}</Text>
+                  : <EmptyState icon="note" message="Không có ghi chú kết quả." />}
               </View>
             </View>
             {!active ? <Text style={screenStyles.muted}>Lượt gửi duyệt này đã thay đổi. Quay về danh sách để kiểm tra lại.</Text>

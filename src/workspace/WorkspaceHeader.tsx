@@ -23,10 +23,10 @@ function HeaderClock({ inRow = false }: { inRow?: boolean }) {
   }, []);
   return (
     <View pointerEvents="none" style={[styles.clock, inRow && styles.clockInRow]}>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.clockTime}>{vietnamTime.format(now)}</Text>
       <Text numberOfLines={1} adjustsFontSizeToFit style={styles.clockDate}>
         {formatVietnamDateWithWeekday(now)}
       </Text>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.clockTime}>{vietnamTime.format(now)}</Text>
     </View>
   );
 }
