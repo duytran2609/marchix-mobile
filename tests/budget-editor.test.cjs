@@ -29,7 +29,8 @@ function editor(line) {
       return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
     } },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
-    'react-native': { Text: 'Text', TextInput: 'TextInput', View: 'View' },
+    'react-native': { Text: 'Text', View: 'View' },
+    '../../components/TextInput': { TextInput: 'TextInput' },
     '../../components/Button': { Button: 'Button' },
     '../../components/Dropdown': { Dropdown: 'Dropdown' },
     '../../components/NumberStepper': { NumberStepper: 'NumberStepper' },
