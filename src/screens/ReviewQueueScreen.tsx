@@ -209,13 +209,13 @@ function ApprovalMetadata({ fields }: { fields: ApprovalField[] }) {
   return <View style={styles.metadata}>
     {fields.map(({ label, value, person }) => person ? (
       <View key={label} style={styles.personRow}>
-        <Text style={[screenStyles.muted, styles.fieldLabel]}>{label}: </Text>
+        <Text style={[screenStyles.muted, screenStyles.metadataLabel]}>{label}: </Text>
         <MemberAvatar name={person} compact />
-        <Text style={[screenStyles.muted, styles.personName]}>{person}</Text>
+        <Text style={[screenStyles.muted, screenStyles.metadataValue, styles.personName]}>{person}</Text>
       </View>
     ) : (
       <Text key={label} style={screenStyles.muted}>
-        <Text style={styles.fieldLabel}>{label}: </Text>{value}
+        <Text style={screenStyles.metadataLabel}>{label}: </Text>{value}
       </Text>
     ))}
   </View>;
@@ -257,6 +257,5 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     borderColor: colors.line, borderWidth: 1 },
   metadata: { gap: 4 },
   personRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
-  fieldLabel: { color: colors.metadataLabel, fontWeight: '700' },
-  personName: { flex: 1, minWidth: 0, fontWeight: '400' },
+  personName: { flex: 1, minWidth: 0 },
 }));

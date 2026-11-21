@@ -48,6 +48,7 @@ function TaskRing({ segments, selected, onSelect }: {
 }) {
   const styles = useStyles();
   const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  const activeSegment = segments.find(segment => segment.status === selected);
   let start = 0;
   const sectors = segments.filter(segment => segment.count > 0).map(segment => {
     const sweep = 360 * segment.count / total;
@@ -86,8 +87,8 @@ function TaskRing({ segments, selected, onSelect }: {
       </View>)}
     </View>
     <View style={styles.ringCenter} aria-hidden pointerEvents="none">
-      <Text style={styles.total}>{total}</Text>
-      <Text style={styles.ringCaption}>công việc</Text>
+      <Text style={styles.total}>{activeSegment?.count ?? total}</Text>
+      <Text numberOfLines={1} style={styles.ringCaption}>{activeSegment?.status ?? 'công việc'}</Text>
     </View>
   </Pressable>;
 }
@@ -104,7 +105,7 @@ export function OverviewScreen({
 }) {
   const styles = useStyles();
   const screen = useScreenStyles();
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { width } = useWindowDimensions();
   const [projects, setProjects] = useState<Load<Project>>(null);
   const [cash, setCash] = useState<Load<Cash>>(null);
@@ -152,8 +153,14 @@ export function OverviewScreen({
   const selectedGroup = summary.find(bucket => bucket.status === group && bucket.tasks.length > 0);
   const selectedStatus = selectedGroup?.status;
   const taskSegments = summary.map(({ status, tasks }) => ({
-    status, count: tasks.length, color: statusTone(status, colors).text,
+    status, count: tasks.length, color: ringStatusColor(status),
   }));
+  function ringStatusColor(status: string) {
+    if (status === 'Khác') return colors.accent;
+    if (status === 'Chờ duyệt') return colors.warning;
+    if (dark && status === 'Đang làm') return '#90CAFF';
+    return statusTone(status, colors).text;
+  }
   const toggleStatus = (status: string) => setGroup(current => current === status ? null : status);
   const ledger = Array.isArray(cash) ? cash : [];
   const scheduled = ledger.filter(row => waiting(row) && verifiedCash(row));
@@ -217,7 +224,7 @@ export function OverviewScreen({
   }
 
   function projectField(label: string, value: string) {
-    return <Text style={screen.muted}><Text style={styles.metaLabel}>{label}: </Text>{value}</Text>;
+    return <Text style={screen.muted}><Text style={screen.metadataLabel}>{label}: </Text>{value}</Text>;
   }
 
   function card(title: string, children: ReactNode, options?: { primary?: boolean; action?: ReactNode }) {
@@ -295,8 +302,8 @@ export function OverviewScreen({
           </Pressable>)}
         </View>
         {cashMonth.income || cashMonth.expense ? <View style={screen.choices} accessibilityLiveRegion="polite">
-          <Text style={screen.body}>Đã thu {vnd.format(cashMonth.income)}</Text>
-          <Text style={screen.body}>Đã chi {vnd.format(cashMonth.expense)}</Text>
+          <Text style={[screen.body, screen.metadataValue]}><Text style={screen.metadataLabel}>Đã thu </Text>{vnd.format(cashMonth.income)}</Text>
+          <Text style={[screen.body, screen.metadataValue]}><Text style={screen.metadataLabel}>Đã chi </Text>{vnd.format(cashMonth.expense)}</Text>
         </View> : <EmptyState icon="wallet" message="Chưa ghi nhận khoản đã thu hoặc đã chi trong kỳ." announce />}
         <Pressable accessibilityRole="button" style={styles.sectionAction} onPress={() => onNavigate({ screen: 'thu-chi' })}>
           <Text style={styles.sectionActionLabel}>Mở sổ Thu chi</Text>
@@ -312,8 +319,8 @@ export function OverviewScreen({
               onPress={() => toggleStatus(status)}
               style={[styles.legendRow, selectedStatus && selectedStatus !== status && styles.dimmed]}>
               <View aria-hidden style={[styles.dot, { backgroundColor: color }]} />
-              <Text style={[screen.label, styles.grow]}>{status}</Text>
-              <Text style={screen.label}>{count}</Text>
+              <Text style={[screen.label, screen.metadataLabel, styles.grow]}>{status}</Text>
+              <Text style={[screen.label, screen.metadataValue]}>{count}</Text>
             </Pressable>)}
           </View>
         </View>
@@ -344,16 +351,16 @@ export function OverviewScreen({
         onPress={() => onNavigate({ screen: 'du-an' })}><Text style={styles.link}>Tất cả dự án</Text></Pressable> })}
       {isAdmin && card('Thu chi đến hạn', state(cash, <>
         <Text style={screen.muted}>7 ngày tới · Khoản đã duyệt</Text>
-        <View style={styles.cardHeading}><Text style={screen.label}>Phải thu</Text><Text style={screen.label}>{vnd.format(income)}</Text></View>
+        <View style={styles.cardHeading}><Text style={[screen.label, screen.metadataLabel]}>Phải thu</Text><Text style={[screen.label, screen.metadataValue]}>{vnd.format(income)}</Text></View>
         {bar(100 * income / Math.max(1, income, expense), colors.success)}
-        <View style={styles.cardHeading}><Text style={screen.label}>Phải chi</Text><Text style={screen.label}>{vnd.format(expense)}</Text></View>
+        <View style={styles.cardHeading}><Text style={[screen.label, screen.metadataLabel]}>Phải chi</Text><Text style={[screen.label, screen.metadataValue]}>{vnd.format(expense)}</Text></View>
         {bar(100 * expense / Math.max(1, income, expense), colors.accent)}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDebt }}
           style={styles.sectionAction} onPress={() => setShowDebt(value => !value)}>
           <Text style={styles.sectionActionLabel}>Chi tiết công nợ</Text>
         </Pressable>
         {showDebt && <>
-          <Text style={screen.body}>Chênh lệch {vnd.format(income - expense)}</Text>
+          <Text style={[screen.body, screen.metadataValue]}><Text style={screen.metadataLabel}>Chênh lệch </Text>{vnd.format(income - expense)}</Text>
           <Text style={screen.muted}>{lateCash.length} khoản quá hạn · {scheduled.filter(item => !item.dueDate).length} khoản chưa có hạn</Text>
           <Button secondary label="Mở Thu chi" onPress={() => onNavigate({ screen: 'thu-chi' })} />
         </>}
@@ -387,7 +394,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   sectionActionLabel: { color: lightColors.onAccent, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   grow: { flex: 1, minWidth: 0 },
   projectMetadata: { gap: 2, marginTop: 4 },
-  metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: colors.line },
   chart: { height: 140, flexDirection: 'row', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
@@ -411,7 +417,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   ringHalf: { width: ringRadius, height: ringRadius * 2 },
   ringCenter: { width: ringCenterRadius * 2, height: ringCenterRadius * 2, borderRadius: ringCenterRadius, backgroundColor: colors.paper,
     alignItems: 'center', justifyContent: 'center' },
-  ringCaption: { color: colors.muted, fontSize: 11 },
+  ringCaption: { color: colors.muted, fontSize: 11, width: '100%', textAlign: 'center' },
   track: { height: 7, backgroundColor: colors.surfaceMuted, borderRadius: 8, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 8 },
   dot: { width: 9, height: 9, borderRadius: 5 },

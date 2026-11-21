@@ -124,11 +124,11 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
         {working && <Text accessibilityLiveRegion="polite" style={[ui.badge, styles.workingTag]}>Đang làm</Text>}
       </View>
       <View style={styles.scheduleDetails}>
-        <Text style={styles.scheduleText}>
-          <Text style={styles.scheduleLabel}>Ngày: </Text>{formatVietnamDateWithWeekday(today)}
+        <Text style={[styles.scheduleText, ui.metadataValue]}>
+          <Text style={ui.metadataLabel}>Ngày: </Text>{formatVietnamDateWithWeekday(today)}
         </Text>
-        <Text style={styles.scheduleText}>
-          <Text style={styles.scheduleLabel}>Ca làm việc: </Text>
+        <Text style={[styles.scheduleText, ui.metadataValue]}>
+          <Text style={ui.metadataLabel}>Ca làm việc: </Text>
           {weight === 0 ? 'Ngày nghỉ' : `${schedule.shiftIn} - ${weight === 0.5 ? schedule.lunchFrom + ' (Nửa ngày)' : schedule.shiftOut}`}
         </Text>
       </View>
@@ -350,8 +350,8 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
           </View>
           <KeyboardScrollView style={styles.editorScroll} contentContainerStyle={ui.stack} keyboardShouldPersistTaps="handled">
             <View style={styles.scheduleDetails}>
-              {details.map(([label, value]) => <Text key={label} style={styles.scheduleText}>
-                <Text style={styles.scheduleLabel}>{label}: </Text>{value}
+              {details.map(([label, value]) => <Text key={label} style={[styles.scheduleText, ui.metadataValue]}>
+                <Text style={ui.metadataLabel}>{label}: </Text>{value}
               </Text>)}
             </View>
             <AdjustmentTimeField label="Giờ vào điều chỉnh" value={manualIn} onChange={setIn} disabled={pending || confirmDelete} />
@@ -361,7 +361,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
               {['', '1', '0.5', '0'].map(value => <Pressable key={value} accessibilityRole="radio"
                 accessibilityState={{ checked: manualWork === value }} disabled={pending || confirmDelete}
                 onPress={() => setWork(value)} style={[ui.choice, manualWork === value && ui.selected]}>
-                <Text style={ui.label}>{value || 'Tự tính'}</Text>
+                <Text style={[ui.label, ui.metadataValue]}>{value || 'Tự tính'}</Text>
               </Pressable>)}
             </View>
             <FieldLabel style={ui.label} required>Lý do điều chỉnh</FieldLabel>
@@ -394,7 +394,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   noteInput: { minHeight: 76, paddingVertical: 10, textAlignVertical: 'top' },
   scheduleDetails: { gap: 5 },
   scheduleText: { color: colors.muted, fontSize: 15, lineHeight: 21 },
-  scheduleLabel: { color: colors.metadataLabel, fontWeight: '700' },
   monthPicker: { width: 148, flexShrink: 1 },
   clockGroup: { gap: 6 },
   clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },

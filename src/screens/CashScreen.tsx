@@ -193,7 +193,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
           onPress={() => void pick()} hint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng." />
       </View>
       {picked.map((file, index) => <View key={index} style={styles.detailRow}>
-        <AttachmentLabel file={file}><Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
+        <AttachmentLabel file={file}><Text style={[styles.body, styles.metadataValue]}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
         <Button label={`Bỏ ${file.name}`} secondary disabled={busy || picking}
           onPress={() => setPicked(current => current.filter((_, i) => i !== index))} />
       </View>)}
@@ -287,7 +287,7 @@ function CashDetail({ row, access, approvers, project, operationLock, onEdit }: 
       {row.type === 'chi' ? '−' : '+'}{vnd.format(row.amount)}
     </Text>
     {fields.filter(([, value]) => !!value).map(([label, value]) => <View key={label} style={styles.detailRow}>
-      <Text style={[styles.label, styles.metadataLabel]}>{label}</Text><Text selectable style={styles.body}>{value}</Text>
+      <Text style={[styles.label, styles.metadataLabel]}>{label}</Text><Text selectable style={[styles.body, styles.metadataValue]}>{value}</Text>
     </View>)}
     {files.length > 0 && <CashProofs cashId={row.id} files={files} />}
     {can('route') && <View style={local.field}>
@@ -363,7 +363,6 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
     .sort().reverse().map(id => ({ id, name: formatMonthLabel(id) }));
   const totals = cashTotals(base);
   const balance = totals.income - totals.expense;
-  const balanceStyle = balance === 0 ? undefined : balance > 0 ? local.positive : local.negative;
   function back() {
     if (detailLock.current) return;
     if (onBackToReview) return onBackToReview();
@@ -435,13 +434,14 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
             </View>
             <View style={local.metrics}>
               {([
-                ['Đã thu', totals.income, local.positive],
-                ['Đã chi', totals.expense, local.negative],
-                ['Chênh lệch', balance, balanceStyle],
-                ['Chi chờ duyệt / chờ chi', totals.pending, local.pending],
-              ] as const).map(([label, value, amountStyle]) => <View key={label} style={local.metric}>
-                <Text style={styles.muted}>{label}</Text>
-                <Text style={[styles.cardTitle, amountStyle]}>
+                ['Đã thu', totals.income, local.incomeTile, local.positive],
+                ['Đã chi', totals.expense, local.expenseTile, local.negative],
+                ['Chênh lệch', balance, balance > 0 ? local.incomeTile : balance < 0 ? local.expenseTile : undefined,
+                  balance > 0 ? local.positive : balance < 0 ? local.negative : undefined],
+                ['Chi chờ duyệt', totals.pending, local.pendingTile, local.pendingAmount],
+              ] as const).map(([label, value, tileStyle, amountStyle]) => <View key={label} style={[local.metric, tileStyle]}>
+                <Text style={[styles.muted, styles.metadataLabel]}>{label}</Text>
+                <Text style={[styles.cardTitle, styles.metadataValue, amountStyle]}>
                   {vnd.format(value)}
                 </Text>
               </View>)}
@@ -473,9 +473,9 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
               {([
                 ['Ngày giao dịch', displayDate(row.date)], ['Hạng mục', row.category], ['Đối tượng', row.partyName],
               ] as const).filter(([, value]) => !!value).map(([label, value]) => (
-                <Text key={label} style={styles.muted}><Text style={local.metaLabel}>{label}: </Text>{value}</Text>
+                <Text key={label} style={[styles.muted, styles.metadataValue]}><Text style={styles.metadataLabel}>{label}: </Text>{value}</Text>
               ))}
-              {row.projectId ? <Text style={local.entryTag}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
+              {row.projectId ? <Text style={[local.entryTag, styles.metadataValue]}><Text style={styles.metadataLabel}>Dự án: </Text>{projectName(row.projectId)}</Text> : null}
             </Pressable>)}
             </PaginatedList>
           </View>
@@ -483,7 +483,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
             <Text accessibilityRole="header" style={styles.cardTitle}>Đã chi theo hạng mục</Text>
             {!totals.categories.length && <EmptyState icon="wallet" message="Chưa có khoản đã chi trong kỳ." />}
             {totals.categories.map(([category, value]) => <View key={category} style={{ gap: 5 }}>
-              <Text style={styles.label}>{category} · {vnd.format(value)}</Text>
+              <Text style={[styles.label, styles.metadataValue]}><Text style={styles.metadataLabel}>{category} · </Text>{vnd.format(value)}</Text>
               <View style={local.barTrack}><View style={[local.bar, { width: `${value / totals.categories[0][1] * 100}%` }]} /></View>
             </View>)}
             <Text style={styles.muted}>Không chi tiền mặt. Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>
@@ -527,16 +527,18 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   detailBody: { flexGrow: 0 },
   detailActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   popupContent: { borderWidth: 0, borderRadius: 0 },
-  metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
   entryTag: { alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
-    backgroundColor: colors.accentSoft, color: colors.accent, fontSize: 12, fontWeight: '700' },
+    backgroundColor: colors.accentSoft, fontSize: 12 },
   ledgerTitle: { gap: 2 },
   positive: { color: colors.success },
   negative: { color: colors.danger },
-  pending: { color: colors.warning },
   field: { gap: 6 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexBasis: '46%', flexGrow: 1, padding: 10, borderRadius: 9, backgroundColor: colors.accentSoft, gap: 4 },
+  incomeTile: { backgroundColor: colors.successSoft },
+  expenseTile: { backgroundColor: colors.dangerSoft },
+  pendingTile: { backgroundColor: colors.warningSoft },
+  pendingAmount: { color: colors.warning },
   entry: { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 12, gap: 6 },
   barTrack: { borderRadius: 5, backgroundColor: colors.accentSoft, height: 7 },
   bar: { borderRadius: 5, backgroundColor: colors.accent, height: 7 },

@@ -340,7 +340,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function detail(label: string, value: string) {
-    return <Text style={shared.body}><Text style={styles.detailLabel}>{label}: </Text>{value}</Text>;
+    return <Text style={[shared.body, shared.metadataValue]}><Text style={shared.metadataLabel}>{label}: </Text>{value}</Text>;
   }
 
   return <Modal visible transparent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
@@ -376,7 +376,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                     if (Keyboard.isVisible()) Keyboard.dismiss();
                     setMonthPickerYear(Number(month.slice(0, 4)));
                   }}>
-                  <Text style={shared.label}>{displayMonth(month)}</Text><Text aria-hidden style={styles.pickerIcon}>▦</Text>
+                  <Text style={[shared.label, shared.metadataValue]}>{displayMonth(month)}</Text>
+                  <Text aria-hidden style={styles.pickerIcon}>▦</Text>
                 </Pressable>
               </> : <>
                 {dateField('from', overtime ? 'Ngày' : 'Từ ngày', from)}
@@ -476,7 +477,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             return <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Tháng ${item}`}
               accessibilityState={{ selected: value === month }} style={[shared.choice, value === month && shared.selected]}
               disabled={busy} onPress={() => { setMonth(value); setMonthPickerYear(null); }}>
-              <Text style={shared.label}>{item}</Text>
+              <Text style={[shared.label, shared.metadataValue]}>{item}</Text>
             </Pressable>;
           })}
         </View>
@@ -491,7 +492,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     borderWidth: 1, borderColor: colors.line },
   popupContent: { gap: 14, padding: 20 },
   field: { gap: 6 },
-  detailLabel: { fontWeight: '700' },
   decisionActions: { justifyContent: 'flex-end' },
   requestCard: { gap: 4 },
   deletable: { minHeight: 58 },

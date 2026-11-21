@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { WorkspaceNotifications } from '../features/notifications/WorkspaceNotifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
@@ -41,6 +41,9 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
   const header = useRef<ComponentRef<typeof View>>(null);
   const { width, fontScale } = useWindowDimensions();
   const showWorkspaceBrand = width >= 660 * Math.max(fontScale, 1);
+  // Snap the stroke and gap separately so each line starts at the same offset on the pixel grid.
+  const menuGap = PixelRatio.roundToNearestPixel(4);
+  const menuLineSize = { width: PixelRatio.roundToNearestPixel(18), height: PixelRatio.roundToNearestPixel(2) };
   const brandDetails = (
     <View style={styles.brandDetails}>
       <Text style={styles.brandName}>Marchix</Text>
@@ -58,10 +61,8 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
         <View style={styles.headerSide}>
           <Pressable accessibilityRole="button" accessibilityLabel="Mở menu"
             accessibilityState={{ expanded: menuOpen }} onPress={onOpenMenu}
-            style={({ pressed }) => [styles.headerButton, styles.menuButton, pressed && screenStyles.dimmed]}>
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
+            style={({ pressed }) => [styles.headerButton, { gap: menuGap }, pressed && screenStyles.dimmed]}>
+            {[0, 1, 2].map(line => <View key={line} aria-hidden style={[styles.menuLine, menuLineSize]} />)}
           </Pressable>
           {showWorkspaceBrand && brandDetails}
         </View>
@@ -94,8 +95,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   clockTime: { color: colors.ink, fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] },
   headerButton: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.accentSoft,
     alignItems: 'center', justifyContent: 'center' },
-  menuButton: { gap: 4 },
-  menuLine: { width: 18, height: 2, borderRadius: 1, backgroundColor: colors.accent },
+  menuLine: { flexShrink: 0, borderRadius: 1, backgroundColor: colors.accent },
   logo: { width: 56, height: 56, transform: [{ scale: 1.4 }] },
   brandDetails: { flex: 1, minWidth: 76 },
   brandName: { fontSize: 19, fontWeight: '800', color: colors.ink },

@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { createThemedStyles } from './theme';
+import { createThemedStyles, metadataValueStyle } from './theme';
 
 export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
   scroll: { alignItems: 'center', padding: 20 },
@@ -18,7 +18,8 @@ export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: '700', color: colors.ink },
   body: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  metadataLabel: { color: colors.metadataLabel },
+  metadataLabel: { color: colors.metadataLabel, fontWeight: '700' },
+  metadataValue: metadataValueStyle(colors),
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -26,7 +27,7 @@ export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
     borderColor: colors.line, borderRadius: 9 },
   selected: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   input: { minHeight: 44, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
-    paddingHorizontal: 12, color: colors.ink, fontSize: 16, backgroundColor: colors.paper },
+    paddingHorizontal: 12, fontSize: 16, backgroundColor: colors.paper },
   messageInput: { minHeight: 90, paddingVertical: 10, textAlignVertical: 'top' },
   detailRow: { gap: 3, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10 },
   secondary: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line },
@@ -38,6 +39,6 @@ export const useInformationStyles = createThemedStyles(colors => StyleSheet.crea
     borderColor: colors.line, backgroundColor: colors.paper },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   divider: { borderTopWidth: 1, borderTopColor: colors.line },
-  label: { width: '44%', color: colors.ink, fontSize: 14, lineHeight: 22, fontWeight: '700' },
-  value: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 15, lineHeight: 22, textAlign: 'right' },
+  label: { width: '44%', color: colors.metadataLabel, fontSize: 14, lineHeight: 22, fontWeight: '700' },
+  value: { ...metadataValueStyle(colors), flex: 1, minWidth: 0, fontSize: 15, lineHeight: 22, textAlign: 'right' },
 }));

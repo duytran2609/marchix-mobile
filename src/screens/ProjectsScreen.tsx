@@ -167,7 +167,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
 function Detail({ label, value }: { label: string; value?: string }) {
   const styles = useScreenStyles();
   return <Text selectable style={styles.muted}>
-    <Text style={[local.metaLabel, styles.metadataLabel]}>{label}: </Text>{value || 'Chưa cập nhật'}
+    <Text style={styles.metadataLabel}>{label}: </Text>{value || 'Chưa cập nhật'}
   </Text>;
 }
 
@@ -181,5 +181,4 @@ const local = StyleSheet.create({
   detailTab: { flex: 1.45 },
   tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   metadata: { gap: 4 },
-  metaLabel: { fontWeight: '700' },
 });

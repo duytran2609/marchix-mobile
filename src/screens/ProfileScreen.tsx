@@ -8,13 +8,20 @@ import type { MemberSession } from '../features/auth/useSession';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 
-export function ProfileScreen({ name, email, photoURL, isAdmin }: Pick<MemberSession, 'name' | 'email' | 'photoURL' | 'isAdmin'>) {
+const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+export function ProfileScreen({ name, email, photoURL, isAdmin, accountCreatedAt }:
+  Pick<MemberSession, 'name' | 'email' | 'photoURL' | 'isAdmin' | 'accountCreatedAt'>) {
   const styles = useScreenStyles();
   const editStyles = useEditStyles();
   const { colors } = useTheme();
   const showToast = useToast();
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
+  const createdAt = Date.parse(accountCreatedAt ?? '');
+  const activityDays = Number.isFinite(createdAt)
+    ? Math.max(0, Math.floor((Date.now() - createdAt) / millisecondsPerDay))
+    : null;
 
   async function changeAvatar() {
     if (pending.current) return;
@@ -46,16 +53,21 @@ export function ProfileScreen({ name, email, photoURL, isAdmin }: Pick<MemberSes
             </View>
           </Pressable>
         </View>
-        <Text style={[styles.cardTitle, layout.name]}>{name}</Text>
+        <View style={layout.identityText}>
+          <Text style={[styles.cardTitle, layout.name]}>{name}</Text>
+          <Text style={[styles.body, styles.metadataValue, layout.role]}>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</Text>
+        </View>
       </View>
       <View style={styles.panel}>
         <View style={layout.detail}>
-          <Text style={[styles.label, layout.label]}>Email Google</Text>
-          <Text selectable style={[styles.body, layout.value]}>{email}</Text>
+          <Text style={[styles.label, styles.metadataLabel, layout.label]}>Email</Text>
+          <Text selectable style={[styles.body, styles.metadataValue, layout.value]}>{email}</Text>
         </View>
         <View style={[styles.detailRow, layout.detail]}>
-          <Text style={[styles.label, layout.label]}>Vai trò</Text>
-          <Text style={[styles.body, layout.value]}>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</Text>
+          <Text style={[styles.label, styles.metadataLabel, layout.label]}>Thời gian hoạt động</Text>
+          <Text style={[styles.body, styles.metadataValue, layout.value]}>
+            {activityDays === null ? 'Chưa có dữ liệu' : `${activityDays.toLocaleString('vi-VN')} ngày`}
+          </Text>
         </View>
       </View>
     </>
@@ -67,7 +79,9 @@ const layout = StyleSheet.create({
   avatar: { position: 'relative', padding: 4 },
   editButton: { position: 'absolute', right: 0, bottom: 0, width: 44, height: 44,
     alignItems: 'flex-end', justifyContent: 'flex-end', borderRadius: 22 },
+  identityText: { alignItems: 'center', gap: 4, maxWidth: '100%' },
   name: { maxWidth: '100%', textAlign: 'center', fontSize: 22 },
+  role: { textAlign: 'center' },
   detail: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   label: { maxWidth: '45%' },
   value: { flex: 1, minWidth: 0, textAlign: 'right' },

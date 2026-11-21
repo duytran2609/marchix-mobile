@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { createThemedStyles } from '../theme/theme';
+import { createThemedStyles, metadataValueStyle } from '../theme/theme';
 
 export function ChoiceButtons<T extends string>({ items, value, onChange, disabled }: {
   items: readonly { value: T; label: string; disabled?: boolean }[]; value: T; onChange: (value: T) => void; disabled: boolean;
@@ -9,7 +9,7 @@ export function ChoiceButtons<T extends string>({ items, value, onChange, disabl
     <Pressable key={item.value} accessibilityRole="radio" aria-checked={value === item.value}
       onPress={() => onChange(item.value)} disabled={disabled || item.disabled}
       style={[styles.choice, value === item.value && styles.highlight, item.disabled && styles.disabled]}>
-      <Text style={[styles.label, value === item.value && styles.selectedLabel]}>{item.label}</Text>
+      <Text style={styles.label}>{item.label}</Text>
     </Pressable>
   ))}</View>;
 }
@@ -20,6 +20,5 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     borderColor: colors.line, paddingHorizontal: 10 },
   highlight: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   disabled: { opacity: 0.5 },
-  label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
-  selectedLabel: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+  label: { ...metadataValueStyle(colors), fontSize: 14 },
 }));

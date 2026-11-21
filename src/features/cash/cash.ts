@@ -139,7 +139,7 @@ export function cashTotals(rows: Cash[]) {
       const key = row.category || 'Chi khác';
       categories.set(key, (categories.get(key) ?? 0) + amount);
     }
-    if (row.type === 'chi' && (status === 'Chờ duyệt' || status === 'Chờ chi')) pending += amount;
+    if (row.type === 'chi' && status === 'Chờ duyệt') pending += amount;
   }
   return { income, expense, pending, categories: [...categories].sort((a, b) => b[1] - a[1]) };
 }

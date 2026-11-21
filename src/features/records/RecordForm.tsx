@@ -206,8 +206,8 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       {attachment && <>
         <View style={existing ? undefined : [popup.fileCard, { borderColor: colors.line }]}>
           <AttachmentLabel file={attachment}>
-            <Text style={styles.body}>{attachment.name}</Text>
-            {!existing && <Text style={styles.muted}>{formatFileSize(attachment.size)}</Text>}
+            <Text style={[styles.body, styles.metadataValue]}>{attachment.name}</Text>
+            {!existing && <Text style={[styles.muted, styles.metadataValue]}>{formatFileSize(attachment.size)}</Text>}
           </AttachmentLabel>
         </View>
         <View style={[styles.choices, !existing && popup.rightActions]}>

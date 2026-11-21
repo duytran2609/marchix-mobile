@@ -41,6 +41,8 @@ function TaskMetadata({ task, email, name, members, project }: {
 }) {
   const styles = useStyles();
   const information = useInformationStyles();
+  const textStyles = useScreenStyles();
+  const personNameStyle = [styles.metadataName, textStyles.metadataValue];
   const watchers = Array.isArray(task.watchers) ? task.watchers : [];
   const assignee = task.assignee?.trim();
   const assigner = task.assignedBy?.trim();
@@ -56,13 +58,13 @@ function TaskMetadata({ task, email, name, members, project }: {
   const fields = [
     ['Hạng mục', task.category?.trim() || 'Chưa xác định'],
     ['Người giao việc', assigner
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(assigner)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(assigner)]} textStyle={personNameStyle} /> : 'Chưa rõ'],
     ['Người thực hiện', task.assigneeEmail || assignee
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.assigneeEmail, assignee)]} textStyle={styles.metadataName} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.assigneeEmail, assignee)]} textStyle={personNameStyle} /> : 'Chưa rõ'],
     ['Người duyệt', task.approverEmail
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.approverEmail)]} textStyle={styles.metadataName} /> : 'Chưa chỉ định'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.approverEmail)]} textStyle={personNameStyle} /> : 'Chưa chỉ định'],
     ['Người theo dõi', watchers.length
-      ? <PeopleSummary wrap wrapAlignEnd people={watchers.map(personEmail => person(personEmail))} textStyle={styles.metadataName} /> : 'Chưa chọn'],
+      ? <PeopleSummary wrap wrapAlignEnd people={watchers.map(personEmail => person(personEmail))} textStyle={personNameStyle} /> : 'Chưa chọn'],
     ['Dự án', project || task.projectId || 'Chung toàn công ty'],
     ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
     ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
@@ -223,9 +225,9 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     }} />
   </>;
   const description = tab === 'description' && <View style={screenStyles.stack}>
-    <Text accessibilityRole="header" style={screenStyles.cardTitle}>Mô tả / Yêu cầu bàn giao</Text>
+    <Text accessibilityRole="header" style={[screenStyles.cardTitle, screenStyles.metadataLabel]}>Mô tả / Yêu cầu bàn giao</Text>
     <View style={[information.panel, styles.taskNote]}>
-      {liveTask.note ? <Text selectable style={screenStyles.body}>{liveTask.note}</Text>
+      {liveTask.note ? <Text selectable style={[screenStyles.body, screenStyles.metadataValue]}>{liveTask.note}</Text>
         : <EmptyState icon="note" message="Chưa có mô tả hoặc yêu cầu bàn giao." />}
     </View>
   </View>;
@@ -244,7 +246,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
             onPress={() => setProgressDraft(draft => ({ ...draft, status: value }))}
             disabled={!!busy}
             style={[screenStyles.choice, value === status && screenStyles.selected]}>
-            <Text style={screenStyles.label}>{value}</Text>
+            <Text style={[screenStyles.label, screenStyles.metadataValue]}>{value}</Text>
           </Pressable>
         ))}
       </View>
@@ -281,8 +283,8 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
                 <Text style={screenStyles.label}>{checked ? '✓' : ''}</Text>
               </View>
               <Text style={[screenStyles.body, styles.grow]}>{label || `Việc con ${index + 1}`}</Text>
-              <Text style={screenStyles.muted}>
-                <Text style={[screenStyles.metadataLabel, { fontWeight: '700' }]}>Khối lượng:</Text>{' '}{checklistWeight(item.weight)}
+              <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
+                <Text style={screenStyles.metadataLabel}>Khối lượng: </Text>{checklistWeight(item.weight)}
               </Text>
             </Pressable>
           );
@@ -310,12 +312,13 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     {liveTask.rating || liveTask.reviewNote ? (
       <View style={screenStyles.panel}>
         <Text accessibilityRole="header" style={screenStyles.cardTitle}>Kết quả duyệt</Text>
-        {liveTask.rating ? <Text style={screenStyles.label}>{liveTask.rating}</Text> : null}
-        {liveTask.reviewNote ? <Text style={screenStyles.body}>{liveTask.reviewNote}</Text> : null}
+        {liveTask.rating ? <Text style={[screenStyles.body, screenStyles.metadataValue]}>{liveTask.rating}</Text> : null}
+        {liveTask.reviewNote ? <Text style={[screenStyles.body, screenStyles.metadataValue]}>{liveTask.reviewNote}</Text> : null}
       </View>
     ) : null}
   </>;
-  const discussion = <View style={tab !== 'discussion' && styles.hidden}>
+  const discussion = <View style={[screenStyles.stack, tab !== 'discussion' && styles.hidden]}>
+    <Text accessibilityRole="header" style={screenStyles.cardTitle}>Trao đổi</Text>
     <TaskDiscussion task={liveTask} email={email} name={name} members={members} />
   </View>;
 
@@ -414,7 +417,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskNote: { paddingVertical: 20 },
   hidden: { display: 'none' },
-  metadataName: { fontSize: 15, lineHeight: 22, fontWeight: '400', textAlign: 'right' },
+  metadataName: { fontSize: 15, lineHeight: 22, textAlign: 'right' },
   checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: colors.line, borderRadius: 5,
     alignItems: 'center', justifyContent: 'center' },

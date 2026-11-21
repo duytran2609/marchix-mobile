@@ -147,19 +147,19 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                 style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
                 <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
                 <Text style={styles.badge}>{recordStates[row.status]}</Text>
-                <Text style={styles.muted}>
+                <Text style={[styles.muted, styles.metadataValue]}>
                   <Text style={[styles.label, styles.metadataLabel]}>Số văn bản: </Text>
                   {recordNumber(row)}
                 </Text>
-                <Text style={styles.muted}>
+                <Text style={[styles.muted, styles.metadataValue]}>
                   <Text style={[styles.label, styles.metadataLabel]}>Loại văn bản: </Text>
                   {recordKinds[row.kind ?? 'letter']}
                 </Text>
-                <Text style={styles.muted}>
+                <Text style={[styles.muted, styles.metadataValue]}>
                   <Text style={[styles.label, styles.metadataLabel]}>{row.direction === 'in' ? 'Nơi gửi: ' : 'Nơi nhận: '}</Text>
                   {row.partner || '—'}
                 </Text>
-                <Text style={styles.muted}>
+                <Text style={[styles.muted, styles.metadataValue]}>
                   <Text style={[styles.label, styles.metadataLabel]}>Người phụ trách: </Text>
                   {assignee(row)}
                 </Text>
@@ -188,13 +188,17 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
               <KeyboardScrollView style={editing ? local.formScroll : local.flex} keyboardShouldPersistTaps="handled"
                 contentContainerStyle={local.body}>
                 {editing ? editor : selected ? <View style={styles.stack}>
-                  <Text style={styles.badge}>{recordBooks[selected.direction]}</Text>
-                  <Text accessibilityRole="header" style={styles.cardTitle}>{selected.subject || 'Hồ sơ văn thư'}</Text>
+                  <View style={[local.detailInset, local.detailHeading]}>
+                    <Text accessibilityRole="header" style={styles.heading}>{selected.subject || 'Hồ sơ văn thư'}</Text>
+                    <View style={local.detailTags}>
+                      <Text style={styles.badge}>{recordStates[selected.status]}</Text>
+                      <Text style={styles.muted}>{recordBooks[selected.direction]}</Text>
+                    </View>
+                  </View>
                   {[
                     ['Số văn bản', recordNumber(selected)],
                     ['Mã hồ sơ', recordSystemCode(selected, today)],
                     ['Loại văn bản', recordKinds[selected.kind ?? 'letter']],
-                    ['Trạng thái', recordStates[selected.status]],
                     [selected.direction === 'in' ? 'Nơi gửi' : 'Nơi nhận', selected.partner],
                     ['Số bên gửi', selected.direction === 'in' ? selected.externalNumber : undefined],
                     ['Phụ trách', assignee(selected)],
@@ -207,7 +211,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                   ].filter(([, value]) => value).map(([label, value]) => (
                     <View key={label} style={[styles.detailRow, local.detailInset]}>
                       <Text style={[styles.label, styles.metadataLabel]}>{label}</Text>
-                      <Text selectable style={styles.body}>{value}</Text>
+                      <Text selectable style={[styles.body, styles.metadataValue]}>{value}</Text>
                     </View>
                   ))}
                   <View style={[styles.detailRow, local.detailInset]}>
@@ -267,12 +271,25 @@ function RecordHistory({ rows, names, onSelect }: {
     <PaginatedList items={entries}>
       {pageItems => pageItems.map(({ row, event }) => (
         <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
-          onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, pressed && styles.dimmed]}>
-          <ClickableCardHeader><Text style={styles.muted}>{recordBooks[row.direction]} · {recordNumber(row)}</Text></ClickableCardHeader>
-          <Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text>
-          <Text style={styles.label}>{recordStates[event.to]}</Text>
-          <Text style={styles.muted}>{names.get(event.actor) ?? event.actor} · {formatVietnamDateTime(event.at)}</Text>
-          {!!event.note && <Text style={styles.body}>{event.note}</Text>}
+          onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
+          <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
+          <View style={local.detailTags}>
+            <Text style={styles.badge}>{event.from ? recordStates[event.from] : 'Chưa vào sổ'}</Text>
+            <Text style={styles.muted} accessibilityLabel="chuyển sang">→</Text>
+            <Text style={styles.badge}>{recordStates[event.to]}</Text>
+          </View>
+          {[
+            ['Sổ văn thư', recordBooks[row.direction]],
+            ['Số văn bản', recordNumber(row)],
+            ['Người thực hiện', names.get(event.actor) ?? event.actor],
+            ['Thời điểm', formatVietnamDateTime(event.at)],
+            ['Ghi chú', event.note],
+          ].filter(([, value]) => value).map(([label, value]) => (
+            <Text key={label} style={styles.muted}>
+              <Text style={[styles.label, styles.metadataLabel]}>{label}: </Text>
+              <Text style={styles.metadataValue}>{value}</Text>
+            </Text>
+          ))}
         </Pressable>
       ))}
     </PaginatedList>
@@ -286,6 +303,8 @@ const local = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   body: { padding: 12 },
   detailInset: { marginStart: 8 },
+  detailHeading: { gap: 6 },
+  detailTags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   formContainer: { flexShrink: 1 },
   formScroll: { flexGrow: 0 },
   hidden: { display: 'none' },

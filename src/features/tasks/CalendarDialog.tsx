@@ -54,7 +54,7 @@ export function DateCalendarButton({ label, value, initialDay, min, max, disable
         if (Keyboard.isVisible()) Keyboard.dismiss();
         setOpen(true);
       }}>
-      <Text style={value ? ui.label : ui.muted}>{display}</Text>
+      <Text style={value ? [ui.muted, ui.metadataValue] : ui.muted}>{display}</Text>
       <Text aria-hidden style={styles.icon}>▦</Text>
     </Pressable>
     {open && <CalendarDialog title={label} onClose={close}>

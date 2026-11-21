@@ -62,7 +62,9 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
     const content = dialog.getByTestId('task-detail-scroll');
     const tab = (name: string) => dialog.getByRole('button', { name, exact: true });
     const height = () => dialog.evaluate(element => element.getBoundingClientRect().height);
-    await expect(dialog.getByText('Hạn chót', { exact: true })).toBeVisible();
+    const deadlineLabel = dialog.getByText('Hạn chót', { exact: true });
+    await expect(deadlineLabel).toHaveCSS('font-weight', '700');
+    await expect(deadlineLabel.locator('..').getByText('Chưa đặt', { exact: true })).toHaveCSS('font-weight', '500');
     const generalHeight = await height();
     const shortHeights = new Map<string, number>();
     for (const name of ['Mô tả', 'Trao đổi & tài liệu']) {
@@ -759,13 +761,35 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
 });
 
 test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò nhân viên', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(previewUrl);
+  const accountLookup = page.waitForResponse(response => response.url().includes('/accounts:lookup') && response.ok());
   await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  const { users } = await (await accountLookup).json();
+  const accountCreatedAt = Number(users[0].createdAt);
+  expect(accountCreatedAt).toBeGreaterThan(0);
 
   const openMenu = page.getByRole('button', { name: 'Mở menu' });
   const drawer = page.getByRole('dialog');
+  const menuLines = openMenu.locator(':scope > [aria-hidden="true"]');
+  await expect(menuLines).toHaveCount(3);
+  const [topLine, middleLine, bottomLine] = await menuLines.evaluateAll(lines => lines.map(line => {
+    const { width, height, x, y } = line.getBoundingClientRect();
+    return { width, height, x, y };
+  }));
+  expect(middleLine).toMatchObject({ width: topLine.width, height: topLine.height, x: topLine.x });
+  expect(bottomLine).toMatchObject({ width: topLine.width, height: topLine.height, x: topLine.x });
+  expect(middleLine.y - topLine.y).toBeCloseTo(bottomLine.y - middleLine.y);
   await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toHaveCount(0);
   await openMenu.click();
+  const drawerPanel = drawer.getByTestId('workspace-drawer');
+  const initialViewport = page.viewportSize()!;
+  for (const [width, drawerWidth] of [[320, 208], [390, 248], [430, 248], [768, 280]]) {
+    await page.setViewportSize({ ...initialViewport, width });
+    await expect(drawerPanel).toHaveCSS('width', `${drawerWidth}px`);
+    await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toBeInViewport({ ratio: 1 });
+  }
+  await page.setViewportSize(initialViewport);
   const items = drawer.getByRole('button');
   const labels = [
     'Đóng menu', 'Web Quản lý Marchix ↗', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
@@ -777,10 +801,22 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
   await expect(drawer).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Thông tin cá nhân' })).toBeVisible();
-  await expect(page.getByText('Nhân viên demo', { exact: true })).toBeVisible();
-  await expect(page.getByText('nhanvien@example.test', { exact: true })).toBeVisible();
-  await expect(page.getByText('Nhân viên', { exact: true })).toBeVisible();
-  await expect(page.getByText('nhanvien@example.test', { exact: true })).toHaveCSS('text-align', 'right');
+  const profileName = page.getByText('Nhân viên demo', { exact: true });
+  await expect(profileName).toBeVisible();
+  const role = profileName.locator('..').getByText('Nhân viên', { exact: true });
+  await expect(role).toBeVisible();
+  expect((await role.boundingBox())!.y).toBeGreaterThan((await profileName.boundingBox())!.y);
+  const emailLabel = page.getByText('Email', { exact: true });
+  const emailValue = page.getByText('nhanvien@example.test', { exact: true });
+  await expect(emailValue).toBeVisible();
+  const activity = page.getByText('Thời gian hoạt động', { exact: true }).locator('..');
+  const activityDays = Math.floor((Date.now() - accountCreatedAt) / (24 * 60 * 60 * 1000));
+  await expect(activity.getByText(`${activityDays.toLocaleString('vi-VN')} ngày`, { exact: true })).toBeVisible();
+  await expect(emailValue).toHaveCSS('text-align', 'right');
+  await expect(emailLabel).toHaveCSS('font-weight', '700');
+  await expect(emailLabel).toHaveCSS('color', 'rgb(0, 0, 0)');
+  await expect(emailValue).toHaveCSS('font-weight', '500');
+  await expect(emailValue).toHaveCSS('color', 'rgb(100, 90, 116)');
   const chooseAvatar = page.waitForEvent('filechooser');
   const changeAvatar = page.getByRole('button', { name: 'Đổi ảnh đại diện' });
   await changeAvatar.click();
@@ -797,12 +833,19 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await expect(page.getByRole('tablist', { name: 'Nhóm cài đặt' }).getByRole('tab')).toHaveCount(1);
   await expect(page.getByRole('tab', { name: 'Chung' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('heading', { name: 'Cài đặt' })).toBeVisible();
+  const versionPanel = page.getByRole('heading', { name: 'Phiên bản ứng dụng' }).locator('..');
+  await expect(versionPanel.getByText('0.4.0', { exact: true })).toBeVisible();
   const appearance = page.getByRole('radiogroup', { name: 'Chế độ hiển thị' });
   const heading = page.getByRole('heading', { name: 'Cài đặt' });
+  const lightMode = appearance.getByRole('radio', { name: 'Sáng' });
+  const lightModeLabel = lightMode.getByText('Sáng', { exact: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(heading).toHaveCSS('color', 'rgb(245, 240, 252)');
-  await appearance.getByRole('radio', { name: 'Sáng' }).click();
+  await expect(lightModeLabel).toHaveCSS('color', 'rgb(196, 184, 212)');
+  await lightMode.click();
   await expect(heading).toHaveCSS('color', 'rgb(33, 25, 53)');
+  await expect(lightModeLabel).toHaveCSS('color', 'rgb(100, 90, 116)');
+  await expect(lightModeLabel).toHaveCSS('font-weight', '500');
   await appearance.getByRole('radio', { name: 'Tối' }).click();
   await expect(heading).toHaveCSS('color', 'rgb(245, 240, 252)');
   await page.getByRole('radio', { name: 'Trước 1 ngày' }).click();
@@ -815,6 +858,11 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await drawer.getByRole('button', { name: 'Cài đặt' }).click();
   await expect(appearance.getByRole('radio', { name: 'Tối' })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'Trước 1 ngày' })).toBeChecked();
+
+  await openMenu.click();
+  await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
+  await expect(emailLabel).toHaveCSS('color', 'rgb(245, 240, 252)');
+  await expect(emailValue).toHaveCSS('color', 'rgb(196, 184, 212)');
 
   await openMenu.click();
   await drawer.getByRole('button', { name: 'Phê duyệt' }).click();
@@ -920,7 +968,8 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
     await expect(page.getByText('45%', { exact: true })).toBeVisible();
     const grade = page.getByText('Xếp loại D');
     await expect(grade).toBeVisible();
-    await expect(grade.getByText('D', { exact: true })).toHaveCSS('font-weight', '700');
+    await expect(grade.getByText('Xếp loại', { exact: true })).toHaveCSS('font-weight', '700');
+    await expect(grade).toHaveCSS('font-weight', '500');
     await expect(pendingReview.getByText('2', { exact: true })).toBeVisible();
     await expect(completed.getByText('0', { exact: true })).toBeVisible();
     await openKpi(admin, 'Đăng nhập quản trị (mô phỏng)');
@@ -1283,9 +1332,26 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
 });
 
 test('Quản trị viên xem và mở được công việc của thành viên khác', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
   await openTasks(page);
+  for (const [label, background, color] of [
+    ['Chưa làm', 'rgb(240, 237, 249)', 'rgb(100, 90, 116)'],
+    ['Đang làm', 'rgb(228, 240, 253)', 'rgb(21, 80, 131)'],
+    ['Vướng', 'rgb(251, 232, 229)', 'rgb(158, 52, 43)'],
+    ['Chờ duyệt', 'rgb(253, 241, 215)', 'rgb(128, 81, 12)'],
+    ['Xong', 'rgb(221, 243, 237)', 'rgb(11, 97, 85)'],
+  ]) {
+    const card = page.getByLabel(new RegExp(`^${label}: \\d+ công việc$`));
+    const count = card.getByText(/^\d+$/);
+    await expect(card).toHaveCSS('background-color', background);
+    await expect(count).toHaveCSS('color', color);
+    const labelBox = await card.getByText(label, { exact: true }).boundingBox();
+    const countBox = await count.boundingBox();
+    expect(labelBox && countBox && countBox.y >= labelBox.y + labelBox.height).toBe(true);
+  }
+  await expect(page.getByLabel(/^(Chưa xong|Quá hạn|Đã xong): \d+ công việc$/)).toHaveCount(0);
   const title = 'Việc riêng của đồng nghiệp';
   await page.getByRole('button', { name: `Mở công việc: ${title}` }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -1410,6 +1476,60 @@ test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết',
   await expect(projectCard).toBeVisible();
 });
 
+test('Gantt dùng màu riêng và chạm để làm nổi bật từng công việc', async ({ page, request }) => {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const base = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks`;
+  const headers = { Authorization: 'Bearer owner' };
+  const email = 'nhanvien@example.test';
+  const start = `${todayInVietnam().slice(0, 7)}-01`;
+  const runId = Date.now();
+  const titles = [`Gantt kiểm thử A ${runId}`, `Gantt kiểm thử B ${runId}`];
+  const urls = titles.map((_, index) => `${base}/gantt-focus-${runId}-${index}`);
+  try {
+    for (const [index, url] of urls.entries()) {
+      const response = await request.patch(url, { headers, data: { fields: {
+        title: { stringValue: titles[index] }, assignedBy: { stringValue: email }, assigneeEmail: { stringValue: email },
+        status: { stringValue: 'Chưa làm' }, due: { stringValue: shiftDay(start, 1) },
+        ...(index === 0 ? { startDate: { stringValue: start } } : {}),
+      } } });
+      expect(response.ok()).toBe(true);
+    }
+    await page.goto(previewUrl);
+    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await openTasks(page);
+    await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
+    const [bar, marker] = titles.map(title => page.getByRole('button', { name: `Làm nổi bật trên biểu đồ: ${title}`, exact: true }));
+    const [first, second] = titles.map(title => page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true }));
+    await expect(bar).toBeVisible();
+    await expect(marker).toBeVisible();
+    const color = (element: Element) => getComputedStyle(element).backgroundColor;
+    const barColor = await bar.locator(':scope > div > div').first().evaluate(color);
+    const markerColor = await marker.locator(':scope > div').evaluate(color);
+    expect(barColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(barColor).not.toBe(markerColor);
+    await bar.tap();
+    await expect(bar).toHaveAttribute('aria-pressed', 'true');
+    await expect(first).toHaveCSS('opacity', '1');
+    await expect(second).toHaveCSS('opacity', '0.38');
+    await expect(marker).toHaveCSS('opacity', '0.38');
+    await marker.tap();
+    await expect(marker).toHaveAttribute('aria-pressed', 'true');
+    await expect(second).toHaveCSS('opacity', '1');
+    await expect(first).toHaveCSS('opacity', '0.38');
+    await expect(bar).toHaveCSS('opacity', '0.38');
+    await marker.tap();
+    await expect(marker).toHaveAttribute('aria-pressed', 'false');
+    await expect(first).toHaveCSS('opacity', '1');
+    await expect(bar).toHaveCSS('opacity', '1');
+    await first.click();
+    await expect(page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true }))
+      .toContainText(titles[0]);
+  } finally {
+    for (const url of urls) await request.delete(url, { headers });
+  }
+});
+
 test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm ứng', async ({ context, page }) => {
   const title = 'Kiểm tra giao diện Kanban với một tên công việc rất dài để xác nhận nội dung dừng ở đúng hai dòng trên điện thoại';
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
@@ -1424,12 +1544,24 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
   } }) });
   expect(fixture.ok).toBeTruthy();
   try {
+    await page.emulateMedia({ colorScheme: 'light' });
     await page.goto(previewUrl);
     await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
     await openTasks(page);
     const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
-    const placeholderColor = await search.evaluate(input => getComputedStyle(input, '::placeholder').color);
-    expect(placeholderColor).toBe('rgb(114, 114, 114)');
+    const placeholderStyle = () => search.evaluate(input => {
+      const { color, fontWeight } = getComputedStyle(input, '::placeholder');
+      return { color, fontWeight };
+    });
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(114, 114, 114)', fontWeight: '400' });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(163, 163, 163)', fontWeight: '400' });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await search.fill('Kiểm tra giao diện Kanban');
+    await expect(search).toHaveCSS('font-weight', '500');
+    await page.getByRole('button', { name: 'Xóa từ khóa tìm tên công việc' }).click();
+    await expect(search).toHaveValue('');
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(114, 114, 114)', fontWeight: '400' });
     await search.fill('Kiểm tra giao diện Kanban');
     const card = page.getByRole('button', { name: `Mở công việc: ${title}` });
     for (const mode of ['Danh sách', 'Bảng Kanban']) {
@@ -1686,7 +1818,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(received).toContainText('0%');
     await receiverPage.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
     const ganttDeadline = received.getByText(`Hạn chót: ${deadline}`, { exact: true });
-    await expect(ganttDeadline).toHaveCSS('font-weight', '400');
+    await expect(ganttDeadline).toHaveCSS('font-weight', '500');
     await expect(ganttDeadline.getByText('Hạn chót:', { exact: true })).toHaveCSS('font-weight', '700');
     const firstTick = receiverPage.getByLabel('Trục thời gian công việc').getByText(/^\d{2}\/\d{2}$/).first();
     await expect(firstTick.locator('..')).toHaveCSS('align-items', 'center');

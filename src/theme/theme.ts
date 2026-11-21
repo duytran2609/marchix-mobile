@@ -23,6 +23,10 @@ export const lightColors = {
 
 export type Palette = typeof lightColors;
 
+export function metadataValueStyle(colors: Palette) {
+  return { color: colors.muted, fontWeight: '500' as const };
+}
+
 export const darkColors: Palette = {
   background: '#181421',
   paper: '#241E32',

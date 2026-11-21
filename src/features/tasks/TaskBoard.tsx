@@ -13,6 +13,7 @@ import type { GanttRange } from './TaskGantt';
 import { TaskKanban } from './TaskKanban';
 import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
+import { taskStatusSummary } from './taskStatusSummary';
 import { searchByName } from '../../utils/search';
 import { listTaskAssignees, taskPriorities, taskStatuses } from './tasks';
 import type { AssignmentProject, Task, TaskAssignee } from './tasks';
@@ -85,9 +86,7 @@ const TaskCard = memo(function TaskCard({
         <View style={[styles.metadataRow, styles.dueRow]}>
           <Text selectable={selectable} style={styles.metadataText}>
             <Text style={styles.metaLabel}>Hạn chót: </Text>
-            <Text style={overdueLabel ? styles.danger : undefined}>
-              {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
-            </Text>
+            {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
           </Text>
           {overdueLabel ? (
             <View style={styles.overdueTag}>
@@ -154,12 +153,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
     (!priority || (task.priority || 'Chưa đặt') === priority) &&
     (project === null || (task.projectId || '') === project));
   const today = todayInVietnam();
-  const stats = [
-    { label: 'Chưa xong', value: scopedTasks.filter(isOpenTask).length, tone: statusTone('Đang làm', colors) },
-    { label: 'Quá hạn', value: scopedTasks.filter(task => daysOverdue(task, today) > 0).length, tone: statusTone('Vướng', colors) },
-    { label: 'Chờ duyệt', value: scopedTasks.filter(task => task.status === 'Chờ duyệt').length, tone: statusTone('Chờ duyệt', colors) },
-    { label: 'Đã xong', value: scopedTasks.filter(task => task.status === 'Xong').length, tone: { text: '#23613A', background: '#E5F5E9' } },
-  ] as const;
+  const stats = taskStatusSummary(scopedTasks);
   const filteredTasks = scopedTasks.filter(task => {
     const status = taskStatus(task);
     return filter === 'Tất cả' || filter === status ||
@@ -198,13 +192,15 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
   return (
     <View style={styles.board}>
       <View style={styles.stats}>
-        {stats.map(stat => (
-          <View key={stat.label} accessible accessibilityLabel={`${stat.label}: ${stat.value} công việc`}
-            style={[styles.stat, { backgroundColor: stat.tone.background }]}>
-            <Text style={[styles.statValue, { color: stat.tone.text }]}>{stat.value}</Text>
-            <Text style={[styles.statLabel, { color: stat.tone.text }]}>{stat.label}</Text>
-          </View>
-        ))}
+        {stats.map(({ status, tasks: statusTasks }) => {
+          const tone = statusTone(status, colors);
+          const count = statusTasks.length;
+          return <View key={status} accessible accessibilityLabel={`${status}: ${count} công việc`}
+            style={[styles.stat, width < 600 && styles.compactStat, { backgroundColor: tone.background }]}>
+            <Text style={[styles.statLabel, { color: tone.text }]}>{status}</Text>
+            <Text style={[styles.statValue, { color: tone.text }]}>{count}</Text>
+          </View>;
+        })}
       </View>
       <View style={styles.controls}>
         <View style={styles.filterRow}>
@@ -245,7 +241,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
       </View> : view === 'list' ? <PaginatedList items={visibleTasks} resetKey={JSON.stringify(options)}>
         {pageItems => pageItems.map(task => renderTaskCard(task, onOpen))}
       </PaginatedList> : view === 'gantt' ? (
-        <TaskGantt tasks={visibleTasks} today={today} range={ganttRange} onOpen={onOpen} />
+        <TaskGantt tasks={tasks} visibleTasks={visibleTasks} today={today} range={ganttRange} onOpen={onOpen} />
       ) : (
         <TaskKanban columns={columns} columnWidth={Math.min(290, width * 0.74)} email={member.email}
           columnColor={status => statusTone(status, colors).text} onOpen={onOpen} onDragChange={onDragChange}
@@ -257,15 +253,16 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   board: { gap: 12 },
-  stats: { flexDirection: 'row', gap: 8 },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   stat: { flex: 1, minWidth: 0, minHeight: 72, alignItems: 'center', gap: 3,
     paddingVertical: 10, paddingHorizontal: 6, borderWidth: 1, borderRadius: 13, borderColor: colors.line },
-  statValue: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
+  compactStat: { flexBasis: '30%' },
+  statValue: { fontSize: 28, fontWeight: '500', textAlign: 'center' },
   statLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   controls: { padding: 12, gap: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.paper },
   activeLabel: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   search: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
-    color: colors.ink, fontSize: 16 },
+    fontSize: 16 },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0 },
   halfFilterField: { flexBasis: '45%' },
@@ -281,8 +278,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },
   dueRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center', columnGap: 6 },
   metaLabel: { color: colors.metadataLabel, fontWeight: '700' },
-  metadataText: { color: colors.muted, fontSize: 13, lineHeight: 22, fontWeight: '400' },
-  danger: { color: colors.danger, fontWeight: '700' },
+  metadataText: { color: colors.muted, fontSize: 13, lineHeight: 22, fontWeight: '500' },
   overdueTag: { maxWidth: '100%', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.dangerSoft },
   overdueText: { color: colors.danger, fontSize: 11, lineHeight: 18, fontWeight: '700' },
 

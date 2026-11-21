@@ -4,7 +4,8 @@ import { PaginatedList } from '../../components/PaginatedList';
 import { EmptyState } from '../../components/EmptyState';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
 import { Button } from '../../components/Button';
@@ -327,9 +328,9 @@ export function AdminSettings({ tab, email, onScrollTop }: {
                 <View style={fieldStyles.memberDetails}>
                   <ClickableCardHeader><Text style={ui.label}>{name}</Text></ClickableCardHeader>
                   <View style={fieldStyles.metadata}>
-                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Email: </Text>{String(row.data.email || row.id)}</Text>
-                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
-                    <Text style={ui.muted}><Text style={[fieldStyles.metaLabel, ui.metadataLabel]}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
+                    <Text style={[ui.muted, ui.metadataValue]}><Text style={ui.metadataLabel}>Email: </Text>{String(row.data.email || row.id)}</Text>
+                    <Text style={[ui.muted, ui.metadataValue]}><Text style={ui.metadataLabel}>Vai trò: </Text>{row.data.role === 'admin' ? 'Quản trị' : 'Nhân viên'}</Text>
+                    <Text style={[ui.muted, ui.metadataValue]}><Text style={ui.metadataLabel}>Trạng thái: </Text>{row.data.enabled === false ? 'Đã khóa' : 'Đang hoạt động'}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -363,7 +364,6 @@ const fieldStyles = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberDetails: { flex: 1, minWidth: 0, gap: 5 },
   metadata: { gap: 5 },
-  metaLabel: { fontWeight: '700' },
 });
 
 const popup = StyleSheet.create({

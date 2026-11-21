@@ -29,7 +29,7 @@ import {
   taskCategoryMaxLength, taskCompletionModes, taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
 } from './tasks';
 import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee } from './tasks';
-import { createThemedStyles, useTheme } from '../../theme/theme';
+import { createThemedStyles, metadataValueStyle, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
 
 const quickDates = [
@@ -325,8 +325,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                   {allFiles.map((file, index) => <View key={'id' in file ? file.id : index - retained.length} style={styles.person}>
                     <View style={styles.personLabel}>
                       <AttachmentLabel file={file}>
-                        <Text style={styles.label}>{file.name}</Text>
-                        <Text style={styles.muted}>{formatFileSize(file.size)}</Text>
+                        <Text style={[styles.label, styles.attachmentValue]}>{file.name}</Text>
+                        <Text style={[styles.muted, styles.attachmentValue]}>{formatFileSize(file.size)}</Text>
                       </AttachmentLabel>
                     </View>
                     <Pressable accessibilityRole="button" accessibilityLabel={`Bỏ tệp ${file.name}`}
@@ -480,8 +480,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   addItem: { alignSelf: 'flex-end' },
   newItemRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  attachmentValue: metadataValueStyle(colors),
   input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderRadius: 9,
-    borderColor: colors.line, color: colors.ink, fontSize: 16 },
+    borderColor: colors.line, fontSize: 16 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,
     backgroundColor: colors.surfaceMuted, borderRadius: 9, minHeight: 48, borderWidth: 1, borderColor: colors.line },
   highlight: { borderColor: colors.accent, backgroundColor: colors.accentSoft },

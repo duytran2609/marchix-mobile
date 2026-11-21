@@ -9,7 +9,7 @@ import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
-import { formatDue } from '../features/tasks/taskDates';
+import { formatTaskDate } from '../features/tasks/taskDates';
 import { TaskProgress } from '../features/tasks/TaskProgress';
 import { checklistWeight } from '../features/tasks/checklistProgress';
 import { commentMaxLength, reviewRatings, reviewTaskCompletion, submissionVersion } from '../features/tasks/tasks';
@@ -61,19 +61,27 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
             keyboardShouldPersistTaps="handled">
             <View style={screenStyles.panel}>
               <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
-              <Text style={screenStyles.muted}>Người thực hiện · {task.assignee || task.assigneeEmail}</Text>
-              <Text style={screenStyles.muted}>{formatDue(task.due)}</Text>
-              {submittedAt ? <Text style={screenStyles.muted}>Gửi duyệt lúc {submittedAt}</Text> : null}
+              <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
+                <Text style={screenStyles.metadataLabel}>Người thực hiện · </Text>{task.assignee || task.assigneeEmail}
+              </Text>
+              <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
+                {task.due ? <><Text style={screenStyles.metadataLabel}>Hạn </Text>{formatTaskDate(task.due)}</> : 'Chưa đặt hạn'}
+              </Text>
+              {submittedAt ? <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
+                <Text style={screenStyles.metadataLabel}>Gửi duyệt lúc </Text>{submittedAt}
+              </Text> : null}
               <TaskProgress task={task} />
               {task.note ? <Text style={screenStyles.body}>{task.note}</Text> : null}
               {task.checklist?.map((item, index) => (
                 <Text key={index} style={screenStyles.body}>
-                  {item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`} · Khối lượng {checklistWeight(item.weight)}
+                  {item.done ? '✓' : '○'} {item.t || item.text || `Việc con ${index + 1}`} · <Text style={screenStyles.metadataValue}>
+                    <Text style={screenStyles.metadataLabel}>Khối lượng </Text>{checklistWeight(item.weight)}
+                  </Text>
                 </Text>
               ))}
               <View style={screenStyles.detailRow}>
-                <Text style={screenStyles.label}>Kết quả nhân viên gửi</Text>
-                {result?.text ? <Text style={screenStyles.body}>{result.text}</Text>
+                <Text style={[screenStyles.label, screenStyles.metadataLabel]}>Kết quả nhân viên gửi</Text>
+                {result?.text ? <Text style={[screenStyles.body, screenStyles.metadataValue]}>{result.text}</Text>
                   : <EmptyState icon="note" message="Không có ghi chú kết quả." />}
               </View>
             </View>
@@ -88,7 +96,7 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
                     <Pressable key={value} accessibilityRole="radio" aria-checked={value === rating}
                       accessibilityState={{ checked: value === rating, disabled: !!busy }} disabled={!!busy}
                       onPress={() => setRating(value)} style={[screenStyles.choice, value === rating && screenStyles.selected]}>
-                      <Text style={screenStyles.label}>{value}</Text>
+                      <Text style={[screenStyles.label, screenStyles.metadataValue]}>{value}</Text>
                     </Pressable>
                   ))}
                 </View>

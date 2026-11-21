@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
@@ -78,8 +79,8 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
             <PopupCloseButton label="Đóng biểu mẫu dự án" onPress={close} disabled={saving} />
           </View>
           <KeyboardScrollView style={popup.scroll} contentContainerStyle={popup.body} keyboardShouldPersistTaps="handled">
-            {!project && <Text selectable style={styles.muted}>
-              <Text style={popup.codeLabel}>Mã dự án: </Text>DA-{projectId}
+            {!project && <Text selectable style={[styles.muted, styles.metadataValue]}>
+              <Text style={styles.metadataLabel}>Mã dự án: </Text>DA-{projectId}
             </Text>}
             {fields.map(field => {
               const label = projectTextFields[field];
@@ -109,7 +110,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
               {projectStatuses.map(value => <Pressable key={value} accessibilityRole="button"
                 accessibilityState={{ selected: value === status, disabled: saving }} disabled={saving}
                 onPress={() => setStatus(value)} style={[styles.choice, value === status && styles.selected]}>
-                <Text style={styles.label}>{value}</Text>
+                <Text style={[styles.label, styles.metadataValue]}>{value}</Text>
               </Pressable>)}
             </View>
             <Text style={styles.label}>Trần vốn dự án (đ)</Text>
@@ -134,6 +135,5 @@ const usePopupStyles = createThemedStyles(colors => StyleSheet.create({
     paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   scroll: { flexShrink: 1, minHeight: 0 },
   body: { padding: 16, gap: 12 },
-  codeLabel: { color: colors.metadataLabel, fontWeight: '700' },
   field: { gap: 6 },
 }));

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createThemedStyles } from '../theme/theme';
+import { createThemedStyles, metadataValueStyle } from '../theme/theme';
 import { searchByName } from '../utils/search';
 import { MemberAvatar } from './MemberAvatar';
 import { PeopleSummary } from './PeopleSummary';
@@ -31,9 +31,9 @@ export function SearchableChoiceDropdown(props: ChoiceListProps & { title: strin
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={open && !disabled}
       disabled={disabled} onPress={() => { Keyboard.dismiss(); setOpen(true); }} style={styles.trigger}>
-      {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} decorative />
+      {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} textStyle={styles.value} decorative />
         : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
-      <Text aria-hidden style={styles.selected}>›</Text>
+      <Text aria-hidden style={styles.arrow}>›</Text>
     </Pressable>
     {open && !disabled && <Modal transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
       <KeyboardSafeAreaView style={styles.overlay}>
@@ -66,7 +66,7 @@ export function SearchableChoiceList({ items, selected, disabled, label, emptyMe
       return <Pressable key={item.id} accessibilityRole="checkbox" aria-checked={checked} disabled={disabled}
         accessibilityLabel={item.name} onPress={() => onToggle(item.id)} style={[styles.row, checked && styles.highlight]}>
         {showAvatar && <MemberAvatar name={item.name} photoURL={item.photoURL} />}
-        <Text style={[styles.label, checked && styles.selected]}>{item.name}{item.self ? ' (Bạn)' : ''}</Text>
+        <Text style={styles.label}>{item.name}{item.self ? ' (Bạn)' : ''}</Text>
         <Text aria-hidden style={[styles.mark, checked && styles.markChecked]}>{checked ? '✓' : ''}</Text>
       </Pressable>;
     })}
@@ -76,7 +76,7 @@ export function SearchableChoiceList({ items, selected, disabled, label, emptyMe
       {hiddenSelected.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Bỏ chọn ${item.name}`}
         onPress={() => onToggle(item.id)} disabled={disabled} style={styles.chip}>
         {showAvatar && <MemberAvatar name={item.name} photoURL={item.photoURL} />}
-        <Text style={styles.selected}>{item.name} ×</Text>
+        <Text style={styles.chipValue}>{item.name} ×</Text>
       </Pressable>)}
     </View>}
   </>;
@@ -99,12 +99,14 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   trigger: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12,
     borderRadius: 9, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
   input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderRadius: 9,
-    borderColor: colors.line, color: colors.ink, fontSize: 16 },
+    borderColor: colors.line, fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,
     backgroundColor: colors.surfaceMuted, borderRadius: 9, minHeight: 48, borderWidth: 1, borderColor: colors.line },
-  label: { flex: 1, color: colors.ink, fontSize: 14, fontWeight: '700' },
+  label: { ...metadataValueStyle(colors), flex: 1, fontSize: 14 },
+  value: metadataValueStyle(colors),
+  chipValue: { ...metadataValueStyle(colors), fontSize: 13 },
   highlight: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  selected: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+  arrow: { color: colors.accent, fontSize: 13, fontWeight: '800' },
   mark: { borderWidth: 1, borderColor: colors.line, width: 22, height: 22, lineHeight: 20, borderRadius: 5,
     color: colors.onAccent, textAlign: 'center', fontWeight: '800' },
   markChecked: { backgroundColor: colors.accent, borderColor: colors.accent },

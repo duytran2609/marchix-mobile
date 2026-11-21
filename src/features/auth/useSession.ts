@@ -6,7 +6,7 @@ import { rememberAccount } from './recentAccounts';
 
 export type MemberSession = {
   kind: 'member'; email: string; name: string; photoURL: string | null; isAdmin: boolean; hasReviewGrant: boolean;
-  canReadCash: boolean; canReviewCash: boolean; canReviewRequests: boolean;
+  canReadCash: boolean; canReviewCash: boolean; canReviewRequests: boolean; accountCreatedAt: string | undefined;
 };
 export type Session =
   | { kind: 'loading' | 'signed-out' | 'denied' | 'error' }
@@ -45,7 +45,7 @@ export function useSession() {
             rememberedName = name;
           }
           setSession(allowed
-            ? { kind: 'member', email, name, photoURL: user.photoURL, isAdmin,
+            ? { kind: 'member', email, name, photoURL: user.photoURL, isAdmin, accountCreatedAt: user.metadata.creationTime,
                 hasReviewGrant: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('taskReview')),
                 canReviewRequests: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('requestReview')),
                 canReadCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashRecord')),

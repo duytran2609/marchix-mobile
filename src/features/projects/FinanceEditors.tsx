@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
 import { NumberStepper } from '../../components/NumberStepper';

@@ -22,7 +22,7 @@ const money = (value: number | bigint | null, empty = 'Chưa đủ dữ liệu')
 function FinanceField({ label, value }: { label: string; value: string }) {
   const styles = useScreenStyles();
   return <Text selectable style={styles.muted}>
-    <Text style={[styles.metadataLabel, { fontWeight: '700' }]}>{label}: </Text>{value}
+    <Text style={styles.metadataLabel}>{label}: </Text>{value}
   </Text>;
 }
 

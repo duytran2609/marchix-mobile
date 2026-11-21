@@ -1,5 +1,7 @@
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createThemedStyles } from '../../theme/theme';
+import { useScreenStyles } from '../../theme/screenStyles';
+import { createThemedStyles, useTheme } from '../../theme/theme';
 import { mondayOf } from '../weekly-plan/weeklyPlan';
 import { formatTaskDate } from './taskDates';
 import { taskProgressValue } from './TaskProgress';
@@ -32,21 +34,20 @@ function schedule(task: Task) {
   return {};
 }
 
-export function TaskGantt({ tasks, today, range, onOpen }: {
-  tasks: Task[]; today: string; range: GanttRange;
+export function TaskGantt({ tasks, visibleTasks, today, range, onOpen }: {
+  tasks: Task[]; visibleTasks: Task[]; today: string; range: GanttRange;
   onOpen: (task: Task) => void;
 }) {
   const styles = useStyles();
+  const ui = useScreenStyles();
+  const { colors, dark } = useTheme();
+  const [selectedId, setSelectedId] = useState<string>();
+  const taskColors = useMemo(() => new Map(tasks.map(task => task.id).sort().map((id, index) => {
+    // The golden-angle step spreads neighboring tasks around the color wheel.
+    const hue = (245 + index * 137.508) % 360;
+    return [id, `hsl(${hue}, 65%, ${dark ? 68 : 40}%)`];
+  })), [tasks, dark]);
   const todayDay = Date.parse(today) / dayMs;
-  const rows = tasks.map(task => {
-    const dates = schedule(task);
-    const progress = taskProgressValue(task);
-    const labels = [];
-    if (dates.startDate) labels.push(`Bắt đầu: ${dates.startDate}`);
-    if (dates.deadline) labels.push(`Hạn chót: ${dates.deadline}`);
-    if (!labels.length) labels.push('Chưa đặt lịch');
-    return { task, progress, ...dates, hint: `${labels.join('. ')}. Tiến độ ${progress}%.` };
-  });
   const start = Date.parse(range === 'week' ? mondayOf(today) : `${today.slice(0, 7)}-01`) / dayMs;
   const nextMonth = new Date(start * dayMs);
   nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
@@ -54,6 +55,17 @@ export function TaskGantt({ tasks, today, range, onOpen }: {
   const timelineWidth = tickCount * tickWidth;
   const rangeEnd = start + tickCount;
   const todayTick = todayDay - start;
+  const rows = visibleTasks.map(task => {
+    const dates = schedule(task);
+    const progress = taskProgressValue(task);
+    const labels = [];
+    if (dates.startDate) labels.push(`Bắt đầu: ${dates.startDate}`);
+    if (dates.deadline) labels.push(`Hạn chót: ${dates.deadline}`);
+    if (!labels.length) labels.push('Chưa đặt lịch');
+    const inRange = dates.start !== undefined && dates.start < rangeEnd && (dates.end ?? dates.start) >= start;
+    return { task, progress, ...dates, inRange, hint: `${labels.join('. ')}. Tiến độ ${progress}%.` };
+  });
+  const activeId = rows.find(row => row.inRange && row.task.id === selectedId)?.task.id;
 
   return (
     <View style={styles.chart}>
@@ -62,12 +74,15 @@ export function TaskGantt({ tasks, today, range, onOpen }: {
         {rows.map(({ task, startDate, deadline, hint, progress }) => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
             accessibilityHint={hint}
-            onPress={() => onOpen(task)} style={({ pressed }) => [styles.nameRow, pressed && styles.pressed]}>
+            onPress={() => onOpen(task)} style={({ pressed }) => [styles.nameRow, pressed && styles.pressed,
+              activeId !== undefined && activeId !== task.id && styles.dimmed]}>
             <View style={styles.taskDetails}>
               <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-              {startDate ? <Text style={styles.dateLabel}>Bắt đầu: {startDate}</Text> : null}
-              {deadline ? <Text style={styles.dateLabel}>
-                <Text style={styles.deadlineLabel}>Hạn chót: </Text>{deadline}
+              {startDate ? <Text style={[styles.dateLabel, ui.metadataValue]}>
+                <Text style={ui.metadataLabel}>Bắt đầu: </Text>{startDate}
+              </Text> : null}
+              {deadline ? <Text style={[styles.dateLabel, ui.metadataValue]}>
+                <Text style={ui.metadataLabel}>Hạn chót: </Text>{deadline}
               </Text> : null}
               {!startDate && !deadline ? <Text style={styles.dateLabel}>Chưa đặt lịch</Text> : null}
             </View>
@@ -91,25 +106,32 @@ export function TaskGantt({ tasks, today, range, onOpen }: {
               <View key={index} style={[styles.gridLine, { left: index * tickWidth }]} />
             ))}
           </View>
-          {rows.map(({ task, start: taskStart, end, hint, progress }) => {
-            if (taskStart === undefined || (end ?? taskStart) < start || taskStart >= rangeEnd) {
+          {rows.map(({ task, start: taskStart, end, hint, progress, inRange }) => {
+            if (!inRange || taskStart === undefined) {
               return <View key={task.id} style={styles.timelineRow} />;
             }
             const visibleStart = Math.max(taskStart, start);
             const dayOffset = visibleStart - start;
             const isMarker = end === undefined;
-            const left = isMarker ? (dayOffset + 0.5) * tickWidth - 5 : dayOffset * tickWidth;
-            const width = isMarker ? 10 : (Math.min(end + 1, rangeEnd) - visibleStart) * tickWidth;
+            const left = isMarker ? (dayOffset + 0.5) * tickWidth - 22 : dayOffset * tickWidth;
+            const width = isMarker ? 44 : (Math.min(end + 1, rangeEnd) - visibleStart) * tickWidth;
             const completedThrough = isMarker ? taskStart : taskStart + (end - taskStart + 1) * progress / 100;
             const fillWidth = Math.min(width, Math.max(0, (completedThrough - visibleStart) * tickWidth));
+            const color = taskColors.get(task.id) ?? colors.accent;
+            const selected = activeId === task.id;
             return (
               <View key={task.id} style={styles.timelineRow}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc trên biểu đồ: ${task.title}`}
-                  accessibilityHint={hint} hitSlop={20}
-                  onPress={() => onOpen(task)}
-                  style={({ pressed }) => [isMarker ? styles.marker : styles.bar, { left, width }, pressed && styles.timelinePressed]}>
-                  {!isMarker && (
-                    <View pointerEvents="none" style={[styles.barFill, task.status === 'Xong' && styles.doneBar, { width: fillWidth }]} />
+                <Pressable accessibilityRole="button" accessibilityLabel={`Làm nổi bật trên biểu đồ: ${task.title}`}
+                  accessibilityHint={hint} aria-pressed={selected}
+                  onPress={() => setSelectedId(current => current === task.id ? undefined : task.id)}
+                  style={[styles.timelineButton, { left, width }, activeId !== undefined && !selected && styles.dimmed]}>
+                  {isMarker ? (
+                    <View pointerEvents="none" style={[styles.marker, { backgroundColor: color }]} />
+                  ) : (
+                    <View pointerEvents="none" style={styles.bar}>
+                      <View style={[StyleSheet.absoluteFill, styles.barTrack, { backgroundColor: color }]} />
+                      <View style={[styles.barFill, { width: fillWidth, backgroundColor: color }]} />
+                    </View>
                   )}
                 </Pressable>
               </View>
@@ -135,7 +157,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   taskTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   progressValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   dateLabel: { color: colors.muted, fontSize: 11 },
-  deadlineLabel: { fontWeight: '700' },
   timelineScroll: { flex: 1, minWidth: 0 },
   axis: { height: headerHeight, flexDirection: 'row', backgroundColor: colors.surfaceMuted,
     borderBottomWidth: 1, borderColor: colors.line },
@@ -145,9 +166,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   todayColumn: { position: 'absolute', top: headerHeight, bottom: 0, width: tickWidth,
     backgroundColor: colors.accentSoft, opacity: 0.65 },
   timelineRow: { height: rowHeight, justifyContent: 'center', borderBottomWidth: 1, borderColor: colors.line },
-  bar: { position: 'absolute', height: 14, borderRadius: 5, overflow: 'hidden', backgroundColor: colors.accentSoft },
-  barFill: { height: '100%', backgroundColor: colors.accent },
-  doneBar: { backgroundColor: colors.success },
-  marker: { position: 'absolute', height: 10, borderRadius: 5, backgroundColor: colors.accent },
-  timelinePressed: { opacity: 0.7 },
+  timelineButton: { position: 'absolute', height: 44, justifyContent: 'center' },
+  bar: { height: 14, borderRadius: 5, overflow: 'hidden' },
+  barTrack: { opacity: 0.54 },
+  barFill: { height: '100%' },
+  marker: { width: 10, height: 10, borderRadius: 5, alignSelf: 'center' },
+  dimmed: { opacity: 0.38 },
 }));

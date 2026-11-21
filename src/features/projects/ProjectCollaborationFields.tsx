@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { AttachmentLabel, FileTypeIcon } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
 import { FilePickerButton } from '../../components/FilePickerButton';
@@ -54,7 +55,7 @@ export function CollaborationFilePicker({ label, files, onChange, disabled, onPi
     <FilePickerButton label={label} accessibilityLabel={label} picking={picking} disabled={disabled}
       onPress={() => void pick()} hint="Tối đa 5 tệp, tổng 8 MB, mỗi tệp tối đa 5 MB." />
     {files.map((file, index) => <View key={index} style={styles.detailRow}>
-      <AttachmentLabel file={file}><Text style={styles.muted}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
+      <AttachmentLabel file={file}><Text style={[styles.muted, styles.metadataValue]}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
       <Button label={'Bỏ ' + file.name} secondary disabled={disabled || picking}
         onPress={() => onChange(files.filter((_, position) => position !== index))} />
     </View>)}

@@ -1,7 +1,8 @@
 import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../components/TextInput';
 import { ClickableCardHeader } from '../components/CardChevron';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
@@ -141,16 +142,15 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
         <Text accessibilityRole="alert" style={ui.error}>Không tải được công việc.</Text>
         <Button secondary label="Tải lại công việc" onPress={onRetryTasks} />
       </> : !tasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} /> : <>
-        <Text style={ui.body}><Text style={[ui.label, ui.metadataLabel]}>Việc gợi ý:</Text> {suggested.length}</Text>
+        <Text style={[ui.body, ui.metadataValue]}><Text style={[ui.label, ui.metadataLabel]}>Việc gợi ý:</Text> {suggested.length}</Text>
         {suggested.length === 0 && <EmptyState icon="calendar" message="Chưa có công việc đến hạn trong tuần này." />}
         {suggested.map(task => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityHint="Mở chi tiết công việc"
             onPress={() => onOpenTask(task.id)}
             style={({ pressed }) => [ui.detailRow, styles.task, pressed && ui.dimmed]}>
             <ClickableCardHeader><Text style={ui.label}>{task.title}</Text></ClickableCardHeader>
-            <Text style={ui.muted}>
-              <Text style={[ui.label, ui.metadataLabel]}>Trạng thái: </Text>
-              <Text style={task.status === 'Vướng' ? ui.error : undefined}>{taskStatus(task)}</Text>
+            <Text style={[ui.muted, ui.metadataValue]}>
+              <Text style={[ui.label, ui.metadataLabel]}>Trạng thái: </Text>{taskStatus(task)}
             </Text>
             <Text style={ui.muted}>
               <Text style={[ui.label, ui.metadataLabel]}>Hạn chót: </Text>{task.due ? formatTaskDate(task.due) : 'Chưa đặt'}

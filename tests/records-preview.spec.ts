@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test } from './helpers/startupReminder';
 import { devices, expect } from '@playwright/test';
 
@@ -55,9 +56,11 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
     const contents = await page.evaluate(async url => (await fetch(url!)).text(), source);
     expect(contents).toContain('(Marchix correspondence PDF) Tj');
     if (download) {
-      const downloaded = page.waitForEvent('download');
+      const downloadEvent = page.waitForEvent('download');
       await button('Tải xuống').click();
-      expect((await downloaded).suggestedFilename()).toBe('marchix.pdf');
+      const downloaded = await downloadEvent;
+      expect(downloaded.suggestedFilename()).toBe('marchix.pdf');
+      expect(await readFile(await downloaded.path())).toEqual(pdf);
     }
     await button('Đóng PDF').click();
   }
@@ -77,8 +80,17 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   const seededRecord = page.getByRole('button', { name: /Công văn xác nhận lịch bàn giao/ });
   const processing = page.getByRole('dialog', { name: 'Bắt đầu xử lý' });
   const note = `Đã liên hệ đối tác ${Date.now()}`;
+  const recordSearch = page.getByRole('textbox', { name: 'Tìm văn bản' });
+  await recordSearch.fill('Công văn xác nhận lịch bàn giao');
   await seededRecord.click();
-  await expect(detail.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' })).toBeVisible();
+  const subject = detail.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' });
+  const status = subject.locator('..').getByText('Đã giao', { exact: true });
+  await expect(subject).toBeVisible();
+  await expect(subject).toHaveCSS('font-size', '26px');
+  await expect(subject).toHaveCSS('font-weight', '800');
+  await expect(status).toBeVisible();
+  const [subjectBox, statusBox] = await Promise.all([subject.boundingBox(), status.boundingBox()]);
+  expect(statusBox!.y).toBeGreaterThanOrEqual(subjectBox!.y + subjectBox!.height);
   await expect(detail.getByText('Nhật ký xử lý')).toHaveCount(0);
   await button('Bắt đầu xử lý').click();
   await processing.getByLabel('Ghi chú xử lý').fill('Ghi chú đã hủy');
@@ -93,11 +105,20 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await button('Về sổ văn thư').click();
   await button('Lịch sử').click();
   await expect(page.getByText('Ghi chú đã hủy')).toHaveCount(0);
-  await page.getByText(note, { exact: true }).click();
+  const historyEntry = page.getByRole('button').filter({ has: page.getByText(note, { exact: true }) });
+  await expect(historyEntry.getByText('Đã giao', { exact: true })).toHaveCSS('border-radius', '8px');
+  await expect(historyEntry.getByText('→', { exact: true })).toBeVisible();
+  await expect(historyEntry.getByText('Đang xử lý', { exact: true })).toHaveCSS('border-radius', '8px');
+  for (const label of ['Sổ văn thư:', 'Số văn bản:', 'Người thực hiện:', 'Thời điểm:', 'Ghi chú:']) {
+    await expect(historyEntry.getByText(label, { exact: true })).toHaveCSS('font-weight', '700');
+  }
+  await expect(historyEntry.getByText(note, { exact: true })).toHaveCSS('font-weight', '500');
+  await historyEntry.click();
   await expect(detail.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' })).toBeVisible();
   await button('Về sổ văn thư').click();
   await expect(button('Lịch sử')).toHaveAttribute('aria-pressed', 'true');
   await button('Văn bản đến').click();
+  await recordSearch.clear();
   await button('+ Vào sổ').click();
   await expect(page.getByRole('dialog', { name: 'Vào sổ · Văn bản đến' })).toBeVisible();
   await expect(page.getByText('Ngày vào sổ', { exact: true })).toBeVisible();

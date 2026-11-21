@@ -1,6 +1,7 @@
+import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bytes } from 'firebase/firestore';
-import { Image, Modal, ScrollView, Text, View } from 'react-native';
+import { Image, Modal, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AttachmentLabel, FileTypeIcon } from '../../components/AttachmentLabel';
 import { Button } from '../../components/Button';
@@ -12,6 +13,16 @@ import { readRecordAttachment } from './recordStore';
 
 export type RecordAttachment = { bytes: Uint8Array; name: string; type: string };
 
+async function saveToDownloads(file: RecordAttachment) {
+  const { media } = await import('react-native-blob-util');
+  const uri = await media.createFile({ name: file.name, mimeType: file.type }, 'Download');
+  const destination = new File(uri);
+  await destination.write(file.bytes);
+  if (destination.size !== file.bytes.length) {
+    throw new Error('Tệp đã lưu không đủ dữ liệu.');
+  }
+}
+
 export function RecordAttachmentPreview({ file, onClose, embedded, downloadable }: {
   file: RecordAttachment; onClose: () => void; embedded?: boolean; downloadable?: boolean;
 }) {
@@ -20,6 +31,7 @@ export function RecordAttachmentPreview({ file, onClose, embedded, downloadable 
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [savedToDownloads, setSavedToDownloads] = useState(false);
   const saveLock = useRef(false);
   const pdf = file.type === 'application/pdf';
   const [imageUri] = useState(() => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
@@ -32,9 +44,15 @@ export function RecordAttachmentPreview({ file, onClose, embedded, downloadable 
     saveLock.current = true;
     setSaving(true);
     setError('');
+    setSavedToDownloads(false);
     try {
       const name = file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+$/, '_') || 'tep-dinh-kem';
-      await saveAttachmentBytes({ ...file, name }, 'Lưu tệp');
+      if (Platform.OS === 'android' && Platform.Version >= 29) {
+        await saveToDownloads({ ...file, name });
+        setSavedToDownloads(true);
+      } else {
+        await saveAttachmentBytes({ ...file, name }, 'Lưu tệp');
+      }
     } catch { setError('Không tải xuống được tệp. Vui lòng thử lại.'); }
     finally { saveLock.current = false; setSaving(false); }
   }
@@ -52,6 +70,9 @@ export function RecordAttachmentPreview({ file, onClose, embedded, downloadable 
             </ScrollView>
               : <Text style={styles.muted}>Định dạng này cần ứng dụng phù hợp để mở.</Text>}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {savedToDownloads && <Text accessibilityLiveRegion="polite" role="status" style={styles.body}>
+        Đã lưu tệp vào thư mục Tải xuống.
+      </Text>}
       <View style={styles.choices}>
         <Button label={pdf ? 'Đóng PDF' : 'Đóng xem trước'} secondary onPress={onClose} disabled={saving} />
         {downloadable && <Button label={saving ? 'Đang tải xuống…' : 'Tải xuống'} disabled={saving}

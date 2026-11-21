@@ -1,5 +1,6 @@
+import Constants from 'expo-constants';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../components/Toast';
 import { AdminSettings } from '../features/settings/AdminSettings';
@@ -56,7 +57,7 @@ function Options<T extends string>({ label, options, value, disabled, onSelect }
             ) : option.icon && (
               <Text aria-hidden style={[styles.label, optionStyles.icon]}>{option.icon}</Text>
             )}
-            <Text style={styles.label}>{option.label}</Text>
+            <Text style={[styles.label, styles.metadataValue]}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -79,24 +80,22 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
   return (
     <View style={styles.stack}>
       <PageHeader title="Cài đặt" />
-      <ScrollView horizontal style={[tabStyles.scroller, { backgroundColor: theme.colors.surfaceMuted }]}
-        contentContainerStyle={tabStyles.content}>
-        <View accessibilityRole="tablist" accessibilityLabel="Nhóm cài đặt" style={tabStyles.row}>
-          {(isAdmin ? allTabs : [generalTab]).map(tab => {
-            const selected = tab.id === activeTab.id;
-            return (
-              <Pressable key={tab.id} accessibilityRole="tab" aria-selected={selected}
-                onPress={() => { setSelectedTab(tab.id); onScrollTop(); }}
-                style={[tabStyles.tab, selected && { backgroundColor: theme.colors.paper }]}>
-                <Text style={[tabStyles.label, { color: theme.colors.muted },
-                  selected && { color: theme.colors.accent, fontWeight: '800' }]}>
-                  {tab.tabLabel}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+      <View accessibilityRole="tablist" accessibilityLabel="Nhóm cài đặt"
+        style={[tabStyles.row, { backgroundColor: theme.colors.surfaceMuted }]}>
+        {(isAdmin ? allTabs : [generalTab]).map(tab => {
+          const selected = tab.id === activeTab.id;
+          return (
+            <Pressable key={tab.id} accessibilityRole="tab" aria-selected={selected}
+              onPress={() => { setSelectedTab(tab.id); onScrollTop(); }}
+              style={[tabStyles.tab, selected && { backgroundColor: theme.colors.paper }]}>
+              <Text style={[tabStyles.label, { color: theme.colors.muted },
+                selected && { color: theme.colors.accent, fontWeight: '800' }]}>
+                {tab.tabLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       {adminTab ? (
         <View style={styles.panel}>
           <Text accessibilityRole="header" style={styles.cardTitle}>{adminTab.label}</Text>
@@ -116,6 +115,10 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
             <Options label="Thời điểm nhắc hạn" options={reminderOptions} value={reminders.value}
               disabled={!reminders.ready} onSelect={reminders.save} />
           </View>
+          <View style={styles.panel}>
+            <Text accessibilityRole="header" style={styles.cardTitle}>Phiên bản ứng dụng</Text>
+            <Text style={[styles.body, styles.metadataValue]}>{Constants.expoConfig?.version ?? 'Chưa xác định'}</Text>
+          </View>
         </>
       )}
     </View>
@@ -132,10 +135,8 @@ const optionStyles = StyleSheet.create({
 });
 
 const tabStyles = StyleSheet.create({
-  scroller: { borderRadius: 10, flexGrow: 0 },
-  content: { flexGrow: 1 },
-  row: { flexDirection: 'row', flexGrow: 1, gap: 4, padding: 3 },
-  tab: { flexGrow: 1, flexShrink: 0, minHeight: 44, paddingHorizontal: 6, paddingVertical: 8,
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 3, borderRadius: 10 },
+  tab: { flexGrow: 1, minHeight: 44, paddingHorizontal: 6, paddingVertical: 8,
     borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
 });

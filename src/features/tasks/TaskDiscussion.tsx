@@ -120,11 +120,8 @@ export function TaskDiscussion({ task, email, name, members }: {
 
   return (
     <View style={screenStyles.panel}>
-      <View style={styles.sectionHeader}>
-        <Text accessibilityRole="header" style={screenStyles.cardTitle}>Trao đổi</Text>
-        {messages.length > 0 && <Dropdown label="Sắp xếp theo thời gian" hideLabel style={styles.sortControl}
-          value={sort} choices={discussionSortChoices} onChange={setSort} highlightSelection={false} />}
-      </View>
+      {messages.length > 0 && <Dropdown label="Sắp xếp theo thời gian" hideLabel style={styles.sortControl}
+        value={sort} choices={discussionSortChoices} onChange={setSort} highlightSelection={false} />}
       {messages.length === 0 ? <EmptyState icon="chat" message="Chưa có trao đổi." /> : null}
       {orderedMessages.map(({ comment, index }) => {
         const member = members.get(comment.by);
@@ -191,8 +188,7 @@ function discussionFiles(comment: NonNullable<Task['comments']>[number]) {
 }
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  sortControl: { width: 172, maxWidth: '65%', flexShrink: 1 },
+  sortControl: { alignSelf: 'flex-end', width: 172, maxWidth: '65%' },
   attachment: { padding: 10, borderRadius: 9 },
   discussionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   discussionContent: { flex: 1, minWidth: 0, gap: 3 },

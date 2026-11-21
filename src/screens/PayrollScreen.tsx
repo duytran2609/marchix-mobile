@@ -192,10 +192,10 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
         {!!displayRows.length && <>
           <Text style={styles.cardTitle}>
             <Text style={styles.metadataLabel}>Tổng thực nhận: </Text>
-            <Text style={{ color: colors.accent, fontSize: 24, fontWeight: '800' }}>{total('net')}</Text>
+            <Text style={[styles.metadataValue, { fontSize: 24 }]}>{total('net')}</Text>
           </Text>
-          <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng thu nhập: </Text>{total('gross')}</Text>
-          <Text style={styles.body}><Text style={styles.metadataLabel}>Tổng chi phí: </Text>{total('companyCost')}</Text>
+          <Text style={[styles.body, styles.metadataValue]}><Text style={styles.metadataLabel}>Tổng thu nhập: </Text>{total('gross')}</Text>
+          <Text style={[styles.body, styles.metadataValue]}><Text style={styles.metadataLabel}>Tổng chi phí: </Text>{total('companyCost')}</Text>
         </>}
         {hasDraft &&
           <Button label="Chốt bảng lương" disabled={busy} onPress={() => {

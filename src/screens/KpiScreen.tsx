@@ -145,7 +145,7 @@ function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: b
       </View>
       <View style={styles.score}>
         <Text style={[styles.scoreValue, { color }]}>{row.pct === null ? '–' : `${row.pct}%`}</Text>
-        <Text style={ui.muted}>Xếp loại <Text style={styles.grade}>{grade}</Text></Text>
+        <Text style={[ui.muted, ui.metadataValue]}><Text style={ui.metadataLabel}>Xếp loại </Text>{grade}</Text>
       </View>
     </View>
     {row.pct !== null && <View style={styles.track}>
@@ -161,7 +161,7 @@ function KpiCard({ row, label, legacy }: { row: KpiRow; label: string; legacy: b
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' },
   filter: { flexGrow: 1, flexBasis: 125 },
-  rulesFrame: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 22, borderColor: colors.accent },
+  rulesFrame: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 22, borderColor: '#000000' },
   rulesExpanded: { alignSelf: 'stretch' },
   rulesButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
   rulesContent: { paddingHorizontal: 14, paddingBottom: 14, gap: 12 },
@@ -174,7 +174,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   person: { flexShrink: 1, gap: 4 },
   score: { alignItems: 'flex-end' },
   scoreValue: { fontSize: 25, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  grade: { fontWeight: '700' },
   track: { height: 6, backgroundColor: colors.surfaceMuted, borderRadius: 4, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 4 },
 }));

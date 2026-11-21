@@ -30,7 +30,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
 }) {
   const styles = useStyles();
   const { width } = useWindowDimensions();
-  const drawerWidth = Math.min(width * 0.75, 280);
+  const drawerWidth = width < 600 ? Math.min(width * 0.65, 248) : 280;
   const progress = useRef(new Animated.Value(0)).current;
   const logoutTrigger = useRef<ComponentRef<typeof Pressable>>(null);
   const [visible, setVisible] = useState(false);
@@ -81,7 +81,8 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
   return (
     <Modal transparent visible={open || visible} onRequestClose={dismiss} statusBarTranslucent navigationBarTranslucent>
       <View style={styles.overlay}>
-        <Animated.View aria-hidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        <Animated.View testID="workspace-drawer" aria-hidden={confirming}
+          importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
           style={[styles.drawer, { width: drawerWidth, transform: [{
           translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] }),
         }] }]}>

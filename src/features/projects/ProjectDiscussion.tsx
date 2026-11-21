@@ -136,10 +136,12 @@ function ProjectPostCard({ project, post, email, isAdmin, tasks, memberName, ope
     <Text selectable style={styles.body}>{post.body}</Text>
     {task && <Button label="Mở công việc liên quan" secondary onPress={() => onOpenTask(task)} />}
     <CollaborationFiles files={post.files} open={openFile} />
-    {!!post.mentions?.length && <Text style={styles.muted}>Cần phản hồi · {post.mentions.map(memberName).join(', ')}</Text>}
+    {!!post.mentions?.length && <Text style={[styles.muted, styles.metadataValue]}>
+      <Text style={styles.metadataLabel}>Cần phản hồi · </Text>{post.mentions.map(memberName).join(', ')}
+    </Text>}
     {!!post.conclusion && <View style={styles.detailRow}>
-      <Text style={styles.label}>Kết luận trao đổi</Text>
-      <Text selectable style={styles.body}>{post.conclusion}</Text>
+      <Text style={[styles.label, styles.metadataLabel]}>Kết luận trao đổi</Text>
+      <Text selectable style={[styles.body, styles.metadataValue]}>{post.conclusion}</Text>
     </View>}
     <View style={styles.choices}>
       <Button label={liked ? 'Đã thích' : 'Thích'} secondary selected={liked} disabled={action.busy}

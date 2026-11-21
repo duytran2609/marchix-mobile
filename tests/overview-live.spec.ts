@@ -1,6 +1,7 @@
 import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
 import { devices, expect, type Page } from '@playwright/test';
 import { todayInVietnam } from '../src/features/tasks/taskDates';
+import { taskStatuses } from '../src/features/tasks/taskStatuses';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium', actionTimeout: 10_000 });
 
@@ -50,8 +51,6 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await Promise.all([login(page), login(source)]);
 
     await navigate(source, 'Công việc');
-    const open = await source.getByLabel(/^Chưa xong: \d+ công việc$/).getAttribute('aria-label');
-    const pending = await source.getByLabel(/^Chờ duyệt: \d+ công việc$/).getAttribute('aria-label');
     // The admin task board contains the whole team; the overview ring contains
     // received/sent personal work. Compare each UI with its actual source scope.
     const taskSnapshot = await request.post(base + ':runQuery', { headers, data: {
@@ -61,10 +60,14 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     const taskDocuments = (await taskSnapshot.json()) as Array<{
       document?: { fields: Record<string, { stringValue?: string }> };
     }>;
-    const openTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : [])
-      .filter(fields => fields.status?.stringValue !== 'Xong');
-    expect(numberFrom(open ?? '') + numberFrom(pending ?? '')).toBe(openTasks.length);
-    const personalTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : []).filter(fields =>
+    const teamTasks = taskDocuments.flatMap(row => row.document ? [row.document.fields] : []);
+    const runningCount = teamTasks.filter(fields => fields.status?.stringValue === 'Đang làm').length;
+    const blockedCount = teamTasks.filter(fields => fields.status?.stringValue === 'Vướng').length;
+    for (const status of taskStatuses) {
+      const count = teamTasks.filter(fields => (fields.status?.stringValue || 'Chưa làm') === status).length;
+      await expect(source.getByLabel(`${status}: ${count} công việc`, { exact: true })).toBeVisible();
+    }
+    const personalTasks = teamTasks.filter(fields =>
       fields.assigneeEmail?.stringValue === admin || fields.assignedBy?.stringValue === admin);
     await expect(page.getByLabel(`${personalTasks.length} công việc`)).toBeVisible();
     const blocked = button(page, /^Vướng \d+$/);
@@ -82,6 +85,8 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await expect(button(page, new RegExp(task))).toHaveCount(0);
     await expect(projectRow).toContainText('65%');
     await button(source, 'Đóng chi tiết công việc').click();
+    await expect(source.getByLabel(`Vướng: ${blockedCount - 1} công việc`, { exact: true })).toBeVisible();
+    await expect(source.getByLabel(`Đang làm: ${runningCount + 1} công việc`, { exact: true })).toBeVisible();
     await navigate(source, 'Dự án');
     await button(source, /^Chọn dự án:/).click();
     await source.getByRole('radiogroup', { name: 'Chọn dự án' })

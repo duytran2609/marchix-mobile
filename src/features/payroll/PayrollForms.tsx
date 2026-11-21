@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components/TextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
@@ -38,7 +39,7 @@ export function PayBreakdown({ pay, employeeName, showTaxable, advances, onOpenA
       <View key={label} style={index > 0 && information.divider}>
         <View style={information.row}>
           <Text style={information.label}>{label}</Text>
-          <Text style={[information.value, label === 'Thực lĩnh' && styles.cardTitle]}>{value}</Text>
+          <Text style={information.value}>{value}</Text>
         </View>
         {label === 'Tạm ứng lương' && (advances?.length || advanceAmount > 0) ? (
           <View style={[styles.stack, { paddingBottom: 10 }]}>

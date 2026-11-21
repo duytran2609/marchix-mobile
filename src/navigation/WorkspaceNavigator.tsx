@@ -26,7 +26,8 @@ import { useTheme } from '../theme/theme';
 import type { WorkspaceRoute } from './workspaceRoutes';
 
 export function WorkspaceNavigator({
-  email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, route, setRoute, showAssignment, setShowAssignment, onDragChange, onScrollTop,
+  email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt,
+  route, setRoute, showAssignment, setShowAssignment, onDragChange, onScrollTop,
 }: Omit<MemberSession, 'kind'> & {
   route: WorkspaceRoute;
   setRoute: Dispatch<SetStateAction<WorkspaceRoute>>;
@@ -73,7 +74,8 @@ export function WorkspaceNavigator({
     setRoute({ screen: 'cho-duyet' });
   }
 
-  if (route.screen === 'ca-nhan') return <ProfileScreen email={email} name={name} photoURL={photoURL} isAdmin={isAdmin} />;
+  if (route.screen === 'ca-nhan') return <ProfileScreen email={email} name={name} photoURL={photoURL} isAdmin={isAdmin}
+    accountCreatedAt={accountCreatedAt} />;
   if (route.screen === 'tong-quan') return <OverviewScreen
     key={JSON.stringify([email, isAdmin, canReadCash, canReviewCash, canReviewRequests])}
     email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}

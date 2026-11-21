@@ -21,7 +21,7 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
 import { workspaceHeaderPadding, WorkspaceHeader } from './WorkspaceHeader';
 
-export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests }: Omit<MemberSession, 'kind'>) {
+export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt }: Omit<MemberSession, 'kind'>) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
@@ -114,6 +114,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
           route.screen === 'tong-quan' && styles.overviewPage]}>
           <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
+            accountCreatedAt={accountCreatedAt}
             canReadCash={canReadCash} canReviewCash={canReviewCash} canReviewRequests={canReviewRequests}
             route={route} setRoute={setRoute}
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}

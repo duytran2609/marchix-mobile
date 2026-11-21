@@ -31,6 +31,7 @@ export default function App() {
             {!configError && session.kind === 'member'
               ? <><MemberWorkspace key={session.email} email={session.email} name={session.name}
                   photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant}
+                  accountCreatedAt={session.accountCreatedAt}
                   canReadCash={session.canReadCash} canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests} />
                 {showLoginReminder && <StartupReminder key={JSON.stringify([
                   session.email, session.isAdmin, session.canReadCash, session.canReviewCash, session.canReviewRequests,
