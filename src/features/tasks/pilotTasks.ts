@@ -3,6 +3,7 @@ import {
   limit, query, runTransaction, where, writeBatch,
 } from 'firebase/firestore';
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
+import { taskRoleNotices } from '../../../functions/taskRoleNotices';
 import { auth, db, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import type { AssignmentInput, AttachmentUpload, ReviewRating, Task } from './tasks';
 import { checklistProgress as percent } from './checklistProgress';
@@ -75,12 +76,17 @@ function attach(writer: DocumentWriter, task: DocumentReference,
   });
 }
 
+function writeTaskNotice(writer: DocumentWriter, from: string, to: string,
+  taskId: string, title: string, body: string, createdAt: string) {
+  writer.set(doc(collection(db, 'notifications')),
+    { from, to, taskId, title, body, link: '#cong-viec', createdAt, read: false, emailed: false });
+}
+
 function notify(writer: DocumentWriter, from: string, recipients: (string | undefined)[],
   taskId: string, title: string, body: string, createdAt: string) {
   for (const to of new Set(recipients)) {
     if (!to || from === to) continue;
-    writer.set(doc(collection(db, 'notifications')),
-      { from, to, taskId, title, body, link: '#cong-viec', createdAt, read: false, emailed: false });
+    writeTaskNotice(writer, from, to, taskId, title, body, createdAt);
   }
 }
 
@@ -216,14 +222,14 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
           throw new Error('Hãy lưu thông tin công việc trước, rồi cập nhật trạng thái riêng.');
         }
       }
-      if (assigneeEmail !== task.assigneeEmail) notify(tx, by, [assigneeEmail], ref.id, 'Bạn được giao việc mới', input.title.trim(), now);
     } else if (task.status === 'Chờ duyệt' && input.approverEmail) {
       if (input.approverEmail === task.assigneeEmail || !people.get(input.approverEmail)?.canReview) {
         throw new Error('Người duyệt phải có quyền duyệt và khác người thực hiện.');
       }
       patch.approverEmail = input.approverEmail;
-      if (task.approverEmail !== input.approverEmail) notify(tx, by, [input.approverEmail], ref.id,
-        'Công việc chờ bạn duyệt', task.title, now);
+    }
+    for (const { to, title, body } of taskRoleNotices(task, { ...task, ...patch })) {
+      writeTaskNotice(tx, by, to, ref.id, title, body, now);
     }
     tx.update(ref, patch);
   });

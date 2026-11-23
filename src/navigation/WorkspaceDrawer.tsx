@@ -4,6 +4,7 @@ import type { ComponentRef } from 'react';
 import { Animated, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { avatarBorderStyle } from '../components/MemberAvatar';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { createThemedStyles } from '../theme/theme';
@@ -132,7 +133,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
                   {...(Platform.OS === 'web' && profileActive ? { 'aria-current': 'page' } : {})}
                   onPress={() => onSelect('ca-nhan')}
                   style={({ pressed }) => [styles.profileButton, profileActive && styles.selected, pressed && styles.pressed]}>
-                  <View style={styles.avatar} aria-hidden>
+                  <View style={styles.avatar} testID="member-avatar" aria-hidden>
                     {photoURL && photoURL !== failedPhoto
                       ? <Image source={{ uri: photoURL }} style={styles.avatarImage} onError={() => setFailedPhoto(photoURL)} />
                       : <Text style={styles.initials}>{initials}</Text>}
@@ -200,7 +201,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   profileButton: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center',
     gap: 8, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accentSoft },
+    backgroundColor: colors.accentSoft, ...avatarBorderStyle },
   avatarImage: { width: '100%', height: '100%' },
   initials: { color: colors.accent, fontSize: 16, fontWeight: '800' },
   profileDetails: { flex: 1, minWidth: 0, gap: 2 },

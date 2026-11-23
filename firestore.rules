@@ -103,12 +103,14 @@ service cloud.firestore {
     function validWorkSettings(data) {
       let time = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
       let day = [0, 0.5, 1];
+      let overrides = data.get('dayOverrides', {});
       return data.shiftIn.matches(time) && data.shiftOut.matches(time)
         && (data.lunchFrom == '' || data.lunchFrom.matches(time)) && (data.lunchTo == '' || data.lunchTo.matches(time))
         && (data.remindIn == '' || data.remindIn.matches(time)) && (data.remindOut == '' || data.remindOut.matches(time))
         && data.grace is int && data.grace >= 0
         && data.days['0'] in day && data.days['1'] in day && data.days['2'] in day && data.days['3'] in day
         && data.days['4'] in day && data.days['5'] in day && data.days['6'] in day
+        && overrides is map && overrides.values().hasOnly(day)
         && data.gpsOn is bool && data.gpsLat is number && data.gpsLat >= -90 && data.gpsLat <= 90
         && data.gpsLng is number && data.gpsLng >= -180 && data.gpsLng <= 180
         && (!data.gpsOn || data.gpsLat != 0 || data.gpsLng != 0)
@@ -119,7 +121,7 @@ service cloud.firestore {
 
     match /settings/work {
       function fields() {
-        return ['shiftIn', 'shiftOut', 'lunchFrom', 'lunchTo', 'remindIn', 'remindOut', 'grace', 'days',
+        return ['shiftIn', 'shiftOut', 'lunchFrom', 'lunchTo', 'remindIn', 'remindOut', 'grace', 'days', 'dayOverrides',
           'gpsOn', 'gpsLat', 'gpsLng', 'gpsRadius', 'emailOn', 'autoStart', 'requireReview', 'requireReportNote', 'updatedBy', 'updatedAt'];
       }
       allow get: if activeMember();

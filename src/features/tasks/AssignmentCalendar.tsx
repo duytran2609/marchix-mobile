@@ -8,9 +8,11 @@ const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 
 export const displayDay = (day: string) => day.split('-').reverse().join('/');
 
-export function AssignmentCalendar({ initialDay, value, rangeEnd = value, min, max, disabled, onSelect }: {
+export function AssignmentCalendar({ initialDay, value, rangeEnd = value, min, max, disabled, onSelect, onLongSelect, getDayMarker }: {
   initialDay: string; value: string; rangeEnd?: string; min?: string; max?: string; disabled: boolean;
   onSelect: (day: string) => void;
+  onLongSelect?: (day: string) => void;
+  getDayMarker?: (day: string) => { label: string; color: string } | undefined;
 }) {
   const styles = useStyles();
   const [month, setMonth] = useState(() => initialDay.slice(0, 7) + '-01');
@@ -56,11 +58,16 @@ export function AssignmentCalendar({ initialDay, value, rangeEnd = value, min, m
             const day = month.slice(0, 8) + String(number).padStart(2, '0');
             const selected = day >= value && day <= rangeEnd;
             const blocked = disabled || Boolean((min && day < min) || (max && day > max));
+            const marker = getDayMarker?.(day);
             return (
-              <Pressable key={weekday} accessibilityRole="button" accessibilityLabel={`Ngày ${displayDay(day)}`}
+              <Pressable key={weekday} accessibilityRole="button"
+                accessibilityLabel={`Ngày ${displayDay(day)}${marker ? ', ' + marker.label : ''}`}
                 aria-pressed={selected} disabled={blocked} onPress={() => onSelect(day)}
+                onLongPress={onLongSelect ? () => onLongSelect(day) : undefined}
                 style={[styles.day, selected && styles.selected, blocked && styles.disabled]}>
                 <Text style={[styles.number, selected && styles.selectedText]}>{number}</Text>
+                {marker && <View aria-hidden testID="calendar-day-marker"
+                  style={[styles.dayMarker, { backgroundColor: marker.color }, selected && styles.selectedMarker]} />}
               </Pressable>
             );
           })}
@@ -82,5 +89,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   number: { color: colors.ink, fontSize: 14 },
   selected: { backgroundColor: colors.accent },
   selectedText: { color: colors.onAccent, fontWeight: '700' },
+  dayMarker: { position: 'absolute', bottom: 4, width: 8, height: 8, borderRadius: 4 },
+  selectedMarker: { borderWidth: 1, borderColor: colors.onAccent },
   disabled: { opacity: 0.35 },
 }));

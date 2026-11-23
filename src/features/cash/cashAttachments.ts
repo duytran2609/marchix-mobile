@@ -75,14 +75,7 @@ export async function readCashFile(cashId: string, fileId: string) {
   }
   const bytes = await readScopedFileBytes(fileRef, file.size, meta.chunks, meta.sha256);
   const type = typeof meta.type === 'string' && mimePattern.test(meta.type) ? meta.type : binary;
-  const pdf = type === 'application/pdf' && hasPdfHeader(bytes);
-  const image = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(type);
-  const safeName = file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+$/, '_') || 'chung-tu';
-  return { bytes, type, name: safeName, kind: pdf ? 'pdf' as const : image ? 'image' as const : 'file' as const };
-}
-
-export function hasPdfHeader(bytes: Uint8Array) {
-  return [37, 80, 68, 70, 45].every((byte, index) => bytes[index] === byte);
+  return { bytes, type, name: file.name };
 }
 
 export async function readScopedFileBytes(fileRef: DocumentReference, size: number, count: number, hash?: string) {

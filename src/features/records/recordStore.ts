@@ -1,6 +1,7 @@
 import { collection, doc, getDocFromServer, onSnapshot, runTransaction, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
-import { hasPdfHeader, prepareCashFiles, readScopedFileBytes, writeScopedFiles } from '../cash/cashAttachments';
+import { hasPdfHeader } from '../../utils/attachmentFile';
+import { prepareCashFiles, readScopedFileBytes, writeScopedFiles } from '../cash/cashAttachments';
 import { todayInVietnam } from '../tasks/taskDates';
 import type { PickedAttachment } from '../tasks/taskAttachments';
 import { recordActions } from './records';

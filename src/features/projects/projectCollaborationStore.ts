@@ -5,8 +5,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { pilotProjectMentionId } from '../notifications/projectMention';
 import { db, pilotMode } from '../../services/firebase/firebase';
-import { hasPdfHeader, prepareCashFiles, readScopedFileBytes, writeScopedFiles } from '../cash/cashAttachments';
-import type { OpenCashFile } from '../cash/cashAttachments';
+import { prepareCashFiles, readScopedFileBytes, writeScopedFiles } from '../cash/cashAttachments';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 import type { PickedAttachment } from '../tasks/taskAttachments';
 import type { TaskAttachment } from '../tasks/tasks';
 
@@ -168,7 +168,7 @@ export async function saveProjectCollaborators(projectId: string, current: strin
   });
 }
 
-export async function readProjectAttachment(projectId: string, file: TaskAttachment): Promise<OpenCashFile> {
+export async function readProjectAttachment(projectId: string, file: TaskAttachment): Promise<AttachmentFile> {
   const ref = doc(db, 'files', file.id);
   const meta = (await getDocFromServer(ref)).data();
   if (!meta || meta.parent !== projectRef(projectId).path || meta.scopeType !== 'projects' ||
@@ -177,8 +177,5 @@ export async function readProjectAttachment(projectId: string, file: TaskAttachm
   }
   const bytes = await readScopedFileBytes(ref, file.size, meta.chunks, meta.sha256);
   const type = typeof meta.type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(meta.type) ? meta.type : 'application/octet-stream';
-  const kind = type === 'application/pdf' && hasPdfHeader(bytes) ? 'pdf'
-    : ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(type) ? 'image' : 'file';
-  const name = file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+$/, '_') || 'tep-du-an';
-  return { bytes, type, name, kind };
+  return { bytes, type, name: file.name };
 }

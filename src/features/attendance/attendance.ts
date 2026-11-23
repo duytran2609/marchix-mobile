@@ -25,7 +25,24 @@ export const defaultSchedule = {
   attStart: '', gpsOn: false, gpsLat: 0, gpsLng: 0, gpsRadius: 300,
 };
 
-export type Schedule = typeof defaultSchedule;
+export const workdayWeights = [1, 0.5, 0] as const;
+export type WorkdayWeight = typeof workdayWeights[number];
+export type WorkdayOverrides = Record<string, WorkdayWeight>;
+export type Schedule = typeof defaultSchedule & { dayOverrides?: WorkdayOverrides };
+
+function isWorkdayWeight(value: unknown): value is WorkdayWeight {
+  return value === 1 || value === 0.5 || value === 0;
+}
+
+export function readWorkdayOverrides(value: unknown): WorkdayOverrides {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, WorkdayWeight] => {
+    const [day, weight] = entry;
+    if (!isWorkdayWeight(weight) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+    const parsed = new Date(day + 'T00:00:00Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day;
+  }));
+}
 export const attendanceVerificationFlag = 'Cần xác minh giờ vào/ra';
 
 export const attendanceId = (email: string, date: string) => email + '_' + date;
@@ -47,7 +64,10 @@ export function monthDays(month: string) {
 
 export const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 export const weekday = (date: string) => new Date(date + 'T00:00:00').getDay();
-export const dayWeight = (date: string, schedule: Schedule) => Number(schedule.days[weekday(date)] ?? 0);
+export function dayWeight(date: string, schedule: Schedule) {
+  const override = schedule.dayOverrides?.[date];
+  return isWorkdayWeight(override) ? override : Number(schedule.days[weekday(date)] ?? 0);
+}
 
 export function clock(minutes: number | null) {
   if (minutes === null) return '–';

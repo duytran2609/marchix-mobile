@@ -1,7 +1,7 @@
 import { createElement, useEffect, useState } from 'react';
-import type { CashPdfProps } from './CashPdf';
+import type { PdfPreviewProps } from './PdfPreview';
 
-export function CashPdf({ bytes, name, onError }: CashPdfProps) {
+export function PdfPreview({ bytes, name, onError }: PdfPreviewProps) {
   const [url, setUrl] = useState('');
   useEffect(() => {
     const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));

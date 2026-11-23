@@ -52,6 +52,7 @@ const marchId = occurrenceId(monthlyId, '2027-03-31');
 const designatedId = `${taskId}-designated`;
 const manualProgressId = `${taskId}-manual`;
 const reportOnlyId = `${taskId}-report-only`;
+const roleChangesId = `${taskId}-role-changes`;
 const designatedEmail = `${taskId}@example.test`;
 const documents = `http://${emulatorHost}:${firestorePort}/v1/projects/${projectId}/databases/(default)/documents`;
 const docs = `${documents}/tasks`;
@@ -329,12 +330,45 @@ try {
   assert.equal(reportOnly.status, 'Xong');
   assert.equal(reportOnly.comments[0].text, result.note);
   assert.equal(reportOnly.reviewedAt, undefined);
+
+  const admin = 'quantri@example.test';
+  const colleague = 'dongnghiep@example.test';
+  const rolesRef = adminDb.doc(`tasks/${roleChangesId}`);
+  const originalTitle = 'Công việc trước khi đổi vai trò';
+  const updatedTitle = 'Công việc sau khi đổi vai trò';
+  await rolesRef.set({
+    title: originalTitle, assignedBy: reviewer, assigneeEmail: staff, approverEmail: reviewer,
+    watchers: [staff, colleague], status: 'Đang làm', updatedAt: '2026-11-01T00:00:00.000Z',
+  });
+  const roleEdit = {
+    taskId: roleChangesId, title: updatedTitle, assigneeEmails: [colleague], approverEmail: admin,
+    watchers: [reviewer, colleague], status: 'Đang làm', due: '', revision: '2026-11-01T00:00:00.000Z',
+  };
+  await login(reviewer, 'marchix-mobile-demo-reviewer');
+  await editAssignment(roleEdit);
+  await assert.rejects(editAssignment(roleEdit), { code: 'functions/failed-precondition' });
+  const newRevision = (await rolesRef.get()).get('updatedAt');
+  await editAssignment({ ...roleEdit, watchers: [...roleEdit.watchers].reverse(), revision: newRevision });
+  const notes = await adminDb.collection('notifications').where('taskId', '==', roleChangesId).get();
+  reminderNotes.push(...notes.docs.map(row => row.ref.path));
+  assert(notes.docs.every(row => row.get('from') === reviewer && row.get('read') === false &&
+    row.get('link') === '#cong-viec' && row.get('createdAt') === newRevision));
+  assert.deepEqual(notes.docs.map(row => [row.get('to'), row.get('title'), row.get('body')]).sort(), [
+    [colleague, 'Bạn được giao việc mới', updatedTitle],
+    [staff, 'Bạn không còn phụ trách thực hiện công việc', originalTitle],
+    [reviewer, 'Bạn được thêm làm người theo dõi công việc', updatedTitle],
+    [staff, 'Bạn không còn theo dõi công việc', originalTitle],
+    [admin, 'Bạn được chỉ định duyệt công việc', updatedTitle],
+    [reviewer, 'Bạn không còn là người duyệt công việc', originalTitle],
+  ].sort());
+  console.log('PASS: đổi người thực hiện, người theo dõi và người duyệt gửi đúng thông báo cho các bên.');
   console.log('PASS: gửi duyệt, trao đổi có tệp, kỳ lặp, phân quyền và yêu cầu lưu tiến độ 100%.');
 } finally {
   await terminate(db);
   await deleteApp(app);
   await deleteAdmin(adminApp);
-  const taskPaths = [taskId, nextId, monthlyId, februaryId, marchId, designatedId, manualProgressId, reportOnlyId].map(id => `tasks/${id}`);
+  const taskPaths = [taskId, nextId, monthlyId, februaryId, marchId, designatedId, manualProgressId, reportOnlyId, roleChangesId]
+    .map(id => `tasks/${id}`);
   for (const path of [...reminderNotes, ...taskPaths, `members/${designatedEmail}`]) {
     const deleted = await fetch(`${documents}/${path}`, { method: 'DELETE', headers });
     assert(deleted.ok, await deleted.text());

@@ -32,14 +32,14 @@ export function CalendarDialog({ title, onClose, children }: {
   </Modal>;
 }
 
-export function DateCalendarButton({ label, value, initialDay, min, max, disabled = false, clearLabel, onChange, style }: {
+export function DateCalendarButton({ label, value, initialDay, min, max, disabled = false, clearLabel, emptyLabel, onChange, style }: {
   label: string; value: string; initialDay?: string; min?: string; max?: string; disabled?: boolean;
-  clearLabel?: string; onChange: (day: string) => void; style?: StyleProp<ViewStyle>;
+  clearLabel?: string; emptyLabel?: string; onChange: (day: string) => void; style?: StyleProp<ViewStyle>;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   const [open, setOpen] = useState(false);
-  const display = value ? displayDay(value) : 'Chọn ngày';
+  const display = value ? displayDay(value) : emptyLabel ?? 'Chọn ngày';
   const close = () => setOpen(false);
   function select(day: string) {
     onChange(day);
@@ -54,7 +54,7 @@ export function DateCalendarButton({ label, value, initialDay, min, max, disable
         if (Keyboard.isVisible()) Keyboard.dismiss();
         setOpen(true);
       }}>
-      <Text style={value ? [ui.muted, ui.metadataValue] : ui.muted}>{display}</Text>
+      <Text style={[ui.muted, value ? ui.metadataValue : !!emptyLabel && ui.unsetValue]}>{display}</Text>
       <Text aria-hidden style={styles.icon}>▦</Text>
     </Pressable>
     {open && <CalendarDialog title={label} onClose={close}>

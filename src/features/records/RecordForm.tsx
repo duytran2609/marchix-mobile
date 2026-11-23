@@ -6,19 +6,21 @@ import { AttachmentLabel } from '../../components/AttachmentLabel';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
+import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
-import { hasPdfHeader } from '../cash/cashAttachments';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
+import { hasPdfHeader } from '../../utils/attachmentFile';
 import { DateCalendarField } from '../tasks/CalendarDialog';
 import { formatFileSize, pickTaskAttachments } from '../tasks/taskAttachments';
 import type { PickedAttachment } from '../tasks/taskAttachments';
 import { todayInVietnam } from '../tasks/taskDates';
 import { recordingSignature, saveRecord } from './recordStore';
-import { RecordAttachmentButton, RecordAttachmentPreview } from './RecordAttachment';
+import { RecordAttachmentButton } from './RecordAttachment';
 import type { RecordAttachment } from './RecordAttachment';
 import type { RecordDraft } from './recordStore';
 import { recordKinds, recordNumber } from './records';
@@ -41,7 +43,11 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   const signing = recordingSignature(existing, action?.status);
   const issuing = action?.status === 'issued';
   const starting = existing?.status === 'assigned' && action?.status === 'processing';
+  const showPdfFileRow = action?.status === 'review' || signing || issuing ||
+    (existing?.status === 'signing' && action?.status === 'numbered');
   const voiding = action?.status === 'void';
+  const flatForm = !existing || starting || showPdfFileRow || voiding ||
+    action?.status === 'assigned' || action?.status === 'completed' || action?.status === 'archived';
   const lock = useRef(false);
   const mounted = useRef(true);
   const [busy, setBusy] = useState('');
@@ -136,7 +142,12 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     finally { lock.current = false; setBusy(''); }
   }
 
-  const content = <View style={existing ? styles.panel : styles.stack}>
+  function removePicked() {
+    setAttachment(undefined);
+    setConfirmed(false);
+  }
+
+  const content = <View style={flatForm ? styles.stack : styles.panel}>
     {existing && <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>}
     {!existing && <>
       <Dropdown required label="Loại văn bản" value={draft.kind} onChange={value => set('kind', value)} disabled={!!busy} highlightSelection={false}
@@ -203,7 +214,17 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
         <FieldLabel style={styles.label} required={(signing || issuing) && !existing.fileId}>Bản PDF (tối đa 5 MB)</FieldLabel>
         <Button label={attachment ? 'Chọn PDF khác' : 'Chọn PDF'} secondary disabled={!!busy} onPress={() => void pick()} />
       </>}
-      {attachment && <>
+      {attachment && (showPdfFileRow ? <View style={[popup.fileCard, popup.fileRow, { borderColor: colors.line }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={attachment.name} disabled={!!busy}
+          onPress={() => void previewPicked()}
+          style={({ pressed }) => [popup.fileOpen, (pressed || !!busy) && styles.dimmed]}>
+          <AttachmentLabel file={attachment}>
+            <Text style={[styles.body, styles.metadataValue]}>{attachment.name}</Text>
+            <Text style={styles.muted}>{formatFileSize(attachment.size)}</Text>
+          </AttachmentLabel>
+        </Pressable>
+        <DeleteIconButton label={`Bỏ tệp ${attachment.name}`} disabled={!!busy} onPress={removePicked} />
+      </View> : <>
         <View style={existing ? undefined : [popup.fileCard, { borderColor: colors.line }]}>
           <AttachmentLabel file={attachment}>
             <Text style={[styles.body, styles.metadataValue]}>{attachment.name}</Text>
@@ -214,11 +235,11 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
           <Button label={existing ? 'Xem PDF vừa chọn' : 'Xem trước'} secondary disabled={!!busy}
             onPress={() => void previewPicked()} />
           <Button label={existing ? 'Bỏ tệp vừa chọn' : 'Bỏ tệp'} secondary={!!existing} danger={!existing} disabled={!!busy}
-            onPress={() => { setAttachment(undefined); setConfirmed(false); }} />
+            onPress={removePicked} />
         </View>
-      </>}
+      </>)}
     </>}
-    {existing?.fileId && !starting && <RecordAttachmentButton key={existing.fileId} recordId={existing.id} fileId={existing.fileId}
+    {existing?.fileId && !starting && !(showPdfFileRow && attachment) && <RecordAttachmentButton key={existing.fileId} recordId={existing.id} fileId={existing.fileId}
       fileName={existing.fileName} disabled={!!busy} onPreview={onPreview && (file => onPreview(file, true))} />}
     {(signing || issuing) && <Button required secondary selected={confirmed} disabled={!!busy}
       label={signing ? 'Tôi đã kiểm tra chữ ký trên PDF' : 'Tôi đã kiểm tra chữ ký, số và ngày trên PDF'}
@@ -227,13 +248,11 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       { placeholder: issuing ? 'Nơi nhận, thời điểm, kênh gửi và tham chiếu' : undefined,
         multiline: true, required: issuing || voiding })}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <View style={[styles.choices,
-      (!existing || starting || action?.status === 'assigned' ||
-        action?.status === 'completed' || action?.status === 'archived') && popup.rightActions]}>
+    <View style={[styles.choices, flatForm && popup.rightActions]}>
       <Button label="Hủy" secondary disabled={!!busy} onPress={onCancel} />
       <Button label={busy || (existing ? 'Xác nhận' : title)} disabled={!!busy} onPress={() => void submit()} />
     </View>
-    {existing && preview && <RecordAttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
+    {existing && preview && <AttachmentPreview downloadable={false} file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
   if (existing) return content;
   const close = () => {
@@ -244,7 +263,7 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
     <KeyboardSafeAreaView style={popup.backdrop}>
       <View role="dialog" accessibilityViewIsModal accessibilityLabel={incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
         style={[popup.card, { backgroundColor: colors.paper }]}>
-        {preview ? <RecordAttachmentPreview embedded file={preview} onClose={() => setPreview(undefined)} /> : <>
+        {preview ? <AttachmentPreview embedded downloadable={false} file={preview} onClose={() => setPreview(undefined)} /> : <>
           <View style={popup.header}>
             <Text accessibilityRole="header" style={[styles.cardTitle, { flex: 1 }]}>
               {incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
@@ -268,5 +287,7 @@ const popup = StyleSheet.create({
   fileAction: { fontSize: 14, fontWeight: '700' },
   fileHint: { fontSize: 12, textAlign: 'center' },
   fileCard: { padding: 12, gap: 4, borderWidth: 1, borderRadius: 9 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 4 },
+  fileOpen: { flex: 1, minWidth: 0 },
   rightActions: { justifyContent: 'flex-end' },
 });

@@ -8,6 +8,8 @@ import { PeopleSummary } from '../../components/PeopleSummary';
 import { SearchInput } from '../../components/SearchInput';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
 import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
+import { taskUnsetLabel } from './taskLabels';
+import { useScreenStyles } from '../../theme/screenStyles';
 import { TaskGantt } from './TaskGantt';
 import type { GanttRange } from './TaskGantt';
 import { TaskKanban } from './TaskKanban';
@@ -22,7 +24,7 @@ import { createThemedStyles, useTheme } from '../../theme/theme';
 
 const taskFilters = ['Tất cả', 'Chưa xong', 'Quá hạn', ...taskStatuses] as const;
 const statusOptions = taskFilters.map(value => ({ value, label: value }));
-const priorityFilters = ['', ...taskPriorities, 'Chưa đặt'] as const;
+const priorityFilters = ['', ...taskPriorities, taskUnsetLabel] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
 const ganttRangeChoices = [
   { value: 'month', label: 'Theo tháng' },
@@ -65,10 +67,12 @@ const TaskCard = memo(function TaskCard({
   assigneePhoto?: string | null;
 }) {
   const styles = useStyles();
+  const ui = useScreenStyles();
   const selectable = kanban ? false : undefined;
   const overdueDays = daysOverdue(task, today);
   const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
-  const due = task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
+  const due = !task.due ? taskUnsetLabel : task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
+  const personId = assigneeKey(task);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
       accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
@@ -80,13 +84,14 @@ const TaskCard = memo(function TaskCard({
       <View style={styles.metadata}>
         <View style={[styles.metadataRow, styles.personRow]}>
           <Text selectable={selectable} style={[styles.metadataText, styles.metaLabel]}>Người thực hiện:</Text>
-          <PeopleSummary people={[{ id: assigneeKey(task), name: assigneeName, photoURL: assigneePhoto }]}
+          {personId ? <PeopleSummary people={[{ id: personId, name: assigneeName, photoURL: assigneePhoto }]}
             textStyle={styles.metadataText} selectable={selectable} />
+            : <Text selectable={selectable} style={[styles.metadataText, ui.unsetValue]}>{taskUnsetLabel}</Text>}
         </View>
         <View style={[styles.metadataRow, styles.dueRow]}>
           <Text selectable={selectable} style={styles.metadataText}>
             <Text style={styles.metaLabel}>Hạn chót: </Text>
-            {task.due ? formatTaskDate(task.due) : 'Chưa đặt'}
+            {task.due ? formatTaskDate(task.due) : <Text style={ui.unsetValue}>{taskUnsetLabel}</Text>}
           </Text>
           {overdueLabel ? (
             <View style={styles.overdueTag}>
@@ -97,7 +102,7 @@ const TaskCard = memo(function TaskCard({
         <View style={styles.metadataRow}>
           <Text selectable={selectable} style={styles.metadataText}>
             <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>
-            <TaskPriority priority={task.priority} />
+            <TaskPriority priority={task.priority} colored />
           </Text>
         </View>
       </View>
@@ -150,7 +155,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
     value: id, label: projectNames.get(id) || id,
   })).sort((a, b) => a.label.localeCompare(b.label, 'vi'));
   const scopedTasks = tasks.filter(task => (!assignee || assigneeKey(task) === assignee) &&
-    (!priority || (task.priority || 'Chưa đặt') === priority) &&
+    (!priority || (task.priority?.trim() || taskUnsetLabel) === priority) &&
     (project === null || (task.projectId || '') === project));
   const today = todayInVietnam();
   const stats = taskStatusSummary(scopedTasks);
@@ -173,7 +178,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
   }
 
   function assigneeName(task: Task) {
-    return assigneeNames.get(assigneeKey(task)) ?? 'Chưa chỉ định';
+    return assigneeNames.get(assigneeKey(task)) ?? taskUnsetLabel;
   }
 
   function photoFor(email?: string) {

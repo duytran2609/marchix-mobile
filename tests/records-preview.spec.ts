@@ -71,6 +71,25 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
     await expect(page.getByText(state, { exact: true }).first()).toBeVisible();
   }
 
+  async function checkPdfForm(label: string) {
+    const dialog = page.getByRole('dialog', { name: label, exact: true });
+    const body = dialog.getByRole('heading', { name: label, exact: true }).locator('..');
+    await expect(body).toHaveCSS('border-top-width', '0px');
+    await expect(body).toHaveCSS('padding-left', '0px');
+    const confirm = dialog.getByRole('button', { name: 'Xác nhận', exact: true });
+    await expect(confirm.locator('..')).toHaveCSS('justify-content', 'flex-end');
+    await expect(confirm.locator('..').getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
+    const file = dialog.getByRole('button', { name: 'marchix.pdf', exact: true });
+    const remove = file.locator('..').getByRole('button', { name: 'Bỏ tệp marchix.pdf', exact: true });
+    await expect(file.locator('..')).toHaveCSS('border-top-width', '1px');
+    await expect(remove).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Xem PDF vừa chọn|Bỏ tệp vừa chọn/ })).toHaveCount(0);
+    await preview('marchix.pdf');
+    await remove.click();
+    await expect(dialog.getByRole('button', { name: 'Bỏ tệp marchix.pdf', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Chọn PDF', exact: true })).toBeVisible();
+  }
+
   await page.goto(previewUrl);
   await button('Đăng nhập quản trị (mô phỏng)').click();
   await button('Mở menu').click();
@@ -93,6 +112,9 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   expect(statusBox!.y).toBeGreaterThanOrEqual(subjectBox!.y + subjectBox!.height);
   await expect(detail.getByText('Nhật ký xử lý')).toHaveCount(0);
   await button('Bắt đầu xử lý').click();
+  const processingBody = processing.getByRole('heading', { name: 'Bắt đầu xử lý' }).locator('..');
+  await expect(processingBody).toHaveCSS('border-top-width', '0px');
+  await expect(processingBody).toHaveCSS('padding-left', '0px');
   await processing.getByLabel('Ghi chú xử lý').fill('Ghi chú đã hủy');
   await processing.getByRole('button', { name: 'Hủy', exact: true }).click();
   await expect(detail.getByText('Đã giao', { exact: true })).toBeVisible();
@@ -102,6 +124,15 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await processing.getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await expect(detail.getByText('Đang xử lý', { exact: true })).toBeVisible();
   await expect(detail.getByText(note)).toHaveCount(0);
+  await button('Hoàn tất xử lý').click();
+  const completion = page.getByRole('dialog', { name: 'Hoàn tất xử lý', exact: true });
+  const completionBody = completion.getByRole('heading', { name: 'Hoàn tất xử lý', exact: true }).locator('..');
+  await expect(completionBody).toHaveCSS('border-top-width', '0px');
+  await expect(completionBody).toHaveCSS('padding-left', '0px');
+  const completionActions = completion.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
+  await expect(completionActions).toHaveCSS('justify-content', 'flex-end');
+  await completionActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(detail.getByText('Đang xử lý', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
   await button('Lịch sử').click();
   await expect(page.getByText('Ghi chú đã hủy')).toHaveCount(0);
@@ -153,6 +184,15 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(detail.getByText(/^\d{2,6}\/20\d{2}$/)).toBeVisible();
   await expect(page.getByText('Đồng nghiệp demo', { exact: true }).first()).toBeVisible();
   await preview('marchix.pdf', true);
+  await button('Giao xử lý').click();
+  const assignment = page.getByRole('dialog', { name: 'Giao xử lý', exact: true });
+  const assignmentBody = assignment.getByRole('heading', { name: 'Giao xử lý', exact: true }).locator('..');
+  await expect(assignmentBody).toHaveCSS('border-top-width', '0px');
+  await expect(assignmentBody).toHaveCSS('padding-left', '0px');
+  const assignmentActions = assignment.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
+  await expect(assignmentActions).toHaveCSS('justify-content', 'flex-end');
+  await assignmentActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(detail.getByText('Đã vào sổ', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
 
   await button('Văn bản đi').click();
@@ -188,17 +228,32 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await button('Xác nhận bản đã ký và cấp số').click();
   await page.getByLabel('Họ tên người ký').fill('Người ký kiểm thử');
   await choosePdf();
+  await checkPdfForm('Xác nhận bản đã ký và cấp số');
+  await expect(button('ghi-chu.txt')).toBeVisible();
+  await choosePdf();
   await button('Tôi đã kiểm tra chữ ký trên PDF').click();
   await button('Xác nhận').click();
   await expect(page.getByText(/^\d{2,6}\/MARCHIX-VP$/)).toBeVisible();
   await preview('marchix.pdf');
   await button('Ghi nhận phát hành').click();
   await page.getByLabel('Bằng chứng phát hành').fill('Gửi email cho đối tác lúc 09:00, tham chiếu TEST-01.');
+  await choosePdf();
+  await checkPdfForm('Ghi nhận phát hành');
+  await expect(button('marchix.pdf')).toBeVisible();
   await button('Tôi đã kiểm tra chữ ký, số và ngày trên PDF').click();
   await button('Xác nhận').click();
   await expect(page.getByText('Đã phát hành', { exact: true }).first()).toBeVisible();
   await expect(detail.getByText(/tham chiếu TEST-01/)).toHaveCount(0);
   await preview('marchix.pdf');
+  await button('Lưu hồ sơ').click();
+  const archive = page.getByRole('dialog', { name: 'Lưu hồ sơ', exact: true });
+  const archiveBody = archive.getByRole('heading', { name: 'Lưu hồ sơ', exact: true }).locator('..');
+  await expect(archiveBody).toHaveCSS('border-top-width', '0px');
+  await expect(archiveBody).toHaveCSS('padding-left', '0px');
+  const archiveActions = archive.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
+  await expect(archiveActions).toHaveCSS('justify-content', 'flex-end');
+  await archiveActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await expect(detail.getByText('Đã phát hành', { exact: true })).toBeVisible();
   await button('Về Phê duyệt').click();
   await expect(page.getByRole('heading', { name: 'PHÊ DUYỆT', exact: true })).toBeVisible();
   await expect(button('Mở hồ sơ: ' + title + ' đi')).toHaveCount(0);
@@ -206,4 +261,119 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await page.getByRole('dialog').getByRole('button', { name: 'Văn thư', exact: true }).click();
   await button('Lịch sử').click();
   await expect(page.getByText(/tham chiếu TEST-01/)).toBeVisible();
+});
+
+test('Trình duyệt nội dung xem và bỏ PDF ngay trên hàng tệp đính kèm', async ({ page }) => {
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  const filename = 'ban-trinh-duyet.pdf';
+  await page.goto(previewUrl);
+  await button('Đăng nhập quản trị (mô phỏng)').click();
+  await button('Mở menu').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Văn thư', exact: true }).click();
+  await button('Văn bản đi').click();
+  await page.getByRole('textbox', { name: 'Tìm văn bản' }).fill('Quyết định phân công phụ trách dự án');
+  await page.getByRole('button', { name: /Quyết định phân công phụ trách dự án/ }).click();
+  await button('Trình duyệt nội dung').click();
+
+  const review = page.getByRole('dialog', { name: 'Trình duyệt nội dung' });
+  const body = review.getByRole('heading', { name: 'Trình duyệt nội dung' }).locator('..');
+  await expect(body).toHaveCSS('border-top-width', '0px');
+  await expect(body).toHaveCSS('padding-left', '0px');
+  await expect(review.getByRole('button', { name: 'Xác nhận' }).locator('..')).toHaveCSS('justify-content', 'flex-end');
+  const note = 'Ghi chú bản trình duyệt';
+  await review.getByRole('textbox', { name: 'Ghi chú nhật ký' }).fill(note);
+
+  async function choosePdf() {
+    const picker = page.waitForEvent('filechooser');
+    await review.getByRole('button', { name: 'Chọn PDF', exact: true }).click();
+    await (await picker).setFiles({ name: filename, mimeType: 'application/pdf', buffer: pdfWithText() });
+  }
+
+  await choosePdf();
+  const file = review.getByRole('button', { name: filename, exact: true });
+  const remove = review.getByRole('button', { name: `Bỏ tệp ${filename}`, exact: true });
+  const fileCard = file.locator('..');
+  await expect(fileCard).toHaveCSS('border-top-width', '1px');
+  await expect(fileCard.getByRole('button', { name: `Bỏ tệp ${filename}`, exact: true })).toBeVisible();
+  await expect(review.getByRole('button', { name: /Xem PDF vừa chọn|Bỏ tệp vừa chọn/ })).toHaveCount(0);
+  const [fileBox, removeBox] = await Promise.all([file.boundingBox(), remove.boundingBox()]);
+  expect(removeBox!.x).toBeGreaterThanOrEqual(fileBox!.x + fileBox!.width);
+
+  await file.click();
+  const preview = page.getByRole('dialog', { name: 'Xem trước tệp' });
+  await expect(preview.locator(`iframe[title="${filename}"]`)).toBeVisible();
+  await preview.getByRole('button', { name: 'Đóng PDF' }).click();
+  await expect(review.getByRole('textbox', { name: 'Ghi chú nhật ký' })).toHaveValue(note);
+
+  await remove.click();
+  await expect(file).toHaveCount(0);
+  await expect(remove).toHaveCount(0);
+  await choosePdf();
+  await review.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  const detail = page.getByRole('dialog', { name: 'Chi tiết công văn' });
+  await expect(detail.getByText('Chờ duyệt nội dung', { exact: true })).toBeVisible();
+  await expect(detail.getByRole('button', { name: filename, exact: true })).toBeVisible();
+});
+
+test('Popup Bổ sung bản đã ký và Hủy số dùng bố cục gọn với nút căn phải', async ({ page, request }) => {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const records = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/correspondence`;
+  const headers = { Authorization: 'Bearer owner' };
+  const id = `bo-sung-ban-ky-${Date.now()}`;
+  const subject = `Hồ sơ bổ sung bản ký ${id}`;
+  const seed = await request.get(`${records}/recordDemoDecision01`, { headers });
+  expect(seed.ok()).toBeTruthy();
+  const { fields } = await seed.json();
+  const fixture = await request.patch(`${records}/${id}`, { headers, data: { fields: {
+    ...fields, status: { stringValue: 'numbered' }, subject: { stringValue: subject },
+    externalNumber: { stringValue: '19/QĐ-MARCHIX' }, fileId: { stringValue: '' }, fileName: { stringValue: '' },
+  } } });
+  expect(fixture.ok()).toBeTruthy();
+
+  try {
+    await page.goto(previewUrl);
+    await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Mở menu', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Văn thư', exact: true }).click();
+    await page.getByRole('button', { name: 'Văn bản đi', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Tìm văn bản' }).fill(subject);
+    await page.getByRole('button', { name: new RegExp(subject) }).click();
+    await page.getByRole('button', { name: 'Bổ sung bản đã ký', exact: true }).click();
+
+    const form = page.getByRole('dialog', { name: 'Bổ sung bản đã ký', exact: true });
+    const body = form.getByRole('heading', { name: 'Bổ sung bản đã ký', exact: true }).locator('..');
+    await expect(body).toHaveCSS('border-top-width', '0px');
+    await expect(body).toHaveCSS('padding-left', '0px');
+    const actions = form.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
+    await expect(actions).toHaveCSS('justify-content', 'flex-end');
+    await expect(actions.getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
+
+    const picker = page.waitForEvent('filechooser');
+    await form.getByRole('button', { name: 'Chọn PDF', exact: true }).click();
+    await (await picker).setFiles({ name: 'ban-da-ky.pdf', mimeType: 'application/pdf', buffer: pdfWithText() });
+    const file = form.getByRole('button', { name: 'ban-da-ky.pdf', exact: true });
+    const remove = file.locator('..').getByRole('button', { name: 'Bỏ tệp ban-da-ky.pdf', exact: true });
+    await expect(remove).toBeVisible();
+    await file.click();
+    const preview = page.getByRole('dialog', { name: 'Xem trước tệp', exact: true });
+    await expect(preview.locator('iframe[title="ban-da-ky.pdf"]')).toBeVisible();
+    await preview.getByRole('button', { name: 'Đóng PDF', exact: true }).click();
+    await remove.click();
+    await expect(file).toHaveCount(0);
+    await expect(form.getByRole('button', { name: 'Chọn PDF', exact: true })).toBeVisible();
+    await actions.getByRole('button', { name: 'Hủy', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Hủy số', exact: true }).click();
+    const voidForm = page.getByRole('dialog', { name: 'Hủy số', exact: true });
+    const voidBody = voidForm.getByRole('heading', { name: 'Hủy số', exact: true }).locator('..');
+    await expect(voidBody).toHaveCSS('border-top-width', '0px');
+    await expect(voidBody).toHaveCSS('padding-left', '0px');
+    const voidActions = voidForm.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
+    await expect(voidActions).toHaveCSS('justify-content', 'flex-end');
+    await voidActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Chi tiết công văn' }).getByText('Đã cấp số', { exact: true })).toBeVisible();
+  } finally {
+    await request.delete(`${records}/${id}`, { headers });
+  }
 });

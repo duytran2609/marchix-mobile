@@ -1,97 +1,10 @@
-import { Directory, File, Paths } from 'expo-file-system';
-import { isAvailableAsync, shareAsync } from 'expo-sharing';
-import { Bytes } from 'firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Modal, Platform, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
-import { Button } from '../../components/Button';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { useScreenStyles } from '../../theme/screenStyles';
-import { useTheme } from '../../theme/theme';
 import { formatFileSize } from '../tasks/taskAttachments';
 import { readCashFile, type CashAttachment, type OpenCashFile } from './cashAttachments';
-import { CashPdf } from './CashPdf';
-
-export async function saveAttachmentBytes(file: { bytes: Uint8Array; name: string; type: string }, dialogTitle = 'Lưu chứng từ') {
-  if (Platform.OS === 'web') {
-    const url = URL.createObjectURL(new Blob([new Uint8Array(file.bytes)], { type: 'application/octet-stream' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = file.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
-  }
-  if (Platform.OS === 'android') {
-    const directory = await Directory.pickDirectoryAsync().catch((error: unknown) => {
-      if (error instanceof Error && 'code' in error && error.code === 'ERR_PICKER_CANCELLED') return;
-      throw error;
-    });
-    if (!directory) return;
-    const saved = directory.createFile(file.name, file.type);
-    try {
-      await saved.write(file.bytes);
-    } catch (error) {
-      if (saved.exists) saved.delete();
-      throw error;
-    }
-    return;
-  }
-  if (!await isAvailableAsync()) throw new Error('Thiết bị chưa hỗ trợ chia sẻ tệp.');
-  const folder = new Directory(Paths.cache, `chung-tu-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  folder.create();
-  try {
-    const saved = folder.createFile(file.name, file.type);
-    await saved.write(file.bytes);
-    await shareAsync(saved.uri, { mimeType: file.type, dialogTitle });
-  } finally {
-    folder.delete();
-  }
-}
-
-export function AttachmentPreview({ file, onClose, projectFile = false }: {
-  file: OpenCashFile; onClose: () => void; projectFile?: boolean;
-}) {
-  const styles = useScreenStyles();
-  const { colors } = useTheme();
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
-  const [previewError, setPreviewError] = useState(false);
-  const failPreview = useCallback(() => setPreviewError(true), []);
-  const [imageUri] = useState(() => file.kind === 'image'
-    ? `data:${file.type};base64,${Bytes.fromUint8Array(file.bytes).toBase64()}` : '');
-
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-    setSaveError('');
-    try { await saveAttachmentBytes(file, projectFile ? 'Lưu tệp dự án' : undefined); }
-    catch { setSaveError(projectFile ? 'Không lưu được tệp. Vui lòng thử lại.' : 'Không lưu được chứng từ. Vui lòng thử lại.'); }
-    finally { setSaving(false); }
-  }
-
-  return <Modal visible animationType="slide" onRequestClose={saving ? () => undefined : onClose}>
-    <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
-      <AttachmentLabel file={file}>
-        <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
-      </AttachmentLabel>
-      {previewError || file.kind === 'file'
-        ? <Text style={styles.muted}>{previewError ? (projectFile ? 'Không hiển thị được tệp.' : 'Không hiển thị được chứng từ.')
-          : 'Định dạng này cần ứng dụng phù hợp để mở.'}</Text>
-        : file.kind === 'image'
-          ? <Image accessibilityLabel={file.name} source={{ uri: imageUri }} resizeMode="contain"
-            onError={failPreview} style={{ flex: 1, width: '100%' }} />
-          : <CashPdf bytes={file.bytes} name={file.name} onError={failPreview} />}
-      {!!saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
-      <View style={styles.choices}>
-        <Button label={projectFile ? 'Đóng tệp' : 'Đóng chứng từ'} secondary onPress={onClose} disabled={saving} />
-        <Button label={saving ? 'Đang lưu…' : projectFile ? 'Lưu tệp' : 'Lưu chứng từ'} onPress={() => void save()} disabled={saving} />
-      </View>
-    </SafeAreaView>
-  </Modal>;
-}
 
 export function CashProofs({ cashId, files }: { cashId: string; files: CashAttachment[] }) {
   const styles = useScreenStyles();
@@ -125,11 +38,13 @@ export function CashProofs({ cashId, files }: { cashId: string; files: CashAttac
 
   return <View style={styles.stack}>
     <Text style={styles.label}>Chứng từ đính kèm</Text>
-    {files.map(file => <View key={file.id} style={styles.detailRow}>
-      <AttachmentLabel file={file}><Text style={styles.body}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
-      <Button label={opening === file.id ? 'Đang mở…' : `Xem ${file.name}`}
-        secondary onPress={() => void open(file)} disabled={!!opening} />
-    </View>)}
+    {files.map(file => <Pressable key={file.id} style={styles.detailRow} accessibilityRole="button"
+      accessibilityLabel={`Xem ${file.name}`} disabled={!!opening} onPress={() => void open(file)}>
+      <AttachmentLabel file={file}>
+        <Text style={styles.body}>{file.name}</Text>
+        <Text style={styles.muted}>{opening === file.id ? 'Đang mở…' : formatFileSize(file.size)}</Text>
+      </AttachmentLabel>
+    </Pressable>)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {preview && <AttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
   </View>;

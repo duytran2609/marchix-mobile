@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
 import { devices, expect, type Locator, type Page } from '@playwright/test';
 
@@ -137,10 +138,15 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(button(page, 'Duyệt')).toHaveCount(0);
     await button(page, 'Xem hoa-don.png').click();
     await expect(page.getByRole('img', { name: 'hoa-don.png' })).toBeVisible();
-    await button(page, 'Đóng chứng từ').click();
+    await button(page, 'Đóng xem trước').click();
     await button(page, 'Xem hoa-don.pdf').click();
     await expect(page.getByTitle('hoa-don.pdf')).toHaveAttribute('src', /^blob:/);
-    await button(page, 'Đóng chứng từ').click();
+    const pdfDownload = page.waitForEvent('download');
+    await button(page, 'Tải xuống').click();
+    const downloadedPdf = await pdfDownload;
+    expect(downloadedPdf.suggestedFilename()).toBe('hoa-don.pdf');
+    expect(await readFile((await downloadedPdf.path())!)).toEqual(pdf);
+    await button(page, 'Đóng PDF').click();
     await button(page, 'Sửa khoản này').click();
     await attach(page, 'bien-nhan.png');
     await button(page, 'Lưu thay đổi').click();
@@ -193,7 +199,7 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(button(reviewer, 'Sửa khoản này')).toHaveCount(0);
     await button(reviewer, 'Xem bien-nhan.png').click();
     await expect(reviewer.getByRole('img', { name: 'bien-nhan.png' })).toBeVisible();
-    await button(reviewer, 'Đóng chứng từ').click();
+    await button(reviewer, 'Đóng xem trước').click();
     await button(reviewer, 'Duyệt').click();
     await expect(status(reviewer, 'Chờ chi')).toBeVisible();
     await expect(button(reviewer, 'Xác nhận đã chi')).toHaveCount(0);

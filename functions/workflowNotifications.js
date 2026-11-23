@@ -10,8 +10,8 @@ function notification(from, to, title, body, link, createdAt) {
   return { from, to, title, body, link, createdAt, read: false, emailed: false };
 }
 
-function writeTaskNotification(transaction, db, { from, to, taskId, title, body, createdAt }) {
-  if (!isEmail(to) || to === from) return;
+function writeTaskNotification(transaction, db, { from, to, taskId, title, body, createdAt, includeSender = false }) {
+  if (!isEmail(to) || (!includeSender && to === from)) return;
   transaction.create(db.collection('notifications').doc(), {
     ...notification(from, to, title, typeof body === 'string' ? body : '', '#cong-viec', createdAt), taskId,
   });

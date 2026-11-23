@@ -10,7 +10,7 @@ export function TextInput({ style, onChangeText, ...props }: ComponentProps<type
   const showsPlaceholder = !!props.placeholder && !hasValue;
 
   return <NativeTextInput {...props} style={[style, metadataValueStyle(colors), showsPlaceholder && styles.placeholder]}
-    placeholderTextColor={colors.placeholder} onChangeText={isControlled ? onChangeText : (text) => {
+    placeholderTextColor={colors.inputPlaceholder} onChangeText={isControlled ? onChangeText : (text) => {
       setHasUncontrolledValue(text.length > 0);
       onChangeText?.(text);
     }} />;

@@ -7,9 +7,14 @@ import { NumberStepper } from '../../components/NumberStepper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { KeyboardScrollView } from '../../components/KeyboardScrollView';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { DateCalendarButton, DateCalendarField } from './CalendarDialog';
+import { priorityTone } from './TaskPriority';
+import { statusTone } from './TaskProgress';
+import { editableStatuses, taskStatus } from './taskStatuses';
+import { taskUnsetLabel } from './taskLabels';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { checklistWeight, maxChecklistWeight, validChecklistWeight } from './checklistProgress';
 import { auth, db, emulatorMode, pilotMode } from '../../services/firebase/firebase';
@@ -22,15 +27,17 @@ import { Dropdown } from '../../components/Dropdown';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { FilePickerButton } from '../../components/FilePickerButton';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachments } from './taskAttachments';
+import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachment, readTaskAttachments } from './taskAttachments';
 import type { PickedAttachment } from './taskAttachments';
 import {
-  createTask, editableStatus, editableStatuses, getAssignmentComment, listTaskAssignees, newTaskId, parseTaskProgress,
+  createTask, editableStatus, getAssignmentComment, listTaskAssignees, newTaskId, parseTaskProgress,
   taskCategoryMaxLength, taskCompletionModes, taskPriorities, taskRepeatOptions, taskTitleMaxLength, updateTask,
 } from './tasks';
-import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee } from './tasks';
+import type { AssignmentOptions, AssignmentProject, Task, TaskAssignee, TaskAttachment } from './tasks';
 import { createThemedStyles, metadataValueStyle, useTheme } from '../../theme/theme';
+import { useScreenStyles } from '../../theme/screenStyles';
 import { ToastLayer, useToast } from '../../components/Toast';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 
 const quickDates = [
   { label: 'Hôm nay', days: 0 }, { label: 'Ngày mai', days: 1 }, { label: 'Sau 7 ngày', days: 7 },
@@ -52,7 +59,9 @@ function MemberPicker({ members, selected, email, disabled, title, label, emptyM
   title: string; multiple?: boolean;
   onToggle: (member: string) => void;
 }) {
-  return <SearchableChoiceDropdown title={title} multiple={multiple} items={members.map(member => ({
+  const ui = useScreenStyles();
+  return <SearchableChoiceDropdown title={title} multiple={multiple} placeholder={taskUnsetLabel}
+    placeholderStyle={ui.unsetValue} items={members.map(member => ({
     id: member.email, name: member.name, self: member.email === email,
     photoURL: member.photoURL || (member.email === email ? auth.currentUser?.photoURL : null),
   }))} selected={selected} disabled={disabled} label={label} emptyMessage={emptyMessage} onToggle={onToggle} />;
@@ -82,6 +91,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
   email: string; task?: Task; onClose: () => void; onSaved: (assignees: string[]) => void;
   initial?: { title: string; note: string; projectId: string };
 }) {
+  const ui = useScreenStyles();
   const { colors } = useTheme();
   const styles = useStyles();
   const showToast = useToast();
@@ -103,6 +113,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
   const [due, setDue] = useState(task?.due ?? '');
   const [retained, setRetained] = useState(assignment?.files ?? []);
   const [files, setFiles] = useState<PickedAttachment[]>([]);
+  const [openingFileId, setOpeningFileId] = useState('');
+  const [preview, setPreview] = useState<AttachmentFile>();
   const [picking, setPicking] = useState(false);
   const [options, setOptions] = useState<AssignmentOptions>(() => ({
     priority: taskPriorities.find(value => value === task?.priority) ?? initialOptions.priority,
@@ -112,6 +124,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     milestone: task?.milestone === true,
     requireReview: task?.requireReview,
   }));
+  const statusLabel = task ? 'Trạng thái' : 'Tình trạng ban đầu';
+  const lockedStatus = workflowLocked ? taskStatus(task) : undefined;
   const [defaultRequireReview, setDefaultRequireReview] = useState(true);
   const requiresReview = options.requireReview ?? defaultRequireReview;
   const [progressText, setProgressText] = useState(String(task?.progress ?? 0));
@@ -134,6 +148,9 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     ? [...items, { t: newItem.trim(), weight: newWeight, done: false, sourceIndex: null }] : items;
   const checklist = draftItems.map(item => ({ ...item, t: item.t.trim(), weight: item.weight ? Number(item.weight) : 1 }));
   const validWeights = checklist.every(item => validChecklistWeight(item.weight));
+  const assigneeName = members?.find(member => member.email === assignees[0])?.name ||
+    (task && assignees[0] === task.assigneeEmail ? task.assignee || task.assigneeEmail : assignees[0]);
+  const approverName = members?.find(member => member.email === approver)?.name || approver;
 
   useEffect(() => {
     if (task?.requireReview !== undefined) return;
@@ -252,6 +269,18 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     }
   }
 
+  async function openFile(file: TaskAttachment) {
+    if (!task || openingFileId) return;
+    setOpeningFileId(file.id);
+    try {
+      setPreview(await readTaskAttachment(task.id, file));
+    } catch {
+      showToast('Không mở được tệp. Kiểm tra kết nối và thử lại.', 'error');
+    } finally {
+      setOpeningFileId('');
+    }
+  }
+
   return (
     <Modal transparent visible onRequestClose={() => { if (!pending.current) onClose(); }} statusBarTranslucent>
       <SafeAreaView style={styles.overlay}>
@@ -281,9 +310,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                 </View>
                 <View style={styles.field}>
                   <FieldLabel style={styles.label} required={!workflowLocked}>Người thực hiện</FieldLabel>
-                  {task && (workflowLocked || !members) ? <Text style={styles.muted}>{members?.find(member => member.email === assignees[0])?.name
-                    || (assignees[0] === task.assigneeEmail ? task.assignee || task.assigneeEmail : assignees[0])
-                    || 'Chưa chọn'}</Text> : null}
+                  {task && (workflowLocked || !members) ? <Text style={[styles.muted, !assigneeName && ui.unsetValue]}>
+                    {assigneeName || taskUnsetLabel}</Text> : null}
                   {workflowLocked ? null : directoryError ? <View style={styles.field}>
                     <Text accessibilityRole="alert" style={styles.error}>{directoryError}</Text>
                     <Pressable accessibilityRole="button" style={styles.back}
@@ -301,17 +329,18 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                 </View>
                 <View style={styles.field}>
                   <FieldLabel style={styles.label} required>Mức độ ưu tiên</FieldLabel>
-                  <Choices items={choices(taskPriorities)} value={options.priority} disabled={saving}
+                  <Choices label="Mức độ ưu tiên" items={taskPriorities.map(value => ({ value, label: value, tone: priorityTone(value, colors) }))}
+                    value={options.priority} disabled={saving}
                     onChange={value => updateOption('priority', value)} />
                 </View>
-                <DateCalendarField label="Ngày bắt đầu" value={start} initialDay={start || due || today}
+                <DateCalendarField label="Ngày bắt đầu" value={start} initialDay={start || due || today} emptyLabel={taskUnsetLabel}
                   disabled={saving} onChange={day => {
                     setStart(day);
                     if (due && day > due) setDue('');
                   }} />
                 <View style={styles.field}>
                   <FieldLabel style={styles.label} required={dueRequired}>Hạn chót</FieldLabel>
-                  <DateCalendarButton label="Hạn chót" value={due} min={earliestDue}
+                  <DateCalendarButton label="Hạn chót" value={due} min={earliestDue} emptyLabel={taskUnsetLabel}
                     initialDay={due && due >= earliestDue ? due : earliestDue || today} disabled={saving} onChange={setDue} />
                   <Choices items={quickDates.map(({ label, days }) => {
                     const value = shiftDay(today, days);
@@ -322,21 +351,26 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                   <Text style={styles.label}>Tệp đính kèm{allFiles.length ? ` · ${allFiles.length}` : ''}</Text>
                   <FilePickerButton disabled={saving} picking={picking} onPress={() => void chooseFiles()}
                     hint="Tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi." />
-                  {allFiles.map((file, index) => <View key={'id' in file ? file.id : index - retained.length} style={styles.person}>
-                    <View style={styles.personLabel}>
-                      <AttachmentLabel file={file}>
-                        <Text style={[styles.label, styles.attachmentValue]}>{file.name}</Text>
-                        <Text style={[styles.muted, styles.attachmentValue]}>{formatFileSize(file.size)}</Text>
-                      </AttachmentLabel>
-                    </View>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`Bỏ tệp ${file.name}`}
-                      style={styles.back} disabled={saving || picking} onPress={() => {
-                        if ('id' in file) setRetained(current => current.filter(item => item.id !== file.id));
-                        else setFiles(current => current.filter((_, position) => position !== index - retained.length));
-                      }}>
-                      <Text style={styles.actionText}>Bỏ</Text>
-                    </Pressable>
-                  </View>)}
+                  {allFiles.map((file, index) => {
+                    const content = <AttachmentLabel file={file}>
+                      <Text style={[styles.label, styles.attachmentValue]}>{file.name}</Text>
+                      <Text style={[styles.muted, styles.attachmentValue]}>
+                        {'id' in file && openingFileId === file.id ? 'Đang mở…' : formatFileSize(file.size)}
+                      </Text>
+                    </AttachmentLabel>;
+                    return <View key={'id' in file ? file.id : index - retained.length} style={styles.person}>
+                      {'id' in file ? <Pressable style={styles.personLabel} accessibilityRole="button"
+                        accessibilityLabel={`Xem tệp ${file.name}`} disabled={saving || picking || !!openingFileId}
+                        onPress={() => void openFile(file)}>{content}</Pressable> : <View style={styles.personLabel}>{content}</View>}
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Bỏ tệp ${file.name}`}
+                        style={styles.back} disabled={saving || picking} onPress={() => {
+                          if ('id' in file) setRetained(current => current.filter(item => item.id !== file.id));
+                          else setFiles(current => current.filter((_, position) => position !== index - retained.length));
+                        }}>
+                        <Text style={styles.actionText}>Bỏ</Text>
+                      </Pressable>
+                    </View>;
+                  })}
                 </View>
                 </> : <>
                   <View style={styles.field}>
@@ -360,16 +394,16 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                       onToggle={member => {
                         if (member !== approver) setApprover(member);
                         else if (!workflowLocked) setApprover('');
-                      }} /> : <Text style={styles.muted}>{members?.find(member => member.email === approver)?.name
-                      || approver || 'Chưa chỉ định'}</Text>}
+                      }} /> : <Text style={[styles.muted, !approverName && ui.unsetValue]}>{approverName || taskUnsetLabel}</Text>}
                   </View>
                   <View style={styles.field}>
                     <FieldLabel style={styles.label} required={!workflowLocked}>
-                      {task ? 'Trạng thái' : 'Tình trạng ban đầu'}
+                      {statusLabel}
                     </FieldLabel>
-                    {workflowLocked ? <Text style={styles.muted}>{task.status}</Text>
-                      : <Choices items={choices(editableStatuses)} value={options.status} disabled={saving}
-                          onChange={value => updateOption('status', value)} />}
+                    {lockedStatus ? <Text style={[styles.label, { color: statusTone(lockedStatus, colors).text }]}>{lockedStatus}</Text>
+                      : <Choices label={statusLabel} items={editableStatuses.map(value => ({
+                        value, label: value, tone: statusTone(value, colors),
+                      }))} value={options.status} disabled={saving} onChange={value => updateOption('status', value)} />}
                     <FieldLabel style={[styles.label, styles.progressLabel]} required={!workflowLocked && !items.length && !newItem.trim()}>
                       Tiến độ (%)
                     </FieldLabel>
@@ -458,6 +492,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
           <ToastLayer safeAreaApplied />
         </KeyboardViewport>
       </SafeAreaView>
+      {preview && <AttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
     </Modal>
   );
 }

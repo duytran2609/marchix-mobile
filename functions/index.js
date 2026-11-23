@@ -6,6 +6,7 @@ const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { createHash, randomUUID } = require('node:crypto');
 const { publishWorkflowNotifications, writeTaskNotification } = require('./workflowNotifications');
+const { taskRoleNotices } = require('./taskRoleNotices');
 const { cadences, createScheduledTasks, timeZone } = require('./recurringTasks');
 
 const projectId = 'demo-marchix-mobile';
@@ -483,9 +484,12 @@ exports.updateMobileTask = onCall(async request => {
       if (requireReview !== undefined) change.requireReview = requireReview;
       if (assigneeEmail !== task.assigneeEmail) {
         change.assignee = memberName(byEmail.get(assigneeEmail));
-        writeTaskNotification(transaction, db, { from: email, to: assigneeEmail, taskId: ref.id,
-          title: 'Bạn được giao việc mới', body: change.title, createdAt: updatedAt });
       }
+    }
+    for (const notice of taskRoleNotices(task, { ...task, ...change })) {
+      writeTaskNotification(transaction, db, {
+        ...notice, from: email, taskId: ref.id, createdAt: updatedAt, includeSender: true,
+      });
     }
     transaction.update(ref, change);
     return { ok: true };

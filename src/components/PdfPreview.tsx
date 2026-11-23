@@ -2,12 +2,12 @@ import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 
-export type CashPdfProps = { bytes: Uint8Array; name: string; onError: () => void };
+export type PdfPreviewProps = { bytes: Uint8Array; name: string; onError: () => void };
 
-export function CashPdf({ bytes, onError }: CashPdfProps) {
+export function PdfPreview({ bytes, onError }: PdfPreviewProps) {
   const [document, setDocument] = useState<{ uri: string; Viewer: typeof import('react-native-pdf').default }>();
   useEffect(() => {
-    const file = new File(Paths.cache, `chung-tu-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+    const file = new File(Paths.cache, `preview-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
     let active = true;
     let writing = true;
     async function load() {

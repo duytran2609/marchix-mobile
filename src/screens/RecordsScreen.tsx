@@ -16,7 +16,8 @@ import { bookStatuses, recordActions, recordBooks, recordKinds,
   recordNumber, recordSortTime, recordStates, recordSystemCode, watchRecords } from '../features/records/records';
 import type { Correspondence, RecordBook, RecordStatus } from '../features/records/records';
 import { RecordForm } from '../features/records/RecordForm';
-import { RecordAttachmentButton, RecordAttachmentPreview } from '../features/records/RecordAttachment';
+import { AttachmentPreview } from '../components/AttachmentPreview';
+import { RecordAttachmentButton } from '../features/records/RecordAttachment';
 import type { RecordAttachment } from '../features/records/RecordAttachment';
 import { watchRecordEvents } from '../features/records/recordStore';
 import type { RecordEvent } from '../features/records/recordStore';
@@ -178,7 +179,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
           <View role="dialog" accessibilityViewIsModal accessibilityLabel={popupTitle}
             style={[local.dialog, { backgroundColor: colors.paper },
               (!editing || activePreview) && local.tallDialog]}>
-            {activePreview && <RecordAttachmentPreview embedded file={activePreview.file}
+            {activePreview && <AttachmentPreview embedded file={activePreview.file}
               downloadable={activePreview.downloadable} onClose={() => setPreview(undefined)} />}
             <View style={activePreview ? local.hidden : editing ? local.formContainer : local.flex}>
               {!editing && <View style={local.header}>

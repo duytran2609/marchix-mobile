@@ -9,16 +9,18 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { KeyboardViewport } from '../components/KeyboardViewport';
 import { Button } from '../components/Button';
+import { ChoiceButtons } from '../components/ChoiceButtons';
 import { FieldLabel } from '../components/FieldLabel';
 import { PeopleSummary } from '../components/PeopleSummary';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
+import { taskUnsetLabel } from '../features/tasks/taskLabels';
 import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskDiscussion } from '../features/tasks/TaskDiscussion';
 import { TaskPriority } from '../features/tasks/TaskPriority';
-import { TaskProgress } from '../features/tasks/TaskProgress';
+import { statusTone, TaskProgress } from '../features/tasks/TaskProgress';
 import { checklistWeight } from '../features/tasks/checklistProgress';
 import {
   commentMaxLength, editableStatus, editableStatuses, listTaskAssignees, parseTaskProgress, remindTask, reportTaskCompletion,
@@ -56,31 +58,29 @@ function TaskMetadata({ task, email, name, members, project }: {
   }
 
   const fields = [
-    ['Hạng mục', task.category?.trim() || 'Chưa xác định'],
+    ['Hạng mục', task.category?.trim() || taskUnsetLabel],
     ['Người giao việc', assigner
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(assigner)]} textStyle={personNameStyle} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(assigner)]} textStyle={personNameStyle} /> : taskUnsetLabel],
     ['Người thực hiện', task.assigneeEmail || assignee
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.assigneeEmail, assignee)]} textStyle={personNameStyle} /> : 'Chưa rõ'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.assigneeEmail, assignee)]} textStyle={personNameStyle} /> : taskUnsetLabel],
     ['Người duyệt', task.approverEmail
-      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.approverEmail)]} textStyle={personNameStyle} /> : 'Chưa chỉ định'],
+      ? <PeopleSummary wrap wrapAlignEnd people={[person(task.approverEmail)]} textStyle={personNameStyle} /> : taskUnsetLabel],
     ['Người theo dõi', watchers.length
-      ? <PeopleSummary wrap wrapAlignEnd people={watchers.map(personEmail => person(personEmail))} textStyle={personNameStyle} /> : 'Chưa chọn'],
-    ['Dự án', project || task.projectId || 'Chung toàn công ty'],
-    ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : 'Chưa đặt'],
-    ['Hạn chót', task.due ? formatTaskDate(task.due) : 'Chưa đặt'],
-    ['Mức độ ưu tiên', <Text style={information.value}><TaskPriority priority={task.priority} /></Text>],
-    ...(typeof task.requireReview === 'boolean' ? [[
-      'Chế độ hoàn thành', taskCompletionModes[task.requireReview ? 1 : 0].label,
-    ] as const] : []),
-    ['Lặp lại', task.repeat || 'Không lặp'],
-    ['Mốc bàn giao dự án', task.milestone ? 'Có' : 'Không'],
+      ? <PeopleSummary wrap wrapAlignEnd people={watchers.map(personEmail => person(personEmail))} textStyle={personNameStyle} /> : taskUnsetLabel],
+    ['Dự án', project || (task.projectId === '' ? 'Chung toàn công ty' : task.projectId || taskUnsetLabel)],
+    ['Ngày bắt đầu', task.startDate ? formatTaskDate(task.startDate) : taskUnsetLabel],
+    ['Hạn chót', task.due ? formatTaskDate(task.due) : taskUnsetLabel],
+    ['Mức độ ưu tiên', <Text style={information.value}><TaskPriority priority={task.priority} colored /></Text>],
+    ['Chế độ hoàn thành', typeof task.requireReview === 'boolean' ? taskCompletionModes[task.requireReview ? 1 : 0].label : taskUnsetLabel],
+    ['Lặp lại', task.repeat || taskUnsetLabel],
+    ['Mốc bàn giao dự án', typeof task.milestone === 'boolean' ? (task.milestone ? 'Có' : 'Không') : taskUnsetLabel],
   ] as const;
 
   return <View style={information.panel}>
     {fields.map(([label, value], index) => (
       <View key={label} style={[information.row, index > 0 && information.divider]}>
         <Text style={information.label}>{label}</Text>
-        {typeof value === 'string' ? <Text style={information.value}>{value}</Text> : value}
+        {typeof value === 'string' ? <Text style={[information.value, value === taskUnsetLabel && textStyles.unsetValue]}>{value}</Text> : value}
       </View>
     ))}
   </View>;
@@ -89,6 +89,7 @@ function TaskMetadata({ task, email, name, members, project }: {
 export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'Danh sách công việc' }: {
   liveTask: Task; email: string; name: string; onBack?: () => void; backLabel?: string;
 }) {
+  const { colors } = useTheme();
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const information = useInformationStyles();
@@ -228,7 +229,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     <Text accessibilityRole="header" style={[screenStyles.cardTitle, screenStyles.metadataLabel]}>Mô tả / Yêu cầu bàn giao</Text>
     <View style={[information.panel, styles.taskNote]}>
       {liveTask.note ? <Text selectable style={[screenStyles.body, screenStyles.metadataValue]}>{liveTask.note}</Text>
-        : <EmptyState icon="note" message="Chưa có mô tả hoặc yêu cầu bàn giao." />}
+        : <EmptyState icon="note" message={taskUnsetLabel} />}
     </View>
   </View>;
   const general = isGeneral && <>
@@ -239,17 +240,9 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
       disabled={!!busy || reminderSent} onPress={() => void sendReminder()} />}
     {canEdit ? <>
       <Text style={screenStyles.label}>Trạng thái</Text>
-      <View style={screenStyles.choices}>
-        {editableStatuses.map(value => (
-          <Pressable key={value} accessibilityRole="radio"
-            accessibilityState={{ checked: value === status, disabled: !!busy }}
-            onPress={() => setProgressDraft(draft => ({ ...draft, status: value }))}
-            disabled={!!busy}
-            style={[screenStyles.choice, value === status && screenStyles.selected]}>
-            <Text style={[screenStyles.label, screenStyles.metadataValue]}>{value}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <ChoiceButtons label="Trạng thái" items={editableStatuses.map(value => ({
+        value, label: value, tone: statusTone(value, colors),
+      }))} value={status} disabled={!!busy} onChange={value => setProgressDraft(draft => ({ ...draft, status: value }))} />
       {!lockedProgress && <>
         <FieldLabel style={screenStyles.label} required>Tiến độ (%)</FieldLabel>
         <NumberStepper accessibilityLabel="Tiến độ (%)" inputMode="numeric" style={screenStyles.input} max={100}

@@ -52,19 +52,36 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
   }
   try {
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'light' });
     await update(1);
     await page.goto(previewUrl);
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
     await openTasks(page);
     await page.getByRole('textbox', { name: 'Tìm tên công việc' }).fill(title);
-    await page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true }).click();
+    const card = page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true });
+    await expect(card.getByText('Hạn chót: Chưa thiết lập', { exact: true })).toBeVisible();
+    await expect(card.getByText('Mức độ ưu tiên: Chưa thiết lập', { exact: true })).toBeVisible();
+    const unsetValues = card.getByText('Chưa thiết lập', { exact: true });
+    await expect(unsetValues).toHaveCount(2);
+    for (const value of await unsetValues.all()) await expect(value).toHaveCSS('color', 'rgb(118, 118, 118)');
+    await page.getByRole('button', { name: 'Mức độ ưu tiên: Tất cả', exact: true }).click();
+    await page.getByRole('radio', { name: 'Chưa thiết lập', exact: true }).click();
+    await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
+    await expect(card.getByText('Chưa thiết lập', { exact: true })).toHaveCSS('color', 'rgb(118, 118, 118)');
+    await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
+    await card.click();
     const dialog = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
     const content = dialog.getByTestId('task-detail-scroll');
     const tab = (name: string) => dialog.getByRole('button', { name, exact: true });
     const height = () => dialog.evaluate(element => element.getBoundingClientRect().height);
-    const deadlineLabel = dialog.getByText('Hạn chót', { exact: true });
-    await expect(deadlineLabel).toHaveCSS('font-weight', '700');
-    await expect(deadlineLabel.locator('..').getByText('Chưa đặt', { exact: true })).toHaveCSS('font-weight', '500');
+    for (const field of ['Hạng mục', 'Người duyệt', 'Người theo dõi', 'Dự án', 'Ngày bắt đầu', 'Hạn chót',
+      'Mức độ ưu tiên', 'Chế độ hoàn thành', 'Lặp lại', 'Mốc bàn giao dự án']) {
+      const label = dialog.getByText(field, { exact: true });
+      await expect(label).toHaveCSS('font-weight', '700');
+      const value = label.locator('..').getByText('Chưa thiết lập', { exact: true });
+      await expect(value).toHaveCSS('font-weight', '400');
+      await expect(value).toHaveCSS('color', 'rgb(118, 118, 118)');
+    }
     const generalHeight = await height();
     const shortHeights = new Map<string, number>();
     for (const name of ['Mô tả', 'Trao đổi & tài liệu']) {
@@ -371,6 +388,37 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
       await request.delete(documents + '/requests/' + id, { headers });
     }
     if (overtimeId) await request.delete(documents + '/requests/' + overtimeId, { headers });
+  }
+});
+
+test('Thống kê bảng công in đậm số với phần chữ nét thường', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Mở menu' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+  const panel = page.getByRole('heading', { name: 'Bảng công của bạn' }).locator('../..');
+  const number = /^\d+(?:[.,]\d+)?$/;
+  for (const [label, unit, count] of [
+    ['Công thực tế', 'công chuẩn', 2], ['Nghỉ phép / công tác', 'ngày', 1], ['Đi muộn', 'lần', 1],
+  ] as const) {
+    const title = panel.getByText(label, { exact: true });
+    await expect(title).toHaveCSS('font-weight', '700');
+    const tile = title.locator('..');
+    const numbers = tile.getByText(number);
+    await expect(numbers).toHaveCount(count);
+    for (const value of await numbers.all()) {
+      await expect(value).toHaveCSS('font-weight', '700');
+      await expect(value).toHaveCSS('color', 'rgb(0, 0, 0)');
+    }
+    await expect(tile.getByText(unit, { exact: true })).toHaveCSS('font-weight', '400');
+  }
+  for (const label of ['Quên chấm vào', 'Quên chấm ra']) {
+    const line = panel.getByText(new RegExp(`^${label} \\d+ lần$`));
+    await expect(line).toHaveCSS('font-weight', '400');
+    const value = line.getByText(number);
+    await expect(value).toHaveCSS('font-weight', '700');
+    await expect(value).toHaveCSS('color', 'rgb(0, 0, 0)');
   }
 });
 
@@ -1177,7 +1225,11 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await page.goto(previewUrl);
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
     await page.getByRole('button', { name: 'Mở menu' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Cài đặt' }).click();
+    const settingsDrawer = page.getByRole('dialog');
+    const drawerAvatar = settingsDrawer.getByRole('button', { name: 'Thông tin cá nhân' }).getByTestId('member-avatar');
+    await expect(drawerAvatar).toHaveCSS('border-top-width', '1px');
+    await expect(drawerAvatar).toHaveCSS('border-top-color', 'rgb(0, 0, 0)');
+    await settingsDrawer.getByRole('button', { name: 'Cài đặt' }).click();
     const labels = ['Chung', 'Tài khoản', 'Chi cố định', 'Công & việc', 'Ngân sách', 'Lương & BH'];
     await expect(page.getByRole('tab')).toHaveText(labels);
 
@@ -1185,12 +1237,19 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await page.getByRole('button', { name: '+ Thêm tài khoản' }).click();
     const accountPopup = page.getByRole('dialog', { name: 'Thêm tài khoản', exact: true });
     await accountPopup.getByRole('textbox', { name: 'Tên hiển thị' }).fill('Nhân viên kiểm thử');
-    await accountPopup.getByRole('textbox', { name: 'Email Google' }).fill(memberEmail);
+    await accountPopup.getByRole('textbox', { name: 'Email', exact: true }).fill(memberEmail);
     await accountPopup.getByRole('button', { name: 'Lưu cài đặt' }).click();
     await expect(accountPopup).toBeHidden();
     await expect.poll(async () => (await read(`members/${memberEmail}`))?.role?.stringValue).toBe('staff');
+    const memberAvatar = page.getByRole('button', { name: /Nhân viên kiểm thử/ }).getByTestId('member-avatar');
+    await expect(memberAvatar).toHaveCSS('border-top-width', '1px');
+    await expect(memberAvatar).toHaveCSS('border-top-color', 'rgb(0, 0, 0)');
 
     await openTab(labels[2]);
+    const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
+    const emptyExpenses = page.getByText('Chưa có khoản chi cố định.', { exact: true });
+    await expect(emptyExpenses).toBeVisible();
+    await expect(expenseTable).toBeHidden();
     await page.getByRole('button', { name: '+ Thêm khoản chi' }).click();
     const expensePopup = page.getByRole('dialog', { name: 'Thêm khoản chi', exact: true });
     await expensePopup.getByRole('textbox', { name: 'Tên khoản chi' }).fill(expenseName);
@@ -1203,7 +1262,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const { documents: recurring } = await (await fetch(`${base}/recurring`, { headers })).json();
     recurringId = recurring.find((item: { fields: { name: { stringValue: string } } }) =>
       item.fields.name.stringValue === expenseName).name.split('/').at(-1);
-    const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
+    await expect(emptyExpenses).toBeHidden();
     const expenseRow = expenseTable.getByRole('row').filter({ has: deleteExpense });
     await expect(expenseRow.getByRole('cell', { name: 'Nhà cung cấp kiểm thử' })).toBeVisible();
     await expect(expenseRow.getByRole('cell', { name: 'Đang áp dụng' })).toBeVisible();
@@ -1212,7 +1271,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await expect(editExpense.getByRole('textbox', { name: 'Tên khoản chi' })).toHaveValue(expenseName);
     await editExpense.getByRole('button', { name: 'Hủy', exact: true }).click();
     const total = expenseTable.getByRole('row').filter({ hasText: 'Tổng chi phí cố định / tháng' });
-    const totalBeforeDelete = await total.textContent();
+    await expect(total).toContainText(/85[.]000\s*₫/);
     await deleteExpense.click();
     const confirm = page.getByRole('alertdialog', { name: 'Xác nhận xóa khoản chi cố định' });
     await confirm.getByRole('button', { name: 'Hủy' }).click();
@@ -1220,32 +1279,114 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await deleteExpense.click();
     await confirm.getByRole('button', { name: 'Xóa khoản chi' }).click();
     await expect(deleteExpense).toBeHidden();
-    await expect(total).not.toHaveText(totalBeforeDelete ?? '');
+    await expect(emptyExpenses).toBeVisible();
+    await expect(expenseTable).toBeHidden();
     expect((await fetch(`${base}/recurring/${recurringId}`, { headers })).status).toBe(404);
 
     await openTab(labels[3]);
     const gpsToggle = page.getByRole('switch', { name: 'Chỉ cho chấm công tại văn phòng (GPS)', exact: true });
+    const reminderToggle = page.getByRole('switch', { name: 'Nhắc quên chấm công', exact: true });
+    const remindInHour = page.getByRole('button', { name: /^Nhắc quên chấm vào lúc – Giờ:/ });
+    const remindInMinute = page.getByRole('button', { name: /^Nhắc quên chấm vào lúc – Phút:/ });
+    const remindOutHour = page.getByRole('button', { name: /^Nhắc quên chấm ra lúc – Giờ:/ });
+    const remindOutMinute = page.getByRole('button', { name: /^Nhắc quên chấm ra lúc – Phút:/ });
+    await expect(reminderToggle).toHaveAttribute('aria-checked', 'false');
+    await expect(remindInHour).toHaveCount(0);
+    await expect(remindOutHour).toHaveCount(0);
+    await reminderToggle.click();
+    await expect(reminderToggle).toHaveAttribute('aria-checked', 'true');
+    const reminderBoxes = await Promise.all([remindInHour, remindInMinute, remindOutHour, remindOutMinute]
+      .map(button => button.boundingBox()));
+    expect(reminderBoxes.every(box => box?.y === reminderBoxes[0]?.y)).toBe(true);
+    expect(reminderBoxes[0]!.y).toBeGreaterThan((await reminderToggle.boundingBox())!.y);
+    expect(reminderBoxes[0]!.y).toBeLessThan((await gpsToggle.boundingBox())!.y);
+    await remindInMinute.click();
+    await page.getByRole('radiogroup', { name: 'Nhắc quên chấm vào lúc – Phút' })
+      .getByRole('radio', { name: '35', exact: true }).click();
+    await reminderToggle.click();
+    await expect(remindInMinute).toHaveCount(0);
+    await reminderToggle.click();
+    await expect(remindInMinute).toHaveAccessibleName('Nhắc quên chấm vào lúc – Phút: 35');
     const thumb = gpsToggle.getByTestId('settings-switch-thumb');
+    const officeCoordinates = page.getByRole('heading', { name: 'Tọa độ văn phòng', exact: true });
+    const latitude = page.getByRole('textbox', { name: 'Vĩ độ (độ)', exact: true });
+    const longitude = page.getByRole('textbox', { name: 'Kinh độ (độ)', exact: true });
+    const radius = page.getByRole('textbox', { name: 'Bán kính cho phép (m)', exact: true });
     await expect(gpsToggle).toBeVisible();
     const initialGps = (await gpsToggle.getAttribute('aria-checked')) === 'true';
+    await expect(officeCoordinates).toHaveCount(initialGps ? 1 : 0);
     await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(thumb).toHaveCSS('border-top-width', '1px');
     await gpsToggle.click();
     await expect(gpsToggle).toHaveAttribute('aria-checked', String(!initialGps));
+    await expect(officeCoordinates).toHaveCount(initialGps ? 0 : 1);
     await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await gpsToggle.press('Space');
     await expect(gpsToggle).toHaveAttribute('aria-checked', String(initialGps));
-    await page.getByRole('button', { name: /^Giờ vào ca – Giờ:/ }).click();
+    if (!initialGps) await gpsToggle.click();
+    await expect(officeCoordinates).toBeVisible();
+    await expect(radius).toBeVisible();
+    const latitudeBox = (await latitude.boundingBox())!;
+    const longitudeBox = (await longitude.boundingBox())!;
+    const radiusBox = (await radius.boundingBox())!;
+    const radiusLabelBox = (await page.getByText(/^Bán kính cho phép/).boundingBox())!;
+    expect(latitudeBox.y).toBe(longitudeBox.y);
+    expect(longitudeBox.x).toBeLessThan(latitudeBox.x);
+    expect(radiusBox.y).toBeGreaterThan(latitudeBox.y);
+    expect(radiusLabelBox.x + radiusLabelBox.width).toBeLessThan(radiusBox.x);
+    expect(radiusBox.y + radiusBox.height / 2).toBeCloseTo(radiusLabelBox.y + radiusLabelBox.height / 2 + 3, 0);
+    await expect(latitude.locator('..').getByText('°', { exact: true })).toBeVisible();
+    await expect(longitude.locator('..').getByText('°', { exact: true })).toBeVisible();
+    const shiftHour = page.getByRole('button', { name: /^Giờ vào ca – Giờ:/ });
+    const shiftOutHour = page.getByRole('button', { name: /^Giờ ra ca – Giờ:/ });
+    await expect(page.getByRole('heading', { name: 'Giờ vào/ra ca' })).toBeVisible();
+    const shiftInPosition = (await shiftHour.boundingBox())!;
+    const shiftOutPosition = (await shiftOutHour.boundingBox())!;
+    expect(shiftInPosition.y).toBe(shiftOutPosition.y);
+    expect(shiftInPosition.x).toBeLessThan(shiftOutPosition.x);
+    await shiftHour.click();
     await page.getByRole('radio', { name: '08', exact: true }).click();
     await page.getByRole('button', { name: /^Giờ vào ca – Phút:/ }).click();
     await page.getByRole('radio', { name: '15', exact: true }).click();
+    const graceInput = page.getByRole('textbox', { name: 'Phút đi muộn cho phép', exact: true });
+    const graceLabelPosition = (await page.getByText(/^Phút đi muộn cho phép/).boundingBox())!;
+    const graceInputPosition = (await graceInput.boundingBox())!;
+    expect(graceLabelPosition.x + graceLabelPosition.width).toBeLessThan(graceInputPosition.x);
+    expect(graceInputPosition.y + graceInputPosition.height / 2)
+      .toBeCloseTo(graceLabelPosition.y + graceLabelPosition.height / 2 + 3, 0);
+    await graceInput.fill('12');
     const monday = page.getByRole('button', { name: /^Thứ 2:/ });
     await monday.click();
     await page.getByRole('radiogroup', { name: 'Thứ 2' }).getByRole('radio', { name: 'Nửa ngày' }).click();
     await expect(monday).toHaveAccessibleName('Thứ 2: Nửa ngày');
-    const latitude = page.getByRole('textbox', { name: 'Vĩ độ văn phòng', exact: true });
-    const longitude = page.getByRole('textbox', { name: 'Kinh độ văn phòng', exact: true });
-    const radius = page.getByRole('textbox', { name: 'Bán kính cho phép (m)', exact: true });
+    const inputFontSize = await latitude.evaluate(input => getComputedStyle(input).fontSize);
+    await expect(shiftHour.getByText('08', { exact: true })).toHaveCSS('font-size', inputFontSize);
+    await expect(monday.getByText('Nửa ngày', { exact: true })).toHaveCSS('font-size', inputFontSize);
+    await expect(page.getByRole('heading', { name: 'Thời gian nghỉ trưa' })).toBeVisible();
+    const lunchStart = page.getByRole('button', { name: /^Nghỉ trưa từ – Giờ:/ });
+    const lunchEnd = page.getByRole('button', { name: /^Nghỉ trưa đến – Giờ:/ });
+    const fromPosition = (await lunchStart.boundingBox())!;
+    const untilPosition = (await lunchEnd.boundingBox())!;
+    expect(fromPosition.y).toBe(untilPosition.y);
+    expect(fromPosition.x).toBeLessThan(untilPosition.x);
+    await lunchStart.click();
+    await page.getByRole('radio', { name: '12', exact: true }).click();
+    await page.getByRole('button', { name: /^Nghỉ trưa từ – Phút:/ }).click();
+    await page.getByRole('radio', { name: '15', exact: true }).click();
+    const overrideDate = todayInVietnam();
+    const overrideLabel = formatTaskDate(overrideDate);
+    await page.getByRole('button', { name: 'Thiết lập ngày cụ thể', exact: true }).click();
+    const calendar = page.getByRole('dialog', { name: 'Thiết lập ngày cụ thể' });
+    await calendar.getByRole('button', { name: `Ngày ${overrideLabel}`, exact: true }).click();
+    await calendar.getByRole('button', { name: /^Lịch làm việc trong ngày:/ }).click();
+    await page.getByRole('radiogroup', { name: 'Lịch làm việc trong ngày' })
+      .getByRole('radio', { name: 'Nghỉ', exact: true }).click();
+    await calendar.getByRole('button', { name: 'Áp dụng cho ngày này' }).click();
+    await expect(calendar.getByRole('button', { name: `Ngày ${overrideLabel}, Nghỉ`, exact: true })
+      .getByTestId('calendar-day-marker')).toBeVisible();
+    await calendar.getByRole('button', { name: 'Đóng lịch' }).click();
+    const overrideRows = page.getByRole('button', { name: /^Sửa lịch ngày / });
+    await expect(overrideRows).toHaveCount(0);
     await latitude.fill('-12x,345abc');
     await longitude.fill('-98y.765abc');
     await radius.fill('2a5b0m');
@@ -1256,6 +1397,12 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await expect.poll(async () => (await read('settings/work'))?.shiftIn?.stringValue).toBe('08:15');
     expect((await read('settings/work'))?.days?.mapValue?.fields?.['1']?.doubleValue).toBe(0.5);
     await expect.poll(() => read('settings/work')).toMatchObject({
+      lunchFrom: { stringValue: '12:15' },
+      grace: { integerValue: '12' },
+      dayOverrides: { mapValue: { fields: { [overrideDate]: { integerValue: '0' } } } },
+      remindIn: { stringValue: '08:35' },
+      remindOut: { stringValue: '17:45' },
+      gpsOn: { booleanValue: true },
       gpsLat: { doubleValue: -12.345 },
       gpsLng: { doubleValue: -98.765 },
       gpsRadius: { integerValue: '250' },
@@ -1263,9 +1410,109 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await openTab(labels[0]);
     await expect(latitude).toHaveCount(0);
     await openTab(labels[3]);
+    await expect(reminderToggle).toHaveAttribute('aria-checked', 'true');
+    await expect(remindInMinute).toHaveAccessibleName('Nhắc quên chấm vào lúc – Phút: 35');
     await expect(latitude).toHaveValue('-12.345');
     await expect(longitude).toHaveValue('-98.765');
     await expect(radius).toHaveValue('250');
+    await expect(overrideRows).toHaveCount(0);
+    const nextMonth = shiftDay(overrideDate.slice(0, 7) + '-01', 32).slice(0, 7) + '-01';
+    const followingMonth = shiftDay(nextMonth, 32).slice(0, 7) + '-01';
+    const rangeStart = shiftDay(followingMonth, -2);
+    const rangeEnd = shiftDay(followingMonth, 1);
+    const dayButton = (day: string, description?: string) => calendar.getByRole('button', {
+      name: `Ngày ${formatTaskDate(day)}${description ? ', ' + description : ''}`, exact: true,
+    });
+    const workdayChoice = (label: string, choice: string) =>
+      page.getByRole('radiogroup', { name: label }).getByRole('radio', { name: choice, exact: true });
+    const rangeEditor = 'Lịch làm việc cho khoảng ngày';
+
+    await page.getByRole('button', { name: 'Thiết lập ngày cụ thể', exact: true }).click();
+    const legend = calendar.getByRole('group', { name: 'Chú thích lịch làm việc' });
+    const legendColor = (label: string) => legend.getByText(label, { exact: true }).locator('..')
+      .getByTestId('calendar-legend-marker').evaluate(dot => getComputedStyle(dot).backgroundColor);
+    const [fullDayColor, halfDayColor, offDayColor] = await Promise.all(['Cả ngày', 'Nửa ngày', 'Nghỉ'].map(legendColor));
+    expect(new Set([fullDayColor, halfDayColor, offDayColor]).size).toBe(3);
+    await expect(dayButton(overrideDate, 'Nghỉ').getByTestId('calendar-day-marker')).toHaveCSS('background-color', offDayColor);
+    await calendar.getByRole('button', { name: 'Tháng sau', exact: true }).click();
+    const firstDay = dayButton(rangeStart);
+    await firstDay.scrollIntoViewIfNeeded();
+    const box = (await firstDay.boundingBox())!;
+    const touch = await page.context().newCDPSession(page);
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }],
+    });
+    await expect(calendar.getByText(`Đã chọn ngày đầu ${formatTaskDate(rangeStart)}. Chọn ngày cuối.`)).toBeVisible();
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await touch.detach();
+    await calendar.getByRole('button', { name: 'Tháng sau', exact: true }).click();
+    await dayButton(rangeEnd).tap();
+    await expect(dayButton(followingMonth)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dayButton(rangeEnd)).toHaveAttribute('aria-pressed', 'true');
+    await calendar.getByRole('button', { name: new RegExp('^' + rangeEditor + ':') }).click();
+    await workdayChoice(rangeEditor, 'Nửa ngày').click();
+    await calendar.getByRole('button', { name: 'Áp dụng cho các ngày đã chọn' }).click();
+    await expect(dayButton(followingMonth, 'Nửa ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', halfDayColor);
+    await expect(dayButton(rangeEnd, 'Nửa ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', halfDayColor);
+    const rangeDates = [rangeStart, shiftDay(rangeStart, 1), followingMonth, rangeEnd];
+    const readOverrides = async () => (await read('settings/work'))?.dayOverrides?.mapValue?.fields;
+
+    await calendar.getByRole('button', { name: 'Tháng trước', exact: true }).click();
+    await expect(dayButton(rangeStart, 'Nửa ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', halfDayColor);
+    await dayButton(rangeStart, 'Nửa ngày').tap();
+    await expect(dayButton(rangeStart, 'Nửa ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', halfDayColor);
+    await calendar.getByRole('button', { name: 'Lịch làm việc trong ngày: Nửa ngày' }).click();
+    await workdayChoice('Lịch làm việc trong ngày', 'Cả ngày').click();
+    await calendar.getByRole('button', { name: 'Áp dụng cho ngày này' }).click();
+    await expect(dayButton(rangeStart, 'Cả ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', fullDayColor);
+    await calendar.getByRole('button', { name: 'Đóng lịch' }).click();
+    await page.getByRole('button', { name: 'Lưu cài đặt' }).click();
+    await expect.poll(readOverrides).toMatchObject(Object.fromEntries(rangeDates.map(day =>
+      [day, day === rangeStart ? { integerValue: '1' } : { doubleValue: 0.5 }])));
+    await expect(overrideRows).toHaveCount(0);
+    await page.getByRole('button', { name: 'Thiết lập ngày cụ thể', exact: true }).click();
+    await calendar.getByRole('button', { name: 'Tháng sau', exact: true }).click();
+    await expect(dayButton(rangeStart, 'Cả ngày').getByTestId('calendar-day-marker')).toHaveCSS('background-color', fullDayColor);
+    await calendar.getByRole('button', { name: 'Đóng lịch' }).click();
+
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+    await expect(page.getByText(/Ca làm việc:\s*Ngày nghỉ/)).toBeVisible();
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cài đặt', exact: true }).click();
+    await openTab(labels[3]);
+    await page.getByRole('button', { name: 'Thiết lập ngày cụ thể', exact: true }).click();
+    await dayButton(overrideDate, 'Nghỉ').tap();
+    await calendar.getByRole('button', { name: 'Dùng lại lịch cố định' }).click();
+    await expect(dayButton(overrideDate)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dayButton(overrideDate).getByTestId('calendar-day-marker')).toHaveCount(0);
+    await expect(calendar.getByRole('button', { name: 'Dùng lại lịch cố định' })).toHaveCount(0);
+    const weekdayIndex = new Date(overrideDate + 'T00:00:00Z').getUTCDay();
+    const weeklyLabel = ['Nghỉ', 'Nửa ngày', 'Cả ngày', 'Cả ngày', 'Cả ngày', 'Cả ngày', 'Nửa ngày'][weekdayIndex];
+    await expect(calendar.getByRole('button', { name: `Lịch làm việc trong ngày: ${weeklyLabel}`, exact: true })).toBeVisible();
+    await calendar.getByRole('button', { name: 'Tháng sau', exact: true }).click();
+    await dayButton(rangeStart, 'Cả ngày').tap();
+    await expect(dayButton(rangeStart, 'Cả ngày')).toHaveAttribute('aria-pressed', 'true');
+    await calendar.getByRole('button', { name: 'Đóng lịch' }).click();
+    await radius.fill('');
+    await gpsToggle.click();
+    await reminderToggle.click();
+    await expect(remindInMinute).toHaveCount(0);
+    await expect(remindOutMinute).toHaveCount(0);
+    await expect(latitude).toHaveCount(0);
+    await expect(longitude).toHaveCount(0);
+    await expect(radius).toHaveCount(0);
+    await page.getByRole('button', { name: 'Lưu cài đặt' }).click();
+    await expect.poll(async () => (await read('settings/work'))?.dayOverrides?.mapValue?.fields?.[overrideDate]).toBeUndefined();
+    await expect.poll(() => read('settings/work')).toMatchObject({
+      gpsOn: { booleanValue: false },
+      gpsRadius: { integerValue: '250' },
+      remindIn: { stringValue: '' },
+      remindOut: { stringValue: '' },
+    });
+    await page.getByRole('button', { name: 'Thiết lập ngày cụ thể', exact: true }).click();
+    await expect(dayButton(overrideDate).getByTestId('calendar-day-marker')).toHaveCount(0);
+    await calendar.getByRole('button', { name: 'Đóng lịch' }).click();
 
     await openTab(labels[4]);
     await page.getByRole('textbox', { name: 'Chi phí cố định (VNĐ)', exact: true }).fill('125000');
@@ -1355,6 +1602,80 @@ test('Quản trị viên xem và mở được công việc của thành viên k
   const title = 'Việc riêng của đồng nghiệp';
   await page.getByRole('button', { name: `Mở công việc: ${title}` }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+});
+
+test('Popup giao và sửa việc hiển thị mức ưu tiên và các trạng thái phù hợp', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click();
+  await openTasks(page);
+  const statuses = ['Chưa làm', 'Đang làm', 'Vướng', 'Chờ duyệt', 'Xong'];
+  const tones = await Promise.all(statuses.map(async status => {
+    const stat = page.getByLabel(new RegExp(`^${status}: \\d+ công việc$`));
+    const background = await stat.evaluate(element => getComputedStyle(element).backgroundColor);
+    const color = await stat.getByText(status, { exact: true }).evaluate(element => getComputedStyle(element).color);
+    return { status, background, color };
+  }));
+
+  async function checkChoices(title: string, label: string, selected: string) {
+    const form = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+    await form.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
+    const group = form.getByRole('radiogroup', { name: label, exact: true });
+    const availableTones = tones.slice(0, 3);
+    await expect(group.getByRole('radio')).toHaveText(availableTones.map(({ status }) => status));
+    for (const { status, background, color } of availableTones) {
+      const choice = group.getByRole('radio', { name: status, exact: true });
+      await expect(choice).toHaveCSS('background-color', background);
+      await expect(choice.getByText(status, { exact: true })).toHaveCSS('color', color);
+      await expect(choice).toBeEnabled();
+    }
+    await expect(group.getByRole('radio', { name: selected, exact: true })).toBeChecked();
+    return group;
+  }
+
+  await page.getByRole('button', { name: '+ Giao việc', exact: true }).click();
+  const emptyAssignee = page.getByRole('button', { name: 'Người thực hiện: Chưa thiết lập', exact: true });
+  await expect(emptyAssignee).toBeVisible({ timeout: 15_000 });
+  await expect(emptyAssignee.getByText('Chưa thiết lập', { exact: true })).toHaveCSS('color', 'rgb(118, 118, 118)');
+  const emptyDue = page.getByRole('button', { name: 'Hạn chót, Chưa thiết lập', exact: true });
+  await expect(emptyDue.getByText('Chưa thiết lập', { exact: true })).toHaveCSS('color', 'rgb(118, 118, 118)');
+  const priorities = page.getByRole('radiogroup', { name: 'Mức độ ưu tiên', exact: true });
+  await expect(priorities.getByRole('radio')).toHaveText(['Cao', 'Trung bình', 'Thấp']);
+  for (const [priority, background, color] of [
+    ['Cao', tones[2].background, tones[2].color],
+    ['Trung bình', 'rgb(255, 240, 213)', 'rgb(135, 80, 9)'],
+    ['Thấp', tones[4].background, tones[4].color],
+  ]) {
+    const choice = priorities.getByRole('radio', { name: priority, exact: true });
+    await expect(choice).toHaveCSS('background-color', background);
+    await expect(choice).toHaveCSS('border-top-left-radius', '13px');
+    await expect(choice.getByText(priority, { exact: true })).toHaveCSS('color', color);
+    await expect(choice.getByText(priority, { exact: true })).toHaveCSS('font-weight', '700');
+  }
+  const highPriority = priorities.getByRole('radio', { name: 'Cao', exact: true });
+  await highPriority.click();
+  await expect(highPriority).toBeChecked();
+  await expect(highPriority).toHaveCSS('border-top-color', tones[2].color);
+  const initial = await checkChoices('Giao việc mới', 'Tình trạng ban đầu', 'Chưa làm');
+  await expect(page.getByRole('dialog').getByText(/Chờ duyệt|^Xong$/)).toHaveCount(0);
+  const blocked = initial.getByRole('radio', { name: 'Vướng', exact: true });
+  await blocked.click();
+  await expect(blocked).toBeChecked();
+  await expect(blocked).toHaveCSS('border-top-color', tones[2].color);
+  await page.getByRole('button', { name: 'Đóng giao việc', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại', exact: true }).click();
+  await page.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
+  await checkChoices('Chỉnh sửa công việc', 'Trạng thái', 'Đang làm');
+  await page.getByRole('button', { name: 'Đóng chỉnh sửa', exact: true }).click();
+  await page.getByRole('button', { name: 'Đóng chi tiết công việc', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Mở công việc: Rà soát tài liệu hướng dẫn', exact: true }).click();
+  await page.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
+  const lockedForm = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Chỉnh sửa công việc', exact: true }) });
+  await lockedForm.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
+  await expect(lockedForm.getByText('Chờ duyệt', { exact: true })).toBeVisible();
+  await expect(lockedForm.getByRole('radiogroup', { name: 'Trạng thái', exact: true })).toHaveCount(0);
 });
 
 test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết', async ({ page }) => {
@@ -1549,25 +1870,29 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
     await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
     await openTasks(page);
     const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
+    await expect(search).toBeVisible({ timeout: 15_000 });
     const placeholderStyle = () => search.evaluate(input => {
       const { color, fontWeight } = getComputedStyle(input, '::placeholder');
       return { color, fontWeight };
     });
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(114, 114, 114)', fontWeight: '400' });
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(118, 118, 118)', fontWeight: '400' });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(163, 163, 163)', fontWeight: '400' });
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(153, 153, 153)', fontWeight: '400' });
     await page.emulateMedia({ colorScheme: 'light' });
     await search.fill('Kiểm tra giao diện Kanban');
     await expect(search).toHaveCSS('font-weight', '500');
     await page.getByRole('button', { name: 'Xóa từ khóa tìm tên công việc' }).click();
     await expect(search).toHaveValue('');
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(114, 114, 114)', fontWeight: '400' });
+    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(118, 118, 118)', fontWeight: '400' });
     await search.fill('Kiểm tra giao diện Kanban');
     const card = page.getByRole('button', { name: `Mở công việc: ${title}` });
     for (const mode of ['Danh sách', 'Bảng Kanban']) {
       await page.getByRole('button', { name: mode, exact: true }).click();
       await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
       await expect(card.getByText('Người giao việc:', { exact: true })).toHaveCount(0);
+      const priorityText = card.getByText('Cao', { exact: true });
+      await expect(priorityText).toHaveCSS('color', 'rgb(158, 52, 43)');
+      await expect(priorityText.locator('..')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       const [assignee, due, overdue, priority] = await Promise.all([
         card.getByText('Người thực hiện:', { exact: true }).boundingBox(),
         card.getByText(`Hạn chót: ${formatTaskDate(deadline)}`, { exact: true }).boundingBox(),
@@ -1605,6 +1930,10 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
     expect(fields.progress.integerValue).toBe('25');
     await moved.click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    const detailPriority = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true })
+      .getByText('Mức độ ưu tiên', { exact: true }).locator('..').getByText('Cao', { exact: true });
+    await expect(detailPriority).toHaveCSS('color', 'rgb(158, 52, 43)');
+    await expect(detailPriority).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   } finally {
     await fetch(doc, { method: 'DELETE', headers });
   }
@@ -1643,7 +1972,11 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const titleColor = await form.getByRole('heading', { name: 'Giao việc mới', exact: true })
       .evaluate(element => getComputedStyle(element).color);
     await expect(close.getByText('×', { exact: true })).toHaveCSS('color', titleColor);
-    await form.getByRole('textbox', { name: 'Tên công việc' }).fill(title);
+    const titleInput = form.getByRole('textbox', { name: 'Tên công việc' });
+    await expect.poll(() => titleInput.evaluate(input => getComputedStyle(input, '::placeholder').fontWeight)).toBe('400');
+    await titleInput.fill(title);
+    await expect(titleInput).toHaveCSS('font-weight', '500');
+    await expect(form.getByRole('radio', { name: 'Trung bình', exact: true })).toBeChecked();
     await form.getByRole('textbox', { name: 'Hạng mục', exact: true }).fill('  Bàn giao  ');
     await form.getByRole('button', { name: /^Người thực hiện:/ }).click();
     const assigneePicker = page.getByRole('dialog', { name: 'Người thực hiện', exact: true });
@@ -1664,7 +1997,11 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(staff).toBeChecked();
     await assigneePicker.getByRole('button', { name: 'Xong', exact: true }).click();
     await expect(form.getByRole('button', { name: 'Người thực hiện: Nhân viên demo, Người giao việc demo', exact: true })).toBeVisible();
-    await form.getByRole('radio', { name: 'Cao', exact: true }).click();
+    const highPriority = form.getByRole('radio', { name: 'Cao', exact: true });
+    await highPriority.click();
+    const highPriorityBackground = await highPriority.evaluate(element => getComputedStyle(element).backgroundColor);
+    const highPriorityColor = await highPriority.getByText('Cao', { exact: true })
+      .evaluate(element => getComputedStyle(element).color);
     const create = form.getByRole('button', { name: 'Tạo công việc', exact: true });
     await create.click();
     await expect(form.getByRole('alert')).toContainText('Chọn hạn chót trên lịch');
@@ -1805,15 +2142,22 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(page.getByRole('textbox', { name: 'Nội dung trao đổi' })).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).toBeDisabled();
     await page.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
+    await page.getByRole('button', { name: `Xem tệp ${attachment.name}` }).click();
+    await expect(page.getByRole('heading', { name: attachment.name, exact: true })).toBeVisible();
     const senderDownloadEvent = page.waitForEvent('download');
-    await page.getByRole('button', { name: `Tải tệp ${attachment.name}` }).click();
+    await page.getByRole('button', { name: 'Tải xuống', exact: true }).click();
     const senderDownload = await senderDownloadEvent;
     expect(senderDownload.suggestedFilename()).toBe(attachment.name);
     expect((await readFile((await senderDownload.path())!)).equals(attachment.buffer)).toBeTruthy();
+    await page.getByRole('button', { name: 'Đóng xem trước', exact: true }).click();
     await page.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
     await expect(assignee).toHaveAccessibleName('Người thực hiện: Nhân viên demo');
     await expect(received.getByText(`Hạn chót: ${deadline}`, { exact: true })).toBeVisible();
     await expect(received.getByText('Mức độ ưu tiên: Cao', { exact: true })).toBeVisible();
+    const cardPriority = received.getByText('Cao', { exact: true });
+    await expect(cardPriority).toHaveCSS('color', highPriorityColor);
+    await expect(cardPriority).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(cardPriority.locator('..')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(received).toContainText('Chưa làm');
     await expect(received).toContainText('0%');
     await receiverPage.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
@@ -1868,17 +2212,20 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await discussion.getByRole('button', { name: 'Gửi trao đổi' }).click();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
     await expect(discussion.getByText('Nhân viên demo', { exact: true })).toBeVisible();
-    const downloading = receiverPage.waitForEvent('download');
     const downloadResponse = receiverPage.waitForResponse(response => response.url().endsWith('/downloadMobileTaskAttachment') &&
       response.request().method() === 'POST');
-    const attachmentCard = receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` });
+    const attachmentCard = receiverPage.getByRole('button', { name: `Xem tệp ${attachment.name}` });
     const iconBox = await attachmentCard.getByText('BIN', { exact: true }).boundingBox();
     const filenameBox = await attachmentCard.getByText(attachment.name, { exact: true }).boundingBox();
     expect(iconBox!.x).toBeLessThan(filenameBox!.x);
     await attachmentCard.click();
+    await expect(receiverPage.getByRole('heading', { name: attachment.name, exact: true })).toBeVisible();
+    const downloading = receiverPage.waitForEvent('download');
+    await receiverPage.getByRole('button', { name: 'Tải xuống', exact: true }).click();
     const download = await downloading;
     expect(download.suggestedFilename()).toBe(attachment.name);
     expect((await readFile((await download.path())!)).equals(attachment.buffer)).toBeTruthy();
+    await receiverPage.getByRole('button', { name: 'Đóng xem trước', exact: true }).click();
     const downloadRequest = (await downloadResponse).request();
     const { data } = downloadRequest.postDataJSON();
     const otherId = taskIds.find(id => id !== data.taskId);
@@ -1906,7 +2253,10 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const editCategory = editForm.getByRole('textbox', { name: 'Hạng mục', exact: true });
     await expect(editCategory).toHaveValue('Bàn giao');
     await editCategory.fill('Nghiệm thu');
-    await expect(editForm.getByRole('radio', { name: 'Cao', exact: true })).toBeChecked();
+    const editHighPriority = editForm.getByRole('radio', { name: 'Cao', exact: true });
+    await expect(editHighPriority).toBeChecked();
+    await expect(editHighPriority).toHaveCSS('background-color', highPriorityBackground);
+    await expect(editHighPriority.getByText('Cao', { exact: true })).toHaveCSS('color', highPriorityColor);
     await expect(editForm.getByText(attachment.name, { exact: true })).toBeVisible();
     await expect(editForm.getByRole('button', { name: 'Người thực hiện: Nhân viên demo', exact: true })).toBeVisible({ timeout: 15000 });
     await editForm.getByRole('button', { name: `Hạn chót, ${deadline}` }).click();
@@ -1914,7 +2264,13 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await dueCalendar.getByRole('button', { name: `Ngày ${newDeadline}` }).click();
     const updatedTitle = `${title} đã sửa`;
     await editTitle.fill(updatedTitle);
-    await editForm.getByRole('radio', { name: 'Thấp', exact: true }).click();
+    const lowPriority = editForm.getByRole('radio', { name: 'Thấp', exact: true });
+    await lowPriority.click();
+    await expect(lowPriority).toBeChecked();
+    await expect(lowPriority).not.toHaveCSS('background-color', highPriorityBackground);
+    const lowPriorityColor = await lowPriority.getByText('Thấp', { exact: true })
+      .evaluate(element => getComputedStyle(element).color);
+    expect(lowPriorityColor).not.toBe(highPriorityColor);
     await editForm.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
     await expect(editForm.getByRole('button', { name: 'Chế độ hoàn thành: Chỉ báo cáo kết quả' })).toBeVisible();
     await expect(editForm.getByRole('button', { name: 'Người duyệt: Quản trị demo' })).toBeVisible();
@@ -1935,12 +2291,12 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(page.getByRole('heading', { name: updatedTitle, exact: true })).toBeVisible();
     await expect(receiverPage.getByRole('heading', { name: updatedTitle, exact: true })).toBeVisible();
     await expect(metadataValue('Hạn chót', newDeadline)).toBeVisible();
-    await expect(metadataValue('Mức độ ưu tiên', 'Thấp')).toBeVisible();
+    await expect(metadataValue('Mức độ ưu tiên', 'Thấp')).toHaveCSS('color', lowPriorityColor);
     await expect(metadataValue('Hạng mục', 'Nghiệm thu')).toBeVisible();
     await receiverPage.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     await expect(receiverPage.getByText('Lời nhắn đã chỉnh sửa.')).toBeVisible();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
-    await expect(receiverPage.getByRole('button', { name: `Tải tệp ${attachment.name}` })).toBeVisible();
+    await expect(receiverPage.getByRole('button', { name: `Xem tệp ${attachment.name}` })).toBeVisible();
     await receiverPage.getByRole('button', { name: 'Chung', exact: true }).click();
     await expect(checked).toBeChecked();
     await expect(receiverPage.getByRole('checkbox', { name: 'Mục mới sau khi sửa' })).not.toBeChecked();
@@ -1979,7 +2335,9 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
 test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai phiên', async ({ browser, page }) => {
   const suffix = Date.now();
   const task = `Kiểm thử lưu tiến độ ${suffix}`;
-  const documentUrl = `http://127.0.0.1:8080/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/progress-test-${suffix}`;
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const documentUrl = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/progress-test-${suffix}`;
   const headers = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' };
   const fixture = await fetch(documentUrl, { method: 'PATCH', headers, body: JSON.stringify({ fields: {
     title: { stringValue: task },
@@ -1995,6 +2353,7 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
   try {
     const otherPage = await other.newPage();
     await acknowledgeStartupReminder(otherPage);
+    await page.emulateMedia({ colorScheme: 'light' });
     await Promise.all([page.goto(previewUrl), otherPage.goto(previewUrl)]);
     await Promise.all([login(page), login(otherPage)]);
     await Promise.all([openTasks(page), openTasks(otherPage)]);
@@ -2005,6 +2364,20 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
     await Promise.all([openTask(page).click(), openTask(otherPage).click()]);
     const detail = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
     const otherDetail = otherPage.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+    const statuses = detail.getByRole('radiogroup', { name: 'Trạng thái', exact: true });
+    await expect(statuses.getByRole('radio')).toHaveText(['Chưa làm', 'Đang làm', 'Vướng']);
+    for (const [label, background, color] of [
+      ['Chưa làm', 'rgb(240, 237, 249)', 'rgb(100, 90, 116)'],
+      ['Đang làm', 'rgb(228, 240, 253)', 'rgb(21, 80, 131)'],
+      ['Vướng', 'rgb(251, 232, 229)', 'rgb(158, 52, 43)'],
+    ]) {
+      const choice = statuses.getByRole('radio', { name: label, exact: true });
+      await expect(choice).toHaveCSS('background-color', background);
+      await expect(choice.getByText(label, { exact: true })).toHaveCSS('color', color);
+    }
+    const initialStatus = statuses.getByRole('radio', { name: 'Chưa làm', exact: true });
+    await expect(initialStatus).toBeChecked();
+    await expect(initialStatus).toHaveCSS('border-top-color', 'rgb(100, 90, 116)');
     const progress = detail.getByRole('textbox', { name: 'Tiến độ (%)', exact: true });
     const previous = await progress.inputValue();
     await progress.fill('50');
@@ -2025,7 +2398,10 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
     await expect(errorToast).toBeVisible();
     await expect(errorToast.locator('..').getByText('\u26A0\uFE0E')).toHaveCSS('color', 'rgb(158, 52, 43)');
     await progress.fill('75');
-    await page.getByRole('radio', { name: 'Vướng' }).click();
+    const blockedStatus = statuses.getByRole('radio', { name: 'Vướng', exact: true });
+    await blockedStatus.click();
+    await expect(blockedStatus).toBeChecked();
+    await expect(blockedStatus).toHaveCSS('border-top-color', 'rgb(158, 52, 43)');
     await detail.getByRole('button', { name: 'Lưu tiến độ', exact: true }).click();
     const toast = page.getByText('Đã lưu tiến độ.', { exact: true });
     await expect(toast).toBeVisible();

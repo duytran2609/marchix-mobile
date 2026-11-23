@@ -1,6 +1,7 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, runTransaction, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, runTransaction, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import { todayInVietnam } from '../tasks/taskDates';
+import type { WorkdayWeight } from '../attendance/attendance';
 import { grants } from './adminSettingsFields';
 import type { AdminSettingsTab, FieldValues } from './adminSettingsFields';
 
@@ -23,7 +24,8 @@ export async function loadProjectChoices() {
   return [['', 'Không gắn dự án'], ...snapshot.docs.map(row => [row.id, String(row.data().name || row.id)] as const)] as const;
 }
 
-export async function saveSettings(tab: DocumentTab, values: FieldValues, email: string) {
+export async function saveSettings(tab: DocumentTab, values: FieldValues, email: string,
+  overrides: Record<string, WorkdayWeight | null> = {}) {
   const fields = { ...values };
   const metadata = { updatedBy: email, updatedAt: new Date().toISOString() };
   if (tab === 'work') {
@@ -33,7 +35,10 @@ export async function saveSettings(tab: DocumentTab, values: FieldValues, email:
       delete fields[key];
       return [day, values[key]];
     }));
-    await setDoc(doc(db, 'settings', tab), { ...fields, days, ...metadata }, { merge: true });
+    const dayOverrides = Object.fromEntries(Object.entries(overrides).map(([day, weight]) => [day, weight ?? deleteField()]));
+    await setDoc(doc(db, 'settings', tab), {
+      ...fields, days, ...metadata, ...(Object.keys(dayOverrides).length ? { dayOverrides } : {}),
+    }, { merge: true });
   } else {
     await setDoc(doc(db, 'settings', tab), tab === 'payroll' ? { ...fields, ...metadata } : fields, { merge: true });
   }
@@ -43,7 +48,7 @@ export const protectedOwner = 'dungnlt.ops@gmail.com';
 
 export async function saveMember(values: FieldValues, currentEmail: string, id?: string) {
   const email = String(values.email).toLowerCase();
-  if (!/^[^\s/@]+@[^\s/@]+\.[^\s/@]+$/.test(email)) throw new Error('Email Google không hợp lệ.');
+  if (!/^[^\s/@]+@[^\s/@]+\.[^\s/@]+$/.test(email)) throw new Error('Email không hợp lệ.');
   const ref = doc(db, 'members', id ?? email);
   await runTransaction(db, async transaction => {
     const snapshot = await transaction.get(ref);

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../components/EmptyState';
 import { TextInput } from '../../components/TextInput';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
 import { FilePickerButton } from '../../components/FilePickerButton';
@@ -11,7 +12,8 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { useToast } from '../../components/Toast';
 import { auth, pilotMode, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { formatVietnamDateTime } from '../../utils/dateTime';
-import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachments, saveTaskAttachment } from './taskAttachments';
+import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachment, readTaskAttachments } from './taskAttachments';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 import { addTaskAttachments, addTaskComment, commentMaxLength, findTaskReplyIndex, getAssignmentComment } from './tasks';
 import type { Task, TaskAssignee, TaskAttachment, TaskReplyTarget } from './tasks';
 import { useScreenStyles } from '../../theme/screenStyles';
@@ -33,7 +35,9 @@ export function TaskDiscussion({ task, email, name, members }: {
   const [replyTo, setReplyTo] = useState<TaskReplyTarget>();
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [downloading, setDownloading] = useState('');
+  const [openingFileId, setOpeningFileId] = useState('');
+  const [preview, setPreview] = useState<{ taskId: string; file: AttachmentFile }>();
+  const openingFile = useRef(false);
   const [sort, setSort] = useState<'oldest' | 'newest'>('oldest');
   const discussionOpen = task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
   const canComment = discussionOpen && task.assigneeEmail === email;
@@ -107,14 +111,17 @@ export function TaskDiscussion({ task, email, name, members }: {
     }
   }
 
-  async function download(file: TaskAttachment) {
-    setDownloading(file.id);
+  async function openFile(file: TaskAttachment) {
+    if (openingFile.current) return;
+    openingFile.current = true;
+    setOpeningFileId(file.id);
     try {
-      await saveTaskAttachment(task.id, file);
+      setPreview({ taskId: task.id, file: await readTaskAttachment(task.id, file) });
     } catch {
-      showToast('Chưa tải được tệp. Kiểm tra kết nối và thử lại.', 'error');
+      showToast('Không mở được tệp. Kiểm tra kết nối và thử lại.', 'error');
     } finally {
-      setDownloading('');
+      openingFile.current = false;
+      setOpeningFileId('');
     }
   }
 
@@ -143,13 +150,12 @@ export function TaskDiscussion({ task, email, name, members }: {
               const key = `${file.id}-${index}`;
               const content = <AttachmentLabel file={file}>
                 <Text style={screenStyles.label}>{file.name}</Text>
-                <Text style={screenStyles.muted}>{downloading === file.id ? 'Đang tải…'
-                  : `${formatFileSize(file.size)}${taskAssignmentEnabled ? ' · Tải tệp' : ''}`}</Text>
+                <Text style={screenStyles.muted}>{openingFileId === file.id ? 'Đang mở…' : formatFileSize(file.size)}</Text>
               </AttachmentLabel>;
               const style = [screenStyles.secondary, styles.attachment];
               return taskAssignmentEnabled
-                ? <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Tải tệp ${file.name}`}
-                    disabled={Boolean(downloading)} style={style} onPress={() => void download(file)}>{content}</Pressable>
+                ? <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Xem tệp ${file.name}`}
+                    disabled={!!openingFileId} style={style} onPress={() => void openFile(file)}>{content}</Pressable>
                 : <View key={key} style={style}>{content}</View>;
             })}
             {canReply && comment.by && comment.at ? <Pressable accessibilityRole="button"
@@ -178,6 +184,7 @@ export function TaskDiscussion({ task, email, name, members }: {
         <Button label={sending ? 'Đang gửi…' : replyTo ? 'Gửi trả lời' : 'Gửi trao đổi'}
           onPress={send} disabled={sending || uploading || !message.trim()} />
       </> : null}
+      {preview?.taskId === task.id && <AttachmentPreview file={preview.file} onClose={() => setPreview(undefined)} />}
     </View>
   );
 }

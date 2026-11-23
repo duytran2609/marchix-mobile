@@ -1,4 +1,5 @@
-import { defaultSchedule } from '../attendance/attendance';
+import { defaultSchedule, workdayWeights } from '../attendance/attendance';
+import type { WorkdayWeight } from '../attendance/attendance';
 
 export type AdminSettingsTab = 'members' | 'recurring' | 'work' | 'budget' | 'payroll';
 export type FieldValue = string | number | boolean;
@@ -38,7 +39,7 @@ export const grants = {
 
 export const memberFields: Field[] = [
   { key: 'name', label: 'Tên hiển thị', initial: '', required: true },
-  { key: 'email', label: 'Email Google', initial: '', required: true },
+  { key: 'email', label: 'Email', initial: '', required: true },
   { key: 'role', label: 'Vai trò', initial: 'staff', choices: [['staff', 'Nhân viên'], ['admin', 'Quản trị']] },
   { key: 'enabled', label: 'Cho phép truy cập Marchix', initial: true },
   ...Object.entries(grants).map(([key, label]) => ({ key, label, initial: false })),
@@ -55,22 +56,37 @@ export const recurringFields: Field[] = [
   { key: 'active', label: 'Đang áp dụng', initial: true },
 ];
 
-const dayChoices = [[1, 'Cả ngày'], [0.5, 'Nửa ngày'], [0, 'Nghỉ']] as const;
-export const workFields: Field[] = [
+export const workdayLabels: Record<WorkdayWeight, string> = { 1: 'Cả ngày', 0.5: 'Nửa ngày', 0: 'Nghỉ' };
+export const workdayChoices = workdayWeights.map(value => ({ value, label: workdayLabels[value] }));
+const dayChoices = workdayChoices.map(({ value, label }): Choice => [value, label]);
+export const shiftFields: [Field, Field] = [
   { key: 'shiftIn', label: 'Giờ vào ca', initial: defaultSchedule.shiftIn, time: true, required: true },
   { key: 'shiftOut', label: 'Giờ ra ca', initial: defaultSchedule.shiftOut, time: true, required: true },
-  { key: 'grace', label: 'Phút đi muộn cho phép', initial: defaultSchedule.grace, integer: true, min: 0 },
+];
+export const lunchFields: [Field, Field] = [
   { key: 'lunchFrom', label: 'Nghỉ trưa từ', initial: defaultSchedule.lunchFrom, time: true },
   { key: 'lunchTo', label: 'Nghỉ trưa đến', initial: defaultSchedule.lunchTo, time: true },
-  ...[1, 2, 3, 4, 5, 6, 0].map(day => ({
-    key: `day${day}`, label: day === 0 ? 'Chủ nhật' : `Thứ ${day + 1}`, initial: defaultSchedule.days[day], choices: dayChoices,
-  })),
+];
+export const officeLocationFields = [
+  { key: 'gpsLng', label: 'Kinh độ', initial: 0, min: -180, max: 180 },
+  { key: 'gpsLat', label: 'Vĩ độ', initial: 0, min: -90, max: 90 },
+  { key: 'gpsRadius', label: 'Bán kính cho phép (m)', initial: 300, min: 50, integer: true },
+] satisfies Field[];
+export const attendanceReminderFields: [Field, Field] = [
   { key: 'remindIn', label: 'Nhắc quên chấm vào lúc', initial: '08:30', time: true },
   { key: 'remindOut', label: 'Nhắc quên chấm ra lúc', initial: '17:45', time: true },
+];
+export const workFields: Field[] = [
+  ...shiftFields,
+  { key: 'grace', label: 'Phút đi muộn cho phép', initial: defaultSchedule.grace, integer: true, min: 0 },
+  ...lunchFields,
+  ...[1, 2, 3, 4, 5, 6, 0].map(day => ({
+    key: `day${day}`, label: day === 0 ? 'Chủ nhật' : `Thứ ${day + 1}`, initial: defaultSchedule.days[day],
+    choices: dayChoices,
+  })),
+  ...attendanceReminderFields,
   { key: 'gpsOn', label: 'Chỉ cho chấm công tại văn phòng (GPS)', initial: false },
-  { key: 'gpsLat', label: 'Vĩ độ văn phòng', initial: 0, min: -90, max: 90 },
-  { key: 'gpsLng', label: 'Kinh độ văn phòng', initial: 0, min: -180, max: 180 },
-  { key: 'gpsRadius', label: 'Bán kính cho phép (m)', initial: 300, min: 50, integer: true },
+  ...officeLocationFields,
   { key: 'emailOn', label: 'Bật nhắc qua email theo lịch', initial: true },
   { key: 'autoStart', label: 'Tự chuyển việc sang “Đang làm” khi đến ngày bắt đầu', initial: true },
   { key: 'requireReview', label: 'Yêu cầu người giao duyệt và đánh giá khi báo xong', initial: true },

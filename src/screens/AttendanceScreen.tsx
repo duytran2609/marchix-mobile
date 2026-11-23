@@ -169,12 +169,16 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
       {isAdmin && <CompanyAttendanceTable month={selectedMonth} rows={companyRows} onEdit={setEdit} />}
       {detail && <>
         <View style={metricStyles.grid}>
-          <Metric label="Công thực tế" value={`${detail.summary.work} / ${detail.summary.standard}`} inlineDetail=" công chuẩn" />
-          <Metric label="Nghỉ phép / công tác" value={`${detail.summary.leave} ngày`} />
-          <Metric label="Đi muộn" value={`${detail.summary.late} lần`} />
+          <Metric label="Công thực tế" value={<>
+            <Text style={ui.metadataLabel}>{detail.summary.work}</Text>
+            <Text style={styles.statSeparator}> / </Text>
+            <Text style={ui.metadataLabel}>{detail.summary.standard}</Text>
+          </>} inlineDetail=" công chuẩn" />
+          <Metric label="Nghỉ phép / công tác" value={<Text style={ui.metadataLabel}>{detail.summary.leave}</Text>} inlineDetail=" ngày" />
+          <Metric label="Đi muộn" value={<Text style={ui.metadataLabel}>{detail.summary.late}</Text>} inlineDetail=" lần" />
           <View style={[metricStyles.tile, styles.missedPunches]}>
-            <Text style={ui.muted}>Quên chấm vào <Text style={ui.cardTitle}>{detail.summary.forgottenIn}</Text> lần</Text>
-            <Text style={ui.muted}>Quên chấm ra <Text style={ui.cardTitle}>{detail.summary.forgottenOut}</Text> lần</Text>
+            <Text style={ui.muted}>Quên chấm vào <Text style={[ui.cardTitle, ui.metadataLabel]}>{detail.summary.forgottenIn}</Text> lần</Text>
+            <Text style={ui.muted}>Quên chấm ra <Text style={[ui.cardTitle, ui.metadataLabel]}>{detail.summary.forgottenOut}</Text> lần</Text>
           </View>
         </View>
         <PersonalAttendanceTable month={selectedMonth} days={personalDays} dailyNotes={dailyNotes} />
@@ -398,6 +402,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   clockGroup: { gap: 6 },
   clock: { alignSelf: 'center', color: colors.ink, fontSize: 42, fontWeight: '800', fontVariant: ['tabular-nums'] },
   workingTag: { alignSelf: 'center', color: colors.success, backgroundColor: colors.successSoft },
+  statSeparator: { color: colors.muted, fontWeight: '400' },
   missedPunches: { gap: 4 },
   editorOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   editorCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },

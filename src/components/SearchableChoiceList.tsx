@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { StyleProp, TextStyle } from 'react-native';
 import { createThemedStyles, metadataValueStyle } from '../theme/theme';
 import { searchByName } from '../utils/search';
 import { MemberAvatar } from './MemberAvatar';
@@ -20,8 +21,10 @@ type ChoiceListProps = {
   emptyIcon?: EmptyStateIcon;
 };
 
-export function SearchableChoiceDropdown(props: ChoiceListProps & { title: string; multiple?: boolean; placeholder?: string }) {
-  const { title, multiple, items, selected, disabled, placeholder = 'Chưa chọn' } = props;
+export function SearchableChoiceDropdown(props: ChoiceListProps & {
+  title: string; multiple?: boolean; placeholder?: string; placeholderStyle?: StyleProp<TextStyle>;
+}) {
+  const { title, multiple, items, selected, disabled, placeholder = 'Chưa chọn', placeholderStyle } = props;
   const styles = useStyles();
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
@@ -32,7 +35,7 @@ export function SearchableChoiceDropdown(props: ChoiceListProps & { title: strin
     <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${summary}`} aria-expanded={open && !disabled}
       disabled={disabled} onPress={() => { Keyboard.dismiss(); setOpen(true); }} style={styles.trigger}>
       {selectedItems.length ? <PeopleSummary people={selectedItems} showAvatar={props.showAvatar} textStyle={styles.value} decorative />
-        : <Text numberOfLines={1} style={styles.label}>{summary}</Text>}
+        : <Text numberOfLines={1} style={[styles.label, placeholderStyle]}>{summary}</Text>}
       <Text aria-hidden style={styles.arrow}>›</Text>
     </Pressable>
     {open && !disabled && <Modal transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>

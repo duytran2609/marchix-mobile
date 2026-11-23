@@ -1,12 +1,12 @@
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { FieldLabel } from './FieldLabel';
 import { createThemedStyles, metadataValueStyle } from '../theme/theme';
 import { DropdownOverlay, useDropdownAnchor } from './DropdownOverlay';
 
 export function Dropdown<Value extends string | number>({ label, value, choices, onChange, style, disabled,
   singleLineValue = false, fallbackLabel = String(value), menuLabel = label, hideLabel = false,
-  highlightSelection = true, required, keepMenuAttached }: {
+  highlightSelection = true, required, keepMenuAttached, valueTextStyle, compact }: {
   label: string; value: Value; choices: readonly { value: Value; label: string }[]; onChange: (value: Value) => void;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
@@ -17,6 +17,8 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
   required?: boolean;
   highlightSelection?: boolean;
   keepMenuAttached?: boolean;
+  valueTextStyle?: StyleProp<TextStyle>;
+  compact?: boolean;
 }) {
   const styles = useStyles();
   const maxHeight = 274;
@@ -24,12 +26,12 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
     useDropdownAnchor(keepMenuAttached ? Math.min(maxHeight, choices.length * 44 + 10) : 0);
   const { fontScale } = useWindowDimensions();
   const selectedLabel = choices.find(choice => choice.value === value)?.label ?? fallbackLabel;
-  const triggerStyle = [styles.filterButton, { height: 44 * Math.max(1, fontScale) },
+  const triggerStyle = [styles.filterButton, compact && styles.compactButton, { height: 44 * Math.max(1, fontScale) },
     highlightSelection && (anchor || value !== choices[0]?.value) && styles.selected, disabled && styles.disabled];
   const triggerContent = <>
-    <Text aria-hidden style={[styles.filterArrow, styles.filterArrowSpacer]}>▾</Text>
+    {!compact && <Text aria-hidden style={[styles.filterArrow, styles.filterArrowSpacer]}>▾</Text>}
     <Text numberOfLines={singleLineValue ? 1 : 2} ellipsizeMode="tail"
-      style={[styles.filterValue, styles.filterTriggerValue]}>{selectedLabel}</Text>
+      style={[styles.filterValue, styles.filterTriggerValue, valueTextStyle]}>{selectedLabel}</Text>
     <Text aria-hidden style={styles.filterArrow}>▾</Text>
   </>;
 
@@ -52,7 +54,7 @@ export function Dropdown<Value extends string | number>({ label, value, choices,
                   onPress={() => { close(); onChange(choice.value); }}
                   style={({ pressed }) => [styles.filterOption,
                     ((highlightSelection && value === choice.value) || pressed) && styles.filterOptionSelected]}>
-                  <Text style={styles.filterValue}>{choice.label}</Text>
+                  <Text style={[styles.filterValue, valueTextStyle]}>{choice.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -69,6 +71,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   filterLabel: { flexGrow: 1, color: colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center' },
   filterButton: { width: '100%', flexDirection: 'row', alignItems: 'center',
     gap: 4, paddingHorizontal: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 9, backgroundColor: colors.paper },
+  compactButton: { gap: 2, paddingHorizontal: 4 },
   filterTriggerValue: { flex: 1, minWidth: 0 },
   filterArrow: { flexShrink: 0, color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   filterArrowSpacer: { opacity: 0 },

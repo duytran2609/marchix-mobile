@@ -15,13 +15,17 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PopupCloseButton } from '../../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../../components/Toast';
-import { useScreenStyles } from '../../theme/screenStyles';
+import { inputTextStyle, useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
-import { budgetFields, grants, memberFields, payrollFields, readFields, recurringFields, validateFields, workFields } from './adminSettingsFields';
+import { readWorkdayOverrides } from '../attendance/attendance';
+import type { WorkdayWeight } from '../attendance/attendance';
+import { attendanceReminderFields, budgetFields, grants, lunchFields, memberFields, officeLocationFields,
+  payrollFields, readFields, recurringFields, shiftFields, validateFields, workFields } from './adminSettingsFields';
 import type { AdminSettingsTab, Field, FieldValue, FieldValues } from './adminSettingsFields';
 import { loadProjectChoices, loadSettings, protectedOwner, removeRecurring, saveMember, saveRecurring, saveSettings } from './adminSettingsStore';
 import type { SettingsRow } from './adminSettingsStore';
 import { RecurringExpenseTable } from './RecurringExpenseTable';
+import { WorkdayOverrideSettings } from './WorkdayOverrideSettings';
 
 const documentFields = { work: workFields, budget: budgetFields, payroll: payrollFields };
 const emptyRow: SettingsRow = { id: '', data: {} };
@@ -32,6 +36,25 @@ const clockChoices = (count: number) => Array.from({ length: count }, (_, index)
 const hours = clockChoices(24);
 const minutes = clockChoices(60);
 const optionalHours = [{ value: '', label: 'Để trống' }, ...hours];
+const attendanceReminderToggle: Field = { key: 'attendanceReminder', label: 'Nhắc quên chấm công', initial: false };
+
+function TimeSettingsField({ field, value, disabled, onChange, label = field.label, compact }: {
+  field: Field; value: FieldValue; disabled: boolean; onChange: (next: string) => void; label?: string; compact?: boolean;
+}) {
+  const ui = useScreenStyles();
+  const [hour = '', minute = ''] = String(value).split(':');
+  return <View style={[fieldStyles.plain, compact && fieldStyles.compactTimeField]}>
+    <FieldLabel style={ui.label} required={field.required}>{label}</FieldLabel>
+    <View style={[fieldStyles.clockRow, compact && fieldStyles.compactClock]}>
+      <Dropdown label={`${field.label} – Giờ`} compact={compact} hideLabel highlightSelection={false} style={fieldStyles.clockPart}
+        valueTextStyle={inputTextStyle} value={hour} choices={field.required ? hours : optionalHours} fallbackLabel="Giờ" disabled={disabled}
+        onChange={next => onChange(next ? `${next}:${minute || '00'}` : '')} />
+      <Dropdown label={`${field.label} – Phút`} compact={compact} hideLabel highlightSelection={false} style={fieldStyles.clockPart}
+        valueTextStyle={inputTextStyle} value={minute} choices={minutes} fallbackLabel="Phút" disabled={disabled || !hour}
+        onChange={next => onChange(`${hour}:${next}`)} />
+    </View>
+  </View>;
+}
 
 function SettingsField({ tab, field, value, disabled, onChange }: {
   field: Field; value: FieldValue; disabled: boolean; onChange: (next: FieldValue) => void;
@@ -45,7 +68,8 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   const isWorkday = /^day[0-6]$/.test(field.key);
   const showFieldLabel = isRole || isRecurring || isWorkday;
   const isMoneyInput = field.money === true;
-  const digitsOnly = isMoneyInput || field.key === 'grace' || field.key === 'gpsRadius';
+  const inlineNumber = field.key === 'grace' || field.key === 'gpsRadius';
+  const digitsOnly = isMoneyInput || inlineNumber;
   const isCoordinate = field.key === 'gpsLat' || field.key === 'gpsLng';
   const label = isMoneyInput ? `${field.label} (VNĐ)` : field.label;
   const inputValue = isMoneyInput ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : String(value);
@@ -73,25 +97,13 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
       </Pressable>
     </View>
   );
-  if (field.time) {
-    const [hour = '', minute = ''] = String(value).split(':');
-    return <View style={fieldStyles.plain}>
-      <FieldLabel style={ui.label} required={required}>{field.label}</FieldLabel>
-      <View style={fieldStyles.clockRow}>
-        <Dropdown label={`${field.label} – Giờ`} hideLabel highlightSelection={false} style={fieldStyles.clockPart}
-          value={hour} choices={field.required ? hours : optionalHours} fallbackLabel="Giờ" disabled={disabled}
-          onChange={next => onChange(next ? `${next}:${minute || '00'}` : '')} />
-        <Dropdown label={`${field.label} – Phút`} hideLabel highlightSelection={false} style={fieldStyles.clockPart}
-          value={minute} choices={minutes} fallbackLabel="Phút" disabled={disabled || !hour}
-          onChange={next => onChange(`${hour}:${next}`)} />
-      </View>
-    </View>;
-  }
+  if (field.time) return <TimeSettingsField field={field} value={value} disabled={disabled} onChange={onChange} />;
   if (field.choices) return (
-    <View style={isWorkday ? fieldStyles.workdayRow : fieldStyles.plain}>
+    <View style={isWorkday ? fieldStyles.inlineFieldRow : fieldStyles.plain}>
       {showFieldLabel && <FieldLabel style={[ui.label, isWorkday && fieldStyles.workdayLabel]} required={required || isRole}>{field.label}</FieldLabel>}
       <Dropdown label={field.label} required={required} value={typeof value === 'boolean' ? String(value) : value} disabled={disabled}
         style={isWorkday ? fieldStyles.workdayDropdown : undefined}
+        valueTextStyle={isWorkday ? inputTextStyle : undefined}
         hideLabel={showFieldLabel} highlightSelection={highlightSelection}
         choices={field.choices.map(([value, label]) => ({ value, label }))} onChange={onChange} />
     </View>
@@ -100,10 +112,8 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
     ? { min: field.min, max: field.max }
     : undefined;
   const Input = stepBounds ? NumberStepper : TextInput;
-  return (
-    <View style={fieldStyles.plain}>
-      <FieldLabel style={ui.label} required={required}>{label}</FieldLabel>
-      <Input accessibilityLabel={label} editable={!disabled} value={inputValue} style={ui.input} {...stepBounds}
+  const input = <Input accessibilityLabel={isCoordinate ? `${label} (độ)` : label} editable={!disabled} value={inputValue}
+        style={[ui.input, isCoordinate && fieldStyles.coordinateInput]} {...stepBounds}
         autoCapitalize={field.key === 'email' ? 'none' : undefined}
         inputMode={digitsOnly ? 'numeric' : field.key === 'email' ? 'email' :
           typeof field.initial === 'number' && field.min !== undefined && field.min >= 0 ? 'decimal' : 'text'}
@@ -118,14 +128,23 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
           } else {
             onChange(text);
           }
-        }} />
+        }} />;
+  return (
+    <View style={inlineNumber ? fieldStyles.inlineFieldRow : fieldStyles.plain}>
+      <FieldLabel style={[ui.label, inlineNumber && ui.listHeading]} required={required}>{label}</FieldLabel>
+      {inlineNumber ? <View style={fieldStyles.inlineNumberInput}>{input}</View> : isCoordinate ? <View>
+        {input}
+        <View aria-hidden pointerEvents="none" style={fieldStyles.coordinateSuffix}>
+          <Text style={[ui.metadataValue, inputTextStyle]}>°</Text>
+        </View>
+      </View> : input}
     </View>
   );
 }
 
 function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }: {
   tab: AdminSettingsTab; fields: Field[]; row: SettingsRow; email: string;
-  onSave: (values: FieldValues) => Promise<void>; onCancel?: () => void;
+  onSave: (values: FieldValues, overrides: Record<string, WorkdayWeight | null>) => Promise<void>; onCancel?: () => void;
   popupTitle?: string;
 }) {
   const ui = useScreenStyles();
@@ -142,6 +161,10 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
     }
     return readFields(fields, data);
   });
+  const [remindAttendance, setRemindAttendance] = useState(() =>
+    tab === 'work' && Boolean(row.data.remindIn || row.data.remindOut));
+  const [savedOverrides] = useState(() => readWorkdayOverrides(row.data.dayOverrides));
+  const [overrides, setOverrides] = useState(savedOverrides);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const protectedAccount = tab === 'members' && [protectedOwner, email].some(account =>
@@ -175,11 +198,43 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
   const permissionFields = tab === 'members' ? fields.filter(field => Object.keys(grants).includes(field.key)) : [];
   const inheritsPermissions = draft.role === 'admin';
   const workdayFields = tab === 'work' ? fields.filter(field => /^day[0-6]$/.test(field.key)) : [];
+  function changeField(key: string, value: FieldValue) {
+    setDraft(current => ({ ...current, [key]: value }));
+  }
+
+  async function save() {
+    let valuesToValidate = draft;
+    if (tab === 'work') {
+      if (remindAttendance && !draft.remindIn && !draft.remindOut) {
+        throw new Error('Chọn giờ nhắc chấm vào hoặc chấm ra.');
+      }
+      valuesToValidate = {
+        ...draft,
+        ...(!draft.gpsOn ? readFields(officeLocationFields, row.data) : {}),
+        ...(!remindAttendance ? { remindIn: '', remindOut: '' } : {}),
+      };
+    }
+    const values = validateFields(fields, valuesToValidate);
+    const dates = new Set([...Object.keys(savedOverrides), ...Object.keys(overrides)]);
+    const changes: Record<string, WorkdayWeight | null> = {};
+    for (const day of dates) {
+      if (overrides[day] !== savedOverrides[day]) changes[day] = overrides[day] ?? null;
+    }
+    await onSave(values, changes);
+  }
+
   function renderField(field: Field, inherited = false) {
     return <SettingsField key={field.key} tab={tab} field={field} value={inherited ? true : draft[field.key]}
       disabled={busy || inherited || (tab === 'members' && ((Boolean(row.id) && field.key === 'email') ||
         (protectedAccount && ['role', 'enabled'].includes(field.key))))}
-      onChange={value => setDraft(current => ({ ...current, [field.key]: value }))} />;
+      onChange={value => changeField(field.key, value)} />;
+  }
+
+  function renderTimePair(pair: [Field, Field], labels: [string, string]) {
+    return <View style={fieldStyles.clockRow}>
+      {pair.map((field, index) => <TimeSettingsField key={field.key} compact field={field} label={labels[index]}
+        value={draft[field.key]} disabled={busy} onChange={value => changeField(field.key, value)} />)}
+    </View>;
   }
 
   const content = (
@@ -191,16 +246,60 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
           {row.id && inheritsPermissions && permissionFields.length > 0 &&
             <Text style={ui.muted}>Vai trò Quản trị tự động có các quyền này.</Text>}
         </View>;
+        if (field === shiftFields[0]) return <View key={field.key} style={ui.stack}>
+          <Text accessibilityRole="header" style={ui.label}>Giờ vào/ra ca</Text>
+          {renderTimePair(shiftFields, ['Vào', 'Ra'])}
+        </View>;
+        if (field === lunchFields[0]) return <View key={field.key} style={ui.stack}>
+          <Text accessibilityRole="header" style={ui.label}>Thời gian nghỉ trưa</Text>
+          {renderTimePair(lunchFields, ['Từ', 'Đến'])}
+        </View>;
         if (field === workdayFields[0]) return <View key={field.key} style={ui.stack}>
           <Text accessibilityRole="header" style={ui.label}>Thời gian làm việc</Text>
           {workdayFields.map(day => renderField(day))}
+          <WorkdayOverrideSettings overrides={overrides} weekly={draft} disabled={busy}
+            onChange={(days, weight) => setOverrides(current => {
+              const next = { ...current };
+              for (const day of days) {
+                if (weight === undefined) delete next[day];
+                else next[day] = weight;
+              }
+              return next;
+            })} />
         </View>;
-        return workdayFields.includes(field) ? null : renderField(field);
+        if (field === attendanceReminderFields[0]) return <View key={field.key} style={fieldStyles.toggleGroup}>
+          <SettingsField tab={tab} field={attendanceReminderToggle} value={remindAttendance} disabled={busy}
+            onChange={value => {
+              const enabled = value === true;
+              if (enabled && !draft.remindIn && !draft.remindOut) {
+                setDraft(current => ({ ...current, ...readFields(attendanceReminderFields, {}) }));
+              }
+              setRemindAttendance(enabled);
+            }} />
+          {remindAttendance && renderTimePair(attendanceReminderFields, ['Vào', 'Ra'])}
+        </View>;
+        if (field.key === 'gpsOn') {
+          const [longitude, latitude, radius] = officeLocationFields;
+          return <View key={field.key} style={fieldStyles.toggleGroup}>
+            {renderField(field)}
+            {draft.gpsOn === true && <View style={ui.stack}>
+              <Text accessibilityRole="header" style={ui.label}>Tọa độ văn phòng</Text>
+              <View style={fieldStyles.coordinateRow}>
+                <View style={fieldStyles.coordinateColumn}>{renderField(longitude)}</View>
+                <View style={fieldStyles.coordinateColumn}>{renderField(latitude)}</View>
+              </View>
+              {renderField(radius)}
+              <Button label="Lấy vị trí hiện tại làm văn phòng" secondary disabled={busy}
+                onPress={() => void run(locateOffice, 'Không lấy được vị trí hiện tại.')} />
+            </View>}
+          </View>;
+        }
+        if (officeLocationFields.some(locationField => locationField.key === field.key)) return null;
+        return workdayFields.includes(field) || field === shiftFields[1] || field === lunchFields[1] || field === attendanceReminderFields[1]
+          ? null : renderField(field);
       })}
-      {tab === 'work' && <Button label="Lấy vị trí hiện tại làm văn phòng" secondary disabled={busy}
-        onPress={() => void run(locateOffice, 'Không lấy được vị trí hiện tại.')} />}
       <Button label={tab === 'budget' ? 'Lưu ngân sách' : 'Lưu cài đặt'} disabled={busy}
-        onPress={() => void run(async () => onSave(validateFields(fields, draft)), 'Không lưu được cài đặt. Kiểm tra kết nối hoặc quyền truy cập.')} />
+        onPress={() => void run(save, 'Không lưu được cài đặt. Kiểm tra kết nối hoặc quyền truy cập.')} />
       {onCancel && <Button label="Hủy" secondary disabled={busy} onPress={close} />}
     </View>
   );
@@ -271,7 +370,7 @@ export function AdminSettings({ tab, email, onScrollTop }: {
   </View>;
   if (!rows) return <ActivityIndicator accessibilityLabel="Đang tải cài đặt" color={colors.accent} />;
   if (!list) return <SettingsForm tab={tab} fields={documentFields[tab]} row={rows[0]} email={email}
-    onSave={async values => { await saveSettings(tab, values, email); saved(); }} />;
+    onSave={async (values, overrides) => { await saveSettings(tab, values, email, overrides); saved(); }} />;
 
   const addTitle = tab === 'members' ? 'Thêm tài khoản' : 'Thêm khoản chi';
   let editor;
@@ -312,9 +411,9 @@ export function AdminSettings({ tab, email, onScrollTop }: {
   return (
     <View style={ui.stack}>
       <Button label={`+ ${addTitle}`} onPress={() => setEdit(emptyRow)} />
-      {!rows.length && <EmptyState icon={tab === 'members' ? 'people' : 'wallet'}
-        message={tab === 'members' ? 'Chưa có tài khoản.' : 'Chưa có khoản chi cố định.'} />}
-      {tab === 'recurring' ? <RecurringExpenseTable rows={rows} onEdit={setEdit}
+      {!rows.length ? <EmptyState icon={tab === 'members' ? 'people' : 'wallet'}
+        message={tab === 'members' ? 'Chưa có tài khoản.' : 'Chưa có khoản chi cố định.'} />
+        : tab === 'recurring' ? <RecurringExpenseTable rows={rows} onEdit={setEdit}
         onRemove={row => { setRemoveError(''); setRemoveTarget(row); }} /> : <PaginatedList items={rows}>
         {pageItems => pageItems.map(row => {
           const name = String(row.data.name || row.id);
@@ -356,10 +455,18 @@ const fieldStyles = StyleSheet.create({
   toggleTrack: { width: 40, height: 14, borderRadius: 7, justifyContent: 'center' },
   toggleThumb: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#FFFFFF' },
   clockRow: { flexDirection: 'row', gap: 8 },
-  clockPart: { flex: 1 },
-  workdayRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  clockPart: { flex: 1, minWidth: 0 },
+  compactTimeField: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
+  compactClock: { flex: 1, minWidth: 0, gap: 4 },
+  toggleGroup: { gap: 4 },
+  inlineFieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  inlineNumberInput: { width: 104, maxWidth: '40%', transform: [{ translateY: 3 }] },
   workdayLabel: { flex: 1, fontWeight: '400' },
   workdayDropdown: { flex: 2 },
+  coordinateRow: { flexDirection: 'row', gap: 8 },
+  coordinateColumn: { flex: 1, minWidth: 0 },
+  coordinateInput: { paddingRight: 28 },
+  coordinateSuffix: { position: 'absolute', top: 0, bottom: 0, right: 12, justifyContent: 'center' },
   permissions: { gap: 8 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberDetails: { flex: 1, minWidth: 0, gap: 5 },

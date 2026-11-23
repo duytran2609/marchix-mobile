@@ -4,6 +4,7 @@ import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import { mondayOf } from '../weekly-plan/weeklyPlan';
 import { formatTaskDate } from './taskDates';
+import { taskUnsetLabel } from './taskLabels';
 import { taskProgressValue } from './TaskProgress';
 import type { Task } from './tasks';
 
@@ -61,7 +62,7 @@ export function TaskGantt({ tasks, visibleTasks, today, range, onOpen }: {
     const labels = [];
     if (dates.startDate) labels.push(`Bắt đầu: ${dates.startDate}`);
     if (dates.deadline) labels.push(`Hạn chót: ${dates.deadline}`);
-    if (!labels.length) labels.push('Chưa đặt lịch');
+    if (!labels.length) labels.push(taskUnsetLabel);
     const inRange = dates.start !== undefined && dates.start < rangeEnd && (dates.end ?? dates.start) >= start;
     return { task, progress, ...dates, inRange, hint: `${labels.join('. ')}. Tiến độ ${progress}%.` };
   });
@@ -84,7 +85,7 @@ export function TaskGantt({ tasks, visibleTasks, today, range, onOpen }: {
               {deadline ? <Text style={[styles.dateLabel, ui.metadataValue]}>
                 <Text style={ui.metadataLabel}>Hạn chót: </Text>{deadline}
               </Text> : null}
-              {!startDate && !deadline ? <Text style={styles.dateLabel}>Chưa đặt lịch</Text> : null}
+              {!startDate && !deadline ? <Text style={[styles.dateLabel, ui.unsetValue]}>{taskUnsetLabel}</Text> : null}
             </View>
             <Text style={styles.progressValue}>{progress}%</Text>
           </Pressable>
@@ -155,7 +156,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   pressed: { backgroundColor: colors.accentSoft },
   taskDetails: { flex: 1, minWidth: 0, gap: 2 },
   taskTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
-  progressValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  progressValue: { color: colors.accent, fontSize: 12, fontWeight: '500' },
   dateLabel: { color: colors.muted, fontSize: 11 },
   timelineScroll: { flex: 1, minWidth: 0 },
   axis: { height: headerHeight, flexDirection: 'row', backgroundColor: colors.surfaceMuted,

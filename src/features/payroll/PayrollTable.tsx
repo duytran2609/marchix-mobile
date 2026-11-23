@@ -1,6 +1,6 @@
 import { PaginatedList } from '../../components/PaginatedList';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createThemedStyles } from '../../theme/theme';
+import { useDataTableStyles } from '../../components/dataTableStyles';
 import { payrollCells, payrollHeaders } from './payrollColumns';
 import type { PayrollRow } from './payrollColumns';
 import { amount, money } from './payroll';
@@ -45,7 +45,7 @@ function PayrollGrid({ label, headers, action, highlightColumn, wideColumn, rows
   rows: GridRow[];
   resetKey?: string;
 }) {
-  const styles = useStyles();
+  const styles = useDataTableStyles();
   return <>
     <PaginatedList items={rows} resetKey={resetKey}>
       {pageItems => (
@@ -54,7 +54,7 @@ function PayrollGrid({ label, headers, action, highlightColumn, wideColumn, rows
           <View role="table">
             <View role="row" style={[styles.row, styles.header]}>
               {headers.map((header, index) => <Text key={header} role="columnheader"
-                style={[styles.cell, index === 0 && styles.name, header === wideColumn && styles.wide, styles.bold]}>{header}</Text>)}
+                style={[styles.cell, index === 0 && styles.name, header === wideColumn && columnStyles.wide, styles.bold]}>{header}</Text>)}
             </View>
             {pageItems.map(row => {
               const [name, ...values] = row.cells;
@@ -66,7 +66,7 @@ function PayrollGrid({ label, headers, action, highlightColumn, wideColumn, rows
                 {values.map((value, index) => {
                   const header = headers[index + 1];
                   return <Text key={header} role="cell"
-                    style={[styles.cell, header === wideColumn && styles.wide, header === highlightColumn && styles.bold]}>{value}</Text>;
+                    style={[styles.cell, header === wideColumn && columnStyles.wide, header === highlightColumn && styles.bold]}>{value}</Text>;
                 })}
               </View>;
             })}
@@ -77,13 +77,6 @@ function PayrollGrid({ label, headers, action, highlightColumn, wideColumn, rows
   </>;
 }
 
-const useStyles = createThemedStyles(colors => StyleSheet.create({
-  scroll: { borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.paper },
-  row: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: colors.line, minHeight: 48 },
-  header: { backgroundColor: colors.accentSoft },
-  cell: { width: 140, paddingHorizontal: 10, paddingVertical: 14, textAlign: 'right', color: colors.ink, fontSize: 13 },
-  name: { width: 170, textAlign: 'left' },
+const columnStyles = StyleSheet.create({
   wide: { width: 260 },
-  bold: { fontWeight: '700' },
-  link: { color: colors.accent, fontWeight: '700' },
-}));
+});

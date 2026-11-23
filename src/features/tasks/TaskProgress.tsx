@@ -52,7 +52,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   progressBlock: { gap: 7 },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   pill: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, fontSize: 12, fontWeight: '700' },
-  progressValue: { color: colors.ink, fontWeight: '800', fontSize: 13 },
+  progressValue: { color: colors.ink, fontWeight: '500', fontSize: 13 },
   track: { height: 5, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
   fullHeightTrack: { height: 7 },
   listTrack: { marginTop: 3 },

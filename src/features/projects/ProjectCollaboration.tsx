@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { Button } from '../../components/Button';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { pilotMode } from '../../services/firebase/firebase';
-import { AttachmentPreview } from '../cash/CashProofs';
-import type { OpenCashFile } from '../cash/cashAttachments';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 import type { Task, TaskAttachment } from '../tasks/tasks';
 import { listTaskAssignees } from '../tasks/tasks';
 import { CollaborationFeedback, toggleChoice, useCollaborationAction } from './ProjectCollaborationFields';
@@ -38,7 +38,7 @@ function CollaborationWorkspace({ project, email, isAdmin, tasks, onOpenTask }: 
   const [showTeam, setShowTeam] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryOpened, setLibraryOpened] = useState(false);
-  const [preview, setPreview] = useState<OpenCashFile>();
+  const [preview, setPreview] = useState<AttachmentFile>();
   const read = useCollaborationAction();
   useEffect(() => {
     if (isAdmin || pilotMode) return watchCollaborationMembers(setMembers, () => setMembersError(true));
@@ -76,7 +76,7 @@ function CollaborationWorkspace({ project, email, isAdmin, tasks, onOpenTask }: 
     <CollaborationFeedback error={read.error} />
     <ProjectDiscussion project={project} email={email} isAdmin={isAdmin} team={team} tasks={tasks}
       memberName={memberName} openFile={openFile} onOpenTask={onOpenTask} />
-    {preview && <AttachmentPreview file={preview} projectFile onClose={() => setPreview(undefined)} />}
+    {preview && <AttachmentPreview file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
 }
 

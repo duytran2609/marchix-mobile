@@ -46,7 +46,8 @@ test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mụ
   await expect(workspace.getByText('Đã chuyển tệp.')).toBeVisible();
   await workspace.getByRole('button', { name: /^hoso-demo\.txt ·/ }).first().click();
   await expect(page.getByRole('heading', { name: 'hoso-demo.txt' })).toBeVisible();
+  await expect(page.getByText('Dữ liệu kiểm thử.', { exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Lưu tệp', exact: true }).click();
+  await page.getByRole('button', { name: 'Tải xuống', exact: true }).click();
   expect((await download).suggestedFilename()).toBe('hoso-demo.txt');
 });
