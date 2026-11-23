@@ -1,6 +1,5 @@
-import { addDoc, collection, deleteField, doc, getDocsFromServer, onSnapshot, or, query, runTransaction, where } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, pilotMode, taskFunctions } from '../../services/firebase/firebase';
+import { addDoc, collection, deleteField, doc, onSnapshot, or, query, runTransaction, where } from 'firebase/firestore';
+import { db } from '../../services/firebase/firebase';
 import { todayInVietnam } from '../tasks/taskDates';
 
 export const requestTypes = ['Nghỉ phép', 'Tạm ứng lương', 'Công tác', 'Làm thêm giờ', 'Đề xuất khác'] as const;
@@ -25,8 +24,6 @@ export function overtimeTasks(overtime?: OvertimeDetails): OvertimeTask[] {
   if (!overtime) return [];
   return 'tasks' in overtime ? overtime.tasks : [{ id: overtime.taskId, title: overtime.taskTitle }];
 }
-type RequestMember = { email: string; name: string; canReview: boolean };
-const listRequestMembers = httpsCallable<void, RequestMember[]>(taskFunctions, 'listMobileRequestMembers', { timeout: 12000 });
 
 export function canActOnRequest(row: StaffRequest, action: RequestAction, access: RequestAccess) {
   const own = row.createdBy === access.email;
@@ -47,20 +44,6 @@ export function watchRequests(access: RequestAccess, onData: (rows: StaffRequest
     onData(snapshot.docs.map(row => ({ ...row.data(), id: row.id }) as StaffRequest)
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
   }, onError);
-}
-
-export async function loadRequestMembers(isAdmin: boolean): Promise<RequestMember[]> {
-  if (!isAdmin && !pilotMode) {
-    const { data } = await listRequestMembers();
-    return data;
-  }
-  const snapshot = await getDocsFromServer(collection(db, 'members'));
-  return snapshot.docs.map(row => {
-    const member = row.data();
-    return { email: row.id, name: typeof member.name === 'string' && member.name.trim() ? member.name : row.id,
-      canReview: member.enabled !== false && (member.role === 'admin' ||
-        (Array.isArray(member.grants) && member.grants.includes('requestReview'))) };
-  });
 }
 
 export async function createRequest(fields: RequestFields, approverEmail: string, email: string) {

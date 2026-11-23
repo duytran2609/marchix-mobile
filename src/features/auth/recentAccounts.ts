@@ -15,8 +15,8 @@ function isRecentAccount(value: unknown): value is RecentAccount {
 }
 
 async function readAccounts(): Promise<RecentAccount[]> {
+  const stored = await AsyncStorage.getItem(storageKey);
   try {
-    const stored = await AsyncStorage.getItem(storageKey);
     const accounts: unknown = stored ? JSON.parse(stored) : [];
     return Array.isArray(accounts) ? accounts.filter(isRecentAccount).slice(0, maxAccounts) : [];
   } catch {
@@ -26,16 +26,34 @@ async function readAccounts(): Promise<RecentAccount[]> {
 
 export async function loadRecentAccounts() {
   await pendingWrite;
-  return readAccounts();
+  return readAccounts().catch(() => []);
 }
 
-export function rememberAccount({ email, name, photoURL }: RecentAccount) {
-  pendingWrite = pendingWrite.then(async () => {
-    const accounts = await readAccounts();
-    const others = accounts.filter(account => account.email.toLowerCase() !== email.toLowerCase());
-    const updated = [{ email, name, photoURL }, ...others].slice(0, maxAccounts);
+function queueWrite(write: () => Promise<void>) {
+  const result = pendingWrite.then(write);
+  pendingWrite = result.catch(() => undefined);
+  return result;
+}
+
+function withoutAccount(accounts: RecentAccount[], email: string) {
+  return accounts.filter(account => account.email.toLowerCase() !== email.toLowerCase());
+}
+
+export function rememberAccount(account: RecentAccount) {
+  void queueWrite(async () => {
+    const others = withoutAccount(await readAccounts(), account.email);
+    const updated = [account, ...others].slice(0, maxAccounts);
     await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
-  }).catch(() => {
-    // Local storage can be unavailable. Signing in still works in that case.
   });
+}
+
+export function removeRecentAccount(email: string) {
+  return queueWrite(async () => {
+    const updated = withoutAccount(await readAccounts(), email);
+    await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+  });
+}
+
+export function clearRecentAccounts() {
+  return queueWrite(() => AsyncStorage.removeItem(storageKey));
 }

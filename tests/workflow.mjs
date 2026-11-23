@@ -34,7 +34,9 @@ const tick = httpsCallable(functions, 'setTaskChecklistItem', { timeout: 35000 }
 const report = httpsCallable(functions, 'reportTaskCompletion', { timeout: 35000 });
 const review = httpsCallable(functions, 'reviewTaskCompletion', { timeout: 35000 });
 const remind = httpsCallable(functions, 'remindMobileTask', { timeout: 35000 });
+const listAssignees = httpsCallable(functions, 'listMobileTaskAssignees', { timeout: 35000 });
 const editAssignment = httpsCallable(functions, 'updateMobileTask', { timeout: 35000 });
+const deleteAssignment = httpsCallable(functions, 'deleteMobileTask', { timeout: 35000 });
 const addAttachments = httpsCallable(functions, 'addMobileTaskAttachments', { timeout: 35000 });
 const downloadAttachment = httpsCallable(functions, 'downloadMobileTaskAttachment', { timeout: 35000 });
 const login = (email, sub) => signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({
@@ -53,7 +55,10 @@ const designatedId = `${taskId}-designated`;
 const manualProgressId = `${taskId}-manual`;
 const reportOnlyId = `${taskId}-report-only`;
 const roleChangesId = `${taskId}-role-changes`;
+const deletionId = `${taskId}-deletion`;
 const designatedEmail = `${taskId}@example.test`;
+const reviewerProfile = adminDb.doc(`members/${reviewer}`);
+const previousReviewerProfile = (await reviewerProfile.get()).data();
 const documents = `http://${emulatorHost}:${firestorePort}/v1/projects/${projectId}/databases/(default)/documents`;
 const docs = `${documents}/tasks`;
 const headers = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' };
@@ -67,6 +72,7 @@ const response = await fetch(`${docs}?documentId=${taskId}`, {
     title: { stringValue: 'Kiểm thử checklist và gửi duyệt' },
     assigneeEmail: { stringValue: staff },
     assignedBy: { stringValue: reviewer },
+    approverEmail: { stringValue: reviewer },
     startDate: { stringValue: '2026-11-10' },
     due: { stringValue: '2026-11-16' },
     createdAt: { stringValue: '2026-11-15T18:00:00.000Z' },
@@ -84,6 +90,7 @@ const response = await fetch(`${docs}?documentId=${taskId}`, {
 assert(response.ok, await response.text());
 
 try {
+  await reviewerProfile.update({ grants: [...new Set([...(previousReviewerProfile.grants ?? []), 'taskReview'])] });
   const item = { taskId, index: 1, label: 'Mục bản demo cũ', done: true };
   const result = { taskId, note: 'Đã chạy kiểm thử trên điện thoại.' };
   const reminder = { taskId, assigneeEmail: staff, previousReminder: null };
@@ -91,11 +98,17 @@ try {
   const upload = { taskId, attachments: [attachment] };
   const readTask = async () => (await getDocFromServer(ref)).data();
   await assert.rejects(tick(item), { code: 'functions/unauthenticated' });
+  await assert.rejects(listAssignees(), { code: 'functions/unauthenticated' });
   await login('dongnghiep@example.test', 'marchix-mobile-demo-colleague');
   await assert.rejects(tick(item), { code: 'functions/permission-denied' });
   await assert.rejects(report(result), { code: 'functions/permission-denied' });
   await assert.rejects(addAttachments(upload), { code: 'functions/permission-denied' });
   await login(staff, 'marchix-mobile-demo-staff');
+  await assert.rejects(getDocsFromServer(collection(db, 'members')), { code: 'permission-denied' });
+  const { data: directory } = await listAssignees();
+  assert(directory.members.some(member => member.email === staff && member.canReview === false));
+  assert(directory.members.some(member => member.email === reviewer && member.canReview === true));
+  assert(Array.isArray(directory.projects));
   await assert.rejects(remind(reminder), { code: 'functions/permission-denied' });
   await assert.rejects(updateDoc(ref, { checklist: [], progress: 100 }), { code: 'permission-denied' });
   await assert.rejects(updateDoc(ref, { status: 'Chờ duyệt', progress: 100 }), { code: 'permission-denied' });
@@ -178,6 +191,9 @@ try {
   const pending = query(collection(db, 'tasks'), where('assignedBy', '==', reviewer), where('status', '==', 'Chờ duyệt'));
   const pendingIds = async () => (await getDocsFromServer(pending)).docs.map(row => row.id);
   assert((await pendingIds()).includes(taskId));
+  await reviewerProfile.update({ grants: previousReviewerProfile.grants ?? [] });
+  await assert.rejects(review(approve), { code: 'functions/permission-denied' });
+  await reviewerProfile.update({ grants: [...new Set([...(previousReviewerProfile.grants ?? []), 'taskReview'])] });
   await assert.rejects(updateDoc(ref, { status: 'Xong' }), { code: 'permission-denied' });
   await assert.rejects(review({ ...approve, rating: '' }), { code: 'functions/invalid-argument' });
   await assert.rejects(review({ ...rework, note: ' ' }), { code: 'functions/invalid-argument' });
@@ -362,12 +378,39 @@ try {
     [reviewer, 'Bạn không còn là người duyệt công việc', originalTitle],
   ].sort());
   console.log('PASS: đổi người thực hiện, người theo dõi và người duyệt gửi đúng thông báo cho các bên.');
+
+  const deletionRef = adminDb.doc(`tasks/${deletionId}`);
+  const deletionTitle = `Công việc cần xóa ${deletionId}`;
+  const deletion = { taskId: deletionId };
+  const deletionNotices = () => adminDb.collection('notifications').where('body', '==', deletionTitle).get();
+  await deletionRef.set({
+    title: deletionTitle, assignedBy: reviewer, assigneeEmail: staff, approverEmail: admin,
+    watchers: [staff, colleague, reviewer], status: 'Đang làm',
+  });
+  await login(staff, 'marchix-mobile-demo-staff');
+  await assert.rejects(deleteAssignment(deletion), { code: 'functions/permission-denied' });
+  await login(admin, 'marchix-mobile-demo-admin');
+  await assert.rejects(deleteAssignment(deletion), { code: 'functions/permission-denied' });
+  assert((await deletionRef.get()).exists);
+  assert((await deletionNotices()).empty);
+
+  await login(reviewer, 'marchix-mobile-demo-reviewer');
+  await Promise.all([deleteAssignment(deletion), deleteAssignment(deletion)]);
+  assert.equal((await deletionRef.get()).exists, false);
+  const deletedNotes = await deletionNotices();
+  reminderNotes.push(...deletedNotes.docs.map(row => row.ref.path));
+  assert.deepEqual(deletedNotes.docs.map(row => row.get('to')).sort(), [admin, colleague, staff].sort());
+  assert(deletedNotes.docs.every(row => row.get('title') === 'Công việc đã được xóa' &&
+    row.get('from') === reviewer && row.get('read') === false && row.get('link') === '#cong-viec' &&
+    row.get('taskId') === undefined));
+  console.log('PASS: chỉ người giao được xóa và mỗi người liên quan nhận đúng một thông báo.');
   console.log('PASS: gửi duyệt, trao đổi có tệp, kỳ lặp, phân quyền và yêu cầu lưu tiến độ 100%.');
 } finally {
+  await reviewerProfile.set(previousReviewerProfile);
   await terminate(db);
   await deleteApp(app);
   await deleteAdmin(adminApp);
-  const taskPaths = [taskId, nextId, monthlyId, februaryId, marchId, designatedId, manualProgressId, reportOnlyId, roleChangesId]
+  const taskPaths = [taskId, nextId, monthlyId, februaryId, marchId, designatedId, manualProgressId, reportOnlyId, roleChangesId, deletionId]
     .map(id => `tasks/${id}`);
   for (const path of [...reminderNotes, ...taskPaths, `members/${designatedEmail}`]) {
     const deleted = await fetch(`${documents}/${path}`, { method: 'DELETE', headers });

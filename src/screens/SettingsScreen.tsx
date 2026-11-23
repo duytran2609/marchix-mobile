@@ -1,11 +1,15 @@
 import Constants from 'expo-constants';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
+import { TextInput } from '../components/TextInput';
 import { useToast } from '../components/Toast';
 import { AdminSettings } from '../features/settings/AdminSettings';
-import { reminderOptions } from '../features/settings/reminderSettings';
+import { SettingsSwitch } from '../features/settings/SettingsSwitch';
+import { maxReminderDays, parseReminderDays, reminderOptions } from '../features/settings/reminderSettings';
 import type { useReminderSettings } from '../features/settings/reminderSettings';
+import type { usePinningEnabled } from '../navigation/usePinnedTabs';
 import { useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 import type { ThemeMode } from '../theme/theme';
@@ -25,6 +29,7 @@ const adminTabs = [
   { id: 'payroll', tabLabel: 'Lương & BH', label: 'Lương & bảo hiểm', description: 'Thiết lập các thông số tính lương và tỷ lệ đóng bảo hiểm.' },
 ] as const;
 const allTabs = [generalTab, ...adminTabs] as const;
+const reminderChoices = [...reminderOptions, { value: 'custom', label: 'Tùy chỉnh' }] as const;
 
 function Options<T extends string>({ label, options, value, disabled, onSelect }: {
   label: string;
@@ -65,14 +70,62 @@ function Options<T extends string>({ label, options, value, disabled, onSelect }
   );
 }
 
-export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
+function ReminderTimingOptions({ reminders }: { reminders: ReturnType<typeof useReminderSettings> }) {
+  const styles = useScreenStyles();
+  const showToast = useToast();
+  const [draft, setDraft] = useState<string | null>(null);
+  const preset = reminderOptions.find(option => Number(option.value) === reminders.timing);
+  const choice = draft !== null ? 'custom' : (preset?.value ?? 'custom');
+  const input = draft ?? String(reminders.timing);
+  const days = parseReminderDays(input.trim());
+  const canSave = reminders.ready && days !== null && days > 0 && days !== reminders.timing;
+
+  async function saveCustom() {
+    if (!canSave) return;
+    try {
+      await reminders.setTiming(days);
+      setDraft(current => current === draft ? null : current);
+    } catch {
+      showToast('Chưa lưu được thời điểm nhắc hạn. Vui lòng thử lại.', 'error');
+    }
+  }
+
+  return (
+    <>
+      <Options label="Thời điểm nhắc hạn" options={reminderChoices} value={choice}
+        disabled={!reminders.ready} onSelect={async value => {
+          if (value === 'custom') {
+            setDraft(current => current ?? (reminders.timing > 0 ? String(reminders.timing) : ''));
+            return;
+          }
+          setDraft(null);
+          await reminders.setTiming(Number(value));
+        }} />
+      {choice === 'custom' && (
+        <View style={styles.stack}>
+          <Text style={styles.label}>Số ngày trước hạn</Text>
+          <View style={optionStyles.customTimingRow}>
+            <TextInput accessibilityLabel="Số ngày trước hạn" inputMode="numeric" keyboardType="number-pad"
+              value={input} onChangeText={setDraft} style={[styles.input, optionStyles.customTimingInput]} />
+            <Button label="Lưu thời điểm" disabled={!canSave} onPress={() => void saveCustom()} />
+          </View>
+          <Text style={styles.muted}>Nhập số ngày từ 1 đến {maxReminderDays}.</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop }: {
   reminders: ReturnType<typeof useReminderSettings>;
+  pinning: ReturnType<typeof usePinningEnabled>;
   isAdmin: boolean;
   email: string;
   onScrollTop: () => void;
 }) {
   const theme = useTheme();
   const styles = useScreenStyles();
+  const showToast = useToast();
   const [selectedTab, setSelectedTab] = useState<typeof allTabs[number]['id']>(generalTab.id);
   const adminTab = isAdmin ? adminTabs.find(tab => tab.id === selectedTab) : undefined;
   const activeTab = adminTab ?? generalTab;
@@ -109,11 +162,26 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
             <Options label="Chế độ hiển thị" options={appearanceOptions} value={theme.mode}
               disabled={!theme.ready} onSelect={theme.setMode} />
           </View>
+          <View style={[styles.panel, optionStyles.switchRow]}>
+            <View style={optionStyles.switchText}>
+              <Text accessibilityRole="header" style={styles.cardTitle}>Ghim mục yêu thích</Text>
+              <Text style={styles.muted}>Ghim các mục từ menu vào thanh điều hướng dưới.</Text>
+            </View>
+            <SettingsSwitch label="Ghim mục yêu thích" disabled={!pinning.ready} checked={pinning.value}
+              onChange={value => void pinning.save(value).catch(() =>
+                showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
+          </View>
           <View style={styles.panel}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>Nhắc hạn công việc</Text>
-            <Text style={styles.muted}>Hiển thị việc được giao sắp đến hạn trong tab Công việc, theo giờ Việt Nam.</Text>
-            <Options label="Thời điểm nhắc hạn" options={reminderOptions} value={reminders.value}
-              disabled={!reminders.ready} onSelect={reminders.save} />
+            <View style={optionStyles.switchRow}>
+              <View style={optionStyles.switchText}>
+                <Text accessibilityRole="header" style={styles.cardTitle}>Nhắc hạn công việc</Text>
+                <Text style={styles.muted}>Hiển thị việc được giao sắp đến hạn trong tab Công việc, theo giờ Việt Nam.</Text>
+              </View>
+              <SettingsSwitch label="Nhắc hạn công việc" disabled={!reminders.ready} checked={reminders.enabled}
+                onChange={enabled => void reminders.setEnabled(enabled).catch(() =>
+                  showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
+            </View>
+            {reminders.enabled && <ReminderTimingOptions reminders={reminders} />}
           </View>
           <View style={styles.panel}>
             <Text accessibilityRole="header" style={styles.cardTitle}>Phiên bản ứng dụng</Text>
@@ -126,6 +194,10 @@ export function SettingsScreen({ reminders, isAdmin, email, onScrollTop }: {
 }
 
 const optionStyles = StyleSheet.create({
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchText: { flex: 1, gap: 4 },
+  customTimingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  customTimingInput: { flex: 1, minWidth: 0 },
   withIcon: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   icon: { fontSize: 16, fontWeight: '400', lineHeight: 18 },
   monitor: { width: 16, height: 18, alignItems: 'center', justifyContent: 'center' },

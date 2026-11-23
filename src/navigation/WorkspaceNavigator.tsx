@@ -23,14 +23,17 @@ import { TasksScreen } from '../screens/TasksScreen';
 import { RecordsScreen } from '../screens/RecordsScreen';
 import { WeeklyPlanScreen } from '../screens/WeeklyPlanScreen';
 import { useTheme } from '../theme/theme';
+import type { usePinningEnabled } from './usePinnedTabs';
 import type { WorkspaceRoute } from './workspaceRoutes';
 
 export function WorkspaceNavigator({
   email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt,
-  route, setRoute, showAssignment, setShowAssignment, onDragChange, onScrollTop,
+  canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords,
+  route, setRoute, pinning, showAssignment, setShowAssignment, onDragChange, onScrollTop,
 }: Omit<MemberSession, 'kind'> & {
   route: WorkspaceRoute;
   setRoute: Dispatch<SetStateAction<WorkspaceRoute>>;
+  pinning: ReturnType<typeof usePinningEnabled>;
   showAssignment: boolean;
   setShowAssignment: (open: boolean) => void;
   onDragChange: (dragging: boolean) => void;
@@ -101,21 +104,22 @@ export function WorkspaceNavigator({
     }
       : route.fromNotification ? () => setRoute({ screen: 'thu-chi' }) : route.cashId ? openReviewQueue : undefined}
     backLabel={route.fromProject ? 'Về tài chính dự án' : route.fromNotification ? 'Về sổ thu chi' : undefined} />;
-  if (route.screen === 'kpi') return <KpiScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
-  if (route.screen === 'ke-hoach-tuan') return <WeeklyPlanScreen key={`${email}-${isAdmin}`}
-    email={email} name={name} isAdmin={isAdmin} tasks={tasksComplete ? tasks : null}
+  if (route.screen === 'kpi') return <KpiScreen key={`${email}-${canReadTeamKpi}`} email={email} name={name} canReadTeam={canReadTeamKpi} />;
+  if (route.screen === 'ke-hoach-tuan') return <WeeklyPlanScreen key={`${email}-${canReadTeamPlans}`}
+    email={email} name={name} canReadTeam={canReadTeamPlans} tasks={tasksComplete ? tasks : null}
     selectedWeek={planningWeek} onSelectWeek={setPlanningWeek}
     draftStorage={planningDrafts}
     tasksError={error} onRetryTasks={retryTasks} />;
-  if (route.screen === 'cai-dat') return <SettingsScreen key={String(isAdmin)} reminders={reminders}
+  if (route.screen === 'cai-dat') return <SettingsScreen key={String(isAdmin)} reminders={reminders} pinning={pinning}
     isAdmin={isAdmin} email={email} onScrollTop={onScrollTop} />;
-  if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, isAdmin])}
-    email={email} isAdmin={isAdmin} recordId={route.recordId}
+  if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, canManageRecords])}
+    email={email} canManageRecords={canManageRecords} recordId={route.recordId}
     onSelect={recordId => setRoute({ screen: 'van-thu', recordId })} />;
   if (route.screen === 'cho-duyet') return <>
-    <ReviewQueueScreen key={JSON.stringify([email, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests])}
+    <ReviewQueueScreen key={JSON.stringify([email, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, canManageRecords])}
       cashAccess={{ email, isAdmin, canReadCash, canReviewCash }} hasReviewGrant={hasReviewGrant}
-      canReviewRequests={canReviewRequests}
+      canReviewRequests={canReviewRequests} canManageRecords={canManageRecords}
+      onAssignTaskReviewer={id => setRoute({ screen: 'task-detail', task: { id, direct: true }, backTo: 'cho-duyet' })}
       onOpenCash={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'cash', id } })}
       onOpenRequest={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'request', id } })}
       onOpenRecord={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'record', id } })} />
@@ -126,13 +130,13 @@ export function WorkspaceNavigator({
       email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
       initialRequestId={route.detail.id} onBackToReview={openReviewQueue}
       tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />}
-    {route.detail?.kind === 'record' && <RecordsScreen key={route.detail.id}
-      email={email} isAdmin={isAdmin} recordId={route.detail.id} onSelect={openReviewQueue}
+    {route.detail?.kind === 'record' && <RecordsScreen key={`${route.detail.id}-${canManageRecords}`}
+      email={email} canManageRecords={canManageRecords} recordId={route.detail.id} onSelect={openReviewQueue}
       onBackToReview={openReviewQueue} />}
   </>;
-  if (route.screen === 'du-an') return <ProjectsScreen key={String(isAdmin)} route={route}
+  if (route.screen === 'du-an') return <ProjectsScreen key={`${isAdmin}-${canManageProjects}`} route={route}
     onNavigate={next => setRoute(current => current === route ? next : current)}
-    email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} tasks={tasksComplete ? tasks : null}
+    email={email} name={name} isAdmin={isAdmin} canManageProjects={canManageProjects} canReadCash={canReadCash} tasks={tasksComplete ? tasks : null}
     tasksError={error || sentError} onRetryTasks={retryTasks} onDragChange={onDragChange}
     onProjectExpense={projectExpense => {
       setRoute({ screen: 'thu-chi', projectExpense, fromProject: projectExpense.projectId });
@@ -153,7 +157,7 @@ export function WorkspaceNavigator({
       return <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />;
     }
     if ('direct' in selected) return <LinkedTaskDetail key={selected.id} id={selected.id} email={email} name={name}
-      onBack={onBack} backLabel={backTo ? 'Tổng quan' : undefined} />;
+      onBack={onBack} backLabel={backTo === 'cho-duyet' ? 'Phê duyệt' : backTo ? 'Tổng quan' : undefined} />;
     const liveTask = tasks?.find(task => task.id === selected.id);
     if (liveTask && !error) return <TaskDetailScreen key={liveTask.id} liveTask={liveTask} email={email} name={name} onBack={onBack} />;
   }
@@ -163,7 +167,7 @@ export function WorkspaceNavigator({
 
   return <>
     <TasksScreen key={String(isAdmin)} email={email} name={name} isAdmin={isAdmin}
-      tasks={tasks} error={error} sentError={sentError} reminderWindow={reminders.value}
+      tasks={tasks} error={error} sentError={sentError} reminderWindow={reminders.window}
       onRetry={retryTasks} options={options} onOptionsChange={setOptions}
       onOpenTask={task => setRoute({ screen: 'cong-viec', taskPopupId: task.id })}
       showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={onDragChange} />

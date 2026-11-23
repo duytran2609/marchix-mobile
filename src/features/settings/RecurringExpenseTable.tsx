@@ -6,7 +6,7 @@ import { createThemedStyles } from '../../theme/theme';
 import type { SettingsRow } from './adminSettingsStore';
 
 const formatMoney = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
-const headers = ['Khoản chi', 'Hạng mục', 'Đối tượng', 'Ngày chi', 'Số tiền / tháng', 'Áp dụng'];
+const valueHeaders = ['Hạng mục', 'Đối tượng', 'Ngày chi', 'Số tiền / tháng', 'Áp dụng'];
 
 export function RecurringExpenseTable({ rows, onEdit, onRemove }: {
   rows: SettingsRow[];
@@ -15,6 +15,7 @@ export function RecurringExpenseTable({ rows, onEdit, onRemove }: {
 }) {
   const styles = useDataTableStyles();
   const expenseStyles = useExpenseStyles();
+  const cellStyle = [styles.cell, expenseStyles.fixedCell];
   const total = rows.reduce((sum, { data }) =>
     sum + (data.active === false ? 0 : Number(data.amount) || 0), 0);
 
@@ -24,26 +25,32 @@ export function RecurringExpenseTable({ rows, onEdit, onRemove }: {
         style={styles.scroll}>
         <View role="table" accessibilityLabel="Bảng chi phí cố định">
           <View role="row" style={[styles.row, styles.header]}>
-            {headers.map((header, index) => <Text key={header} role="columnheader"
-              style={[styles.cell, index === 0 && styles.name, styles.bold]}>{header}</Text>)}
+            <Text role="columnheader" style={[cellStyle, styles.name, styles.bold]}>Khoản chi</Text>
+            {valueHeaders.map(header => <Text key={header} role="columnheader"
+              style={[cellStyle, styles.bold]}>{header}</Text>)}
             <View role="columnheader" accessibilityLabel="Thao tác" style={expenseStyles.action} />
           </View>
           {pageItems.map(row => {
             const { data } = row;
             const name = String(data.name || row.id);
-            const active = data.active !== false;
+            const values = [
+              String(data.category || '—'),
+              String(data.partyName || '—'),
+              `Ngày ${String(data.day || 1)}`,
+              formatMoney.format(Number(data.amount) || 0),
+              data.active === false ? 'Tạm dừng' : 'Đang áp dụng',
+            ];
             return <View key={row.id} role="row" style={styles.row}>
-              <View role="rowheader" style={styles.name}>
+              <View role="rowheader" style={[styles.name, expenseStyles.fixedCell]}>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Sửa khoản chi ${name}`}
                   onPress={() => onEdit(row)}>
-                  <Text style={[styles.cell, styles.name, styles.link]}>{name}</Text>
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={[cellStyle, styles.name, styles.link]}>{name}</Text>
                 </Pressable>
               </View>
-              <Text role="cell" style={styles.cell}>{String(data.category || '—')}</Text>
-              <Text role="cell" style={styles.cell}>{String(data.partyName || '—')}</Text>
-              <Text role="cell" style={styles.cell}>Ngày {String(data.day || 1)}</Text>
-              <Text role="cell" style={[styles.cell, styles.bold]}>{formatMoney.format(Number(data.amount) || 0)}</Text>
-              <Text role="cell" style={styles.cell}>{active ? 'Đang áp dụng' : 'Tạm dừng'}</Text>
+              {values.map((value, index) => (
+                <Text key={valueHeaders[index]} role="cell" numberOfLines={1} ellipsizeMode="tail"
+                  style={[cellStyle, index === 3 && styles.bold]}>{value}</Text>
+              ))}
               <View role="cell" style={expenseStyles.action}>
                 <DeleteIconButton label={`Xóa khoản chi ${name}`} onPress={() => onRemove(row)} />
               </View>
@@ -53,8 +60,8 @@ export function RecurringExpenseTable({ rows, onEdit, onRemove }: {
             <Text role="rowheader" style={[styles.cell, styles.name, styles.bold, expenseStyles.totalLabel]}>
               Tổng chi phí cố định / tháng
             </Text>
-            <Text role="cell" style={[styles.cell, styles.bold]}>{formatMoney.format(total)}</Text>
-            <View role="cell" style={styles.cell} />
+            <Text role="cell" numberOfLines={1} ellipsizeMode="tail" style={[cellStyle, styles.bold]}>{formatMoney.format(total)}</Text>
+            <View role="cell" style={cellStyle} />
             <View role="cell" style={expenseStyles.action} />
           </View>
         </View>
@@ -65,6 +72,7 @@ export function RecurringExpenseTable({ rows, onEdit, onRemove }: {
 
 const useExpenseStyles = createThemedStyles(colors => StyleSheet.create({
   footer: { backgroundColor: colors.surfaceMuted, borderBottomWidth: 0 },
-  action: { width: 44 },
-  totalLabel: { flex: 1 },
+  fixedCell: { flexShrink: 0 },
+  action: { width: 44, flexShrink: 0 },
+  totalLabel: { flex: 1, minWidth: 0 },
 }));

@@ -14,7 +14,7 @@ import type { WorkspaceTab } from './workspaceRoutes';
 import type { PinnableTab } from './usePinnedTabs';
 import { workspaceTabIcons } from './workspaceTabIcons';
 
-export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins, pinsReady, onTogglePin,
+export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins, onTogglePin,
   onClose, onSelect, onOpenWeb, onLogout }: {
   open: boolean;
   activeTab: WorkspaceTab | 'ca-nhan';
@@ -22,8 +22,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
   name: string;
   photoURL: string | null;
   pins: readonly PinnableTab[];
-  pinsReady: boolean;
-  onTogglePin: (tab: PinnableTab) => void;
+  onTogglePin?: (tab: PinnableTab) => void;
   onClose: () => void;
   onSelect: (tab: WorkspaceTab | 'ca-nhan') => void;
   onOpenWeb: () => void;
@@ -92,26 +91,26 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
               <View style={styles.brandRow}>
                 <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain"
                   accessible accessibilityLabel="Logo Marchix" style={styles.logo} />
-                <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} />
+                <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} tone="accent" />
               </View>
               <Button label="Web Quản lý Marchix ↗" secondary disabled={confirming} onPress={onOpenWeb} />
             </View>
             <ScrollView contentContainerStyle={styles.list}>
-              <Text style={styles.pinHint}>Nhấn giữ một mục để ghim hoặc bỏ ghim khỏi thanh dưới.</Text>
+              {onTogglePin && <Text style={styles.pinHint}>Nhấn giữ một mục để ghim hoặc bỏ ghim khỏi thanh dưới.</Text>}
               {workspaceTabs.map(item => {
                 const selected = item.id === activeTab;
                 const label = workspaceTabLabel(item, isAdmin);
                 const id = item.id;
-                const pinned = id !== 'tong-quan' && pins.includes(id);
-                const togglePin = id !== 'tong-quan' && pinsReady ? () => onTogglePin(id) : undefined;
+                const togglePin = id !== 'tong-quan' && onTogglePin ? () => onTogglePin(id) : undefined;
+                const pinned = !!togglePin && id !== 'tong-quan' && pins.includes(id);
                 const pinActionLabel = pinned ? 'Bỏ ghim khỏi thanh dưới' : 'Ghim vào thanh dưới';
                 return (
                   <Pressable key={id} accessibilityRole="button" accessibilityLabel={label}
                     accessibilityHint={togglePin ? `Nhấn giữ để ${pinActionLabel.toLocaleLowerCase('vi')}.` : undefined}
                     accessibilityActions={togglePin ? [{ name: 'togglePin', label: pinActionLabel }] : undefined}
-                    onAccessibilityAction={event => {
-                      if (!confirming && event.nativeEvent.actionName === 'togglePin') togglePin?.();
-                    }}
+                    onAccessibilityAction={togglePin ? event => {
+                      if (!confirming && event.nativeEvent.actionName === 'togglePin') togglePin();
+                    } : undefined}
                     accessibilityState={{ selected }} disabled={confirming} onPress={() => onSelect(id)}
                     onLongPress={togglePin}
                     style={({ pressed }) => [styles.item, selected && styles.selected, pressed && styles.pressed]}>

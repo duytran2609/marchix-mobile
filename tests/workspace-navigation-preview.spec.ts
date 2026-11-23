@@ -7,7 +7,7 @@ const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
 
 test('Thanh điều hướng dưới chỉ ghim tối đa ba tab và nhớ sau khi tải lại', async ({ page }) => {
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)', exact: true }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).click();
 
   const nav = page.getByRole('navigation', { name: 'Điều hướng dưới' });
   const tabs = nav.getByRole('button');
@@ -49,7 +49,7 @@ test('Thanh điều hướng dưới chỉ ghim tối đa ba tab và nhớ sau k
 
 test('Cảnh báo mất kết nối tự ẩn khi có mạng trở lại', async ({ page, context }) => {
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).waitFor();
   const banner = page.getByRole('alert').filter({ hasText: 'Không có kết nối Internet' });
   await expect(banner).toHaveCount(0);
   await context.setOffline(true);

@@ -4,7 +4,7 @@ import { PaginatedList } from '../../components/PaginatedList';
 import { EmptyState } from '../../components/EmptyState';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../../components/TextInput';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { Dropdown } from '../../components/Dropdown';
@@ -25,6 +25,7 @@ import type { AdminSettingsTab, Field, FieldValue, FieldValues } from './adminSe
 import { loadProjectChoices, loadSettings, protectedOwner, removeRecurring, saveMember, saveRecurring, saveSettings } from './adminSettingsStore';
 import type { SettingsRow } from './adminSettingsStore';
 import { RecurringExpenseTable } from './RecurringExpenseTable';
+import { SettingsSwitch } from './SettingsSwitch';
 import { WorkdayOverrideSettings } from './WorkdayOverrideSettings';
 
 const documentFields = { work: workFields, budget: budgetFields, payroll: payrollFields };
@@ -61,7 +62,6 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   tab: AdminSettingsTab;
 }) {
   const ui = useScreenStyles();
-  const { colors } = useTheme();
   const required = field.required || typeof field.initial === 'number';
   const isRole = field.key === 'role';
   const isRecurring = tab === 'recurring';
@@ -75,26 +75,10 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   const inputValue = isMoneyInput ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : String(value);
   const highlightSelection = !isRole && !isWorkday &&
     !(isRecurring && ['category', 'partyType'].includes(field.key));
-  const checked = value === true;
   if (typeof field.initial === 'boolean') return (
     <View style={ui.listHeader}>
       <Text style={[ui.label, ui.listHeading]}>{field.label}</Text>
-      <Pressable accessibilityRole="switch" accessibilityLabel={field.label} aria-checked={checked}
-        disabled={disabled} onPress={() => onChange(!checked)}
-        onKeyDown={Platform.OS === 'web' ? event => {
-          const { key, repeat } = event as typeof event & { key?: string; repeat?: boolean };
-          if (key !== ' ' || disabled) return;
-          event.preventDefault();
-          if (!repeat) onChange(!checked);
-        } : undefined}
-        style={[fieldStyles.toggle, disabled && fieldStyles.toggleDisabled]}>
-        <View aria-hidden pointerEvents="none" style={[fieldStyles.toggleTrack, {
-          backgroundColor: checked ? colors.accent : colors.line,
-          alignItems: checked ? 'flex-end' : 'flex-start',
-        }]}>
-          <View testID="settings-switch-thumb" style={[fieldStyles.toggleThumb, { borderColor: colors.placeholder }]} />
-        </View>
-      </Pressable>
+      <SettingsSwitch label={field.label} checked={value === true} disabled={disabled} onChange={onChange} />
     </View>
   );
   if (field.time) return <TimeSettingsField field={field} value={value} disabled={disabled} onChange={onChange} />;
@@ -225,8 +209,7 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
 
   function renderField(field: Field, inherited = false) {
     return <SettingsField key={field.key} tab={tab} field={field} value={inherited ? true : draft[field.key]}
-      disabled={busy || inherited || (tab === 'members' && ((Boolean(row.id) && field.key === 'email') ||
-        (protectedAccount && ['role', 'enabled'].includes(field.key))))}
+      disabled={busy || inherited || (protectedAccount && ['role', 'enabled'].includes(field.key))}
       onChange={value => changeField(field.key, value)} />;
   }
 
@@ -242,8 +225,8 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
       {fields.filter(field => !permissionFields.includes(field)).map(field => {
         if (tab === 'members' && field.key === 'enabled') return <View key={field.key} style={fieldStyles.permissions}>
           {renderField(field)}
-          {row.id && permissionFields.map(permission => renderField(permission, inheritsPermissions))}
-          {row.id && inheritsPermissions && permissionFields.length > 0 &&
+          {permissionFields.map(permission => renderField(permission, inheritsPermissions))}
+          {inheritsPermissions && permissionFields.length > 0 &&
             <Text style={ui.muted}>Vai trò Quản trị tự động có các quyền này.</Text>}
         </View>;
         if (field === shiftFields[0]) return <View key={field.key} style={ui.stack}>
@@ -375,7 +358,7 @@ export function AdminSettings({ tab, email, onScrollTop }: {
   const addTitle = tab === 'members' ? 'Thêm tài khoản' : 'Thêm khoản chi';
   let editor;
   if (edit) {
-    const fields = tab === 'members' ? memberFields : recurringFields.map(field =>
+    const fields = tab === 'members' ? (edit.id ? memberFields.filter(field => !['name', 'email'].includes(field.key)) : memberFields) : recurringFields.map(field =>
       field.key === 'projectId' ? { ...field, choices: projects } : field);
     editor = <SettingsForm key={edit.id} tab={tab} fields={fields} row={edit} email={email}
       popupTitle={edit.id ? (tab === 'members' ? 'Chỉnh sửa tài khoản' : 'Chỉnh sửa khoản chi cố định') : addTitle}
@@ -450,10 +433,6 @@ export function AdminSettings({ tab, email, onScrollTop }: {
 
 const fieldStyles = StyleSheet.create({
   plain: { gap: 5 },
-  toggle: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  toggleDisabled: { opacity: 0.5 },
-  toggleTrack: { width: 40, height: 14, borderRadius: 7, justifyContent: 'center' },
-  toggleThumb: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#FFFFFF' },
   clockRow: { flexDirection: 'row', gap: 8 },
   clockPart: { flex: 1, minWidth: 0 },
   compactTimeField: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },

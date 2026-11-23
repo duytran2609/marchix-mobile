@@ -35,6 +35,10 @@ export const grants = {
   requestReview: 'Duyệt đơn từ',
   cashReview: 'Duyệt thu chi',
   cashRecord: 'Xác nhận thu/chi thực tế',
+  projectManage: 'Tạo và chỉnh sửa hồ sơ dự án',
+  weekPlanRead: 'Xem kế hoạch tuần của nhóm',
+  kpiRead: 'Xem KPI của nhóm',
+  recordManage: 'Quản lý văn thư',
 };
 
 export const memberFields: Field[] = [

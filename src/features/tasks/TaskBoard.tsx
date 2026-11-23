@@ -3,6 +3,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ClickableCardHeader } from '../../components/CardChevron';
+import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { Dropdown } from '../../components/Dropdown';
 import { PeopleSummary } from '../../components/PeopleSummary';
 import { SearchInput } from '../../components/SearchInput';
@@ -61,9 +62,10 @@ function assigneeKey(task: Task) {
 }
 
 const TaskCard = memo(function TaskCard({
-  task, today, onOpen, kanban = false, assigneeName, assigneePhoto,
+  task, today, onOpen, onDelete, kanban = false, assigneeName, assigneePhoto,
 }: {
   task: Task; today: string; onOpen: (task: Task) => void; kanban?: boolean; assigneeName: string;
+  onDelete?: (task: Task) => void;
   assigneePhoto?: string | null;
 }) {
   const styles = useStyles();
@@ -73,14 +75,16 @@ const TaskCard = memo(function TaskCard({
   const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
   const due = !task.due ? taskUnsetLabel : task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   const personId = assigneeKey(task);
-  return (
+  const card = (
     <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
       accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <ClickableCardHeader>
-        <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
-          style={styles.cardTitle}>{task.title}</Text>
-      </ClickableCardHeader>
+      <View style={onDelete && styles.headerWithDelete}>
+        <ClickableCardHeader>
+          <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
+            style={styles.cardTitle}>{task.title}</Text>
+        </ClickableCardHeader>
+      </View>
       <View style={styles.metadata}>
         <View style={[styles.metadataRow, styles.personRow]}>
           <Text selectable={selectable} style={[styles.metadataText, styles.metaLabel]}>Người thực hiện:</Text>
@@ -109,14 +113,21 @@ const TaskCard = memo(function TaskCard({
       <TaskProgress task={task} variant="list" />
     </Pressable>
   );
+  return onDelete ? <View>
+    {card}
+    <View style={styles.deleteButton}>
+      <DeleteIconButton label={`Xóa công việc: ${task.title}`} onPress={() => onDelete(task)} />
+    </View>
+  </View> : card;
 });
 
-export function TaskBoard({ tasks, member, showTeamTasks = false, projects, options, onOptionsChange, onOpen, onDragChange }: {
+export function TaskBoard({ tasks, member, showTeamTasks = false, projects, options, onOptionsChange, onOpen, onDelete, onDragChange }: {
   tasks: Task[]; member: { email: string; name: string };
   showTeamTasks?: boolean;
   projects?: AssignmentProject[];
   options: TaskBoardOptions; onOptionsChange: (options: TaskBoardOptions) => void;
   onOpen: (task: Task) => void;
+  onDelete?: (task: Task) => void;
   onDragChange: (dragging: boolean) => void;
 }) {
   const { colors } = useTheme();
@@ -190,6 +201,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
     const assignee = task.assigneeEmail;
     const storedAssigneeName = assigneeName(task);
     return <TaskCard key={task.id} task={task} today={today} onOpen={open} kanban={kanban}
+      onDelete={!kanban && task.assignedBy === memberEmail ? onDelete : undefined}
       assigneeName={storedAssigneeName === assignee ? members?.get(assignee)?.name || storedAssigneeName : storedAssigneeName}
       assigneePhoto={photoFor(assignee)} />;
   }
@@ -278,6 +290,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   card: { gap: 9, padding: 13, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.paper },
   pressed: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   cardTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
+  headerWithDelete: { marginRight: 44 },
+  deleteButton: { position: 'absolute', right: 6, top: 2 },
   metadata: { gap: 5 },
   metadataRow: { minHeight: 22, justifyContent: 'center' },
   personRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 4 },

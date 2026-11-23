@@ -28,7 +28,7 @@ import {
 } from '../features/tasks/tasks';
 import type { AssignmentProject, EditableStatus, Task, TaskAssignee } from '../features/tasks/tasks';
 import { auth, db, emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
-import { createThemedStyles, useTheme } from '../theme/theme';
+import { createThemedStyles, lightColors, useTheme } from '../theme/theme';
 import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 
 type TaskDirectory = { members: TaskAssignee[]; projects?: AssignmentProject[] };
@@ -211,13 +211,20 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     }
   }
 
+  const editButton = canEditAssignment ? <Button label="Chỉnh sửa" secondary={!inPopup} disabled={!!busy}
+    style={inPopup && [styles.popupAction, styles.popupEditButton]} labelStyle={inPopup && styles.popupEditLabel}
+    onPress={() => {
+      setSavedAssignment(undefined);
+      setAssignmentDraft(liveTask);
+    }} /> : null;
+  const remindButton = canRemind ? <Button secondary
+    label={busy === 'reminder' ? 'Đang tạo thông báo…' : reminderSent ? 'Đã nhắc việc' : 'Nhắc việc'}
+    style={inPopup && styles.popupAction} labelStyle={inPopup && styles.popupActionLabel}
+    disabled={!!busy || reminderSent} onPress={() => void sendReminder()} /> : null;
   const header = <>
-    {(onBack || canEditAssignment) && <View style={styles.taskDetailHeader}>
-      {onBack && <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>}
-      {canEditAssignment ? <Button label="Chỉnh sửa" secondary disabled={!!busy} onPress={() => {
-        setSavedAssignment(undefined);
-        setAssignmentDraft(liveTask);
-      }} /> : null}
+    {!inPopup && <View style={styles.taskDetailHeader}>
+      <Text style={[screenStyles.eyebrow, styles.grow]}>CHI TIẾT CÔNG VIỆC</Text>
+      {editButton}
     </View>}
     <Text accessibilityRole="header" style={screenStyles.heading}>{liveTask.title}</Text>
     <SegmentedButtons label="Chi tiết công việc" choices={detailTabs} value={tab} onChange={next => {
@@ -235,9 +242,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   const general = isGeneral && <>
     <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
     <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} variant="detail" />
-    {canRemind && <Button secondary
-      label={busy === 'reminder' ? 'Đang tạo thông báo…' : reminderSent ? 'Đã nhắc việc' : 'Nhắc việc'}
-      disabled={!!busy || reminderSent} onPress={() => void sendReminder()} />}
+    {!inPopup && remindButton}
     {canEdit ? <>
       <Text style={screenStyles.label}>Trạng thái</Text>
       <ChoiceButtons label="Trạng thái" items={editableStatuses.map(value => ({
@@ -329,6 +334,10 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
           {description}
           {discussion}
         </KeyboardScrollView>
+        {editButton && <View style={styles.popupActions}>
+          {remindButton}
+          {editButton}
+        </View>}
       </> : <>
         <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />
         <View style={screenStyles.panel}>
@@ -404,6 +413,12 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   popupBody: { flexShrink: 1, minHeight: 0, paddingTop: 16, gap: 14 },
   popupTabs: { marginHorizontal: 16, flexShrink: 0 },
+  popupActions: { flexDirection: 'row', gap: 8,
+    paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
+  popupAction: { flex: 1, minWidth: 0 },
+  popupActionLabel: { textAlign: 'center' },
+  popupEditButton: { backgroundColor: lightColors.accent },
+  popupEditLabel: { color: lightColors.onAccent, textAlign: 'center' },
   popupSection: { gap: 14 },
   popupScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   popupScrollContent: { paddingHorizontal: 16, paddingBottom: 16 },

@@ -13,7 +13,8 @@ function notification(from, to, title, body, link, createdAt) {
 function writeTaskNotification(transaction, db, { from, to, taskId, title, body, createdAt, includeSender = false }) {
   if (!isEmail(to) || (!includeSender && to === from)) return;
   transaction.create(db.collection('notifications').doc(), {
-    ...notification(from, to, title, typeof body === 'string' ? body : '', '#cong-viec', createdAt), taskId,
+    ...notification(from, to, title, typeof body === 'string' ? body : '', '#cong-viec', createdAt),
+    ...(taskId !== undefined && { taskId }),
   });
 }
 

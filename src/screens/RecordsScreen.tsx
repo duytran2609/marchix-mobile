@@ -41,9 +41,9 @@ function displayDate(date?: string) {
   return date?.split('-').reverse().join('/') || '—';
 }
 
-export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelect, onBackToReview }: {
+export function RecordsScreen({ email, canManageRecords, recordId: routeRecordId, onSelect, onBackToReview }: {
   email: string;
-  isAdmin: boolean;
+  canManageRecords: boolean;
   recordId?: string;
   onSelect: (id?: string) => void;
   onBackToReview?: () => void;
@@ -71,15 +71,15 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   const openPreview = selected && ((file: RecordAttachment, downloadable: boolean) =>
     setPreview({ recordId: selected.id, file, downloadable }));
 
-  useEffect(() => watchRecords(email, isAdmin, setRows, () => {
+  useEffect(() => watchRecords(email, canManageRecords, setRows, () => {
     setRows(null);
     setError(true);
-  }), [email, isAdmin, retry]);
+  }), [email, canManageRecords, retry]);
   useEffect(() => watchPlanningTeam(team => setNames(new Map(team.map(member => [member.email, member.name]))),
     () => setNames(new Map())), [email]);
 
   const current = rows?.filter(row => row.direction === book) ?? [];
-  const actions = (row: Correspondence) => recordActions(row, email, isAdmin);
+  const actions = (row: Correspondence) => recordActions(row, email, canManageRecords);
   const assignee = (row: Correspondence) => row.assigneeEmail
     ? names.get(row.assigneeEmail) || row.assigneeEmail : 'Chưa giao';
   const filtered = searchByName(current.filter(row =>
@@ -97,7 +97,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
   }
 
   const editor = form && (!form.existing || form.existing.id === selected?.id) &&
-    <RecordForm key={form.existing?.id} {...form} names={names} email={email} isAdmin={isAdmin}
+    <RecordForm key={form.existing?.id} {...form} names={names} email={email} isAdmin={canManageRecords}
       onPreview={form.existing ? openPreview : undefined} onCancel={() => setForm(undefined)}
       onSaved={({ id, code, notificationFailed, watchersFailed }) => {
         setForm(undefined);
@@ -118,7 +118,7 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
         <View style={styles.panel}>
           <SegmentedButtons label="Sổ văn thư" value={tab} choices={tabChoices}
             onChange={value => { setTab(value); setStatus(''); }} />
-          {tab !== 'history' && isAdmin && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
+          {tab !== 'history' && canManageRecords && rows && <Button label={book === 'in' ? '+ Vào sổ' : '+ Lập bản nháp'}
             onPress={() => setForm({ direction: book })} />}
         </View>
         {error ? <View style={styles.panel}>
@@ -190,16 +190,14 @@ export function RecordsScreen({ email, isAdmin, recordId: routeRecordId, onSelec
                 contentContainerStyle={local.body}>
                 {editing ? editor : selected ? <View style={styles.stack}>
                   <View style={[local.detailInset, local.detailHeading]}>
+                    <Text style={styles.badge}>{recordStates[selected.status]}</Text>
                     <Text accessibilityRole="header" style={styles.heading}>{selected.subject || 'Hồ sơ văn thư'}</Text>
-                    <View style={local.detailTags}>
-                      <Text style={styles.badge}>{recordStates[selected.status]}</Text>
-                      <Text style={styles.muted}>{recordBooks[selected.direction]}</Text>
-                    </View>
+                    <Text style={[styles.cardTitle, { color: colors.accent }]}>{recordKinds[selected.kind ?? 'letter']}</Text>
                   </View>
                   {[
                     ['Số văn bản', recordNumber(selected)],
                     ['Mã hồ sơ', recordSystemCode(selected, today)],
-                    ['Loại văn bản', recordKinds[selected.kind ?? 'letter']],
+                    ['Sổ văn thư', recordBooks[selected.direction]],
                     [selected.direction === 'in' ? 'Nơi gửi' : 'Nơi nhận', selected.partner],
                     ['Số bên gửi', selected.direction === 'in' ? selected.externalNumber : undefined],
                     ['Phụ trách', assignee(selected)],
@@ -262,34 +260,45 @@ function RecordHistory({ rows, names, onSelect }: {
 
   const loading = rows.some(row => byRecord[row.id] === undefined);
   const error = rows.some(row => byRecord[row.id] === null);
-  const entries = rows.flatMap(row => (byRecord[row.id] ?? []).map(event => ({ row, event })));
-  entries.sort((a, b) => b.event.at.getTime() - a.event.at.getTime());
+  const history = rows.flatMap(row => {
+    const events = byRecord[row.id];
+    if (!events?.length) return [];
+    return [{ row, events, latestAt: events[0].at.getTime() }];
+  });
+  history.sort((a, b) => b.latestAt - a.latestAt);
 
   return <View style={styles.stack}>
     {loading && <Text style={styles.muted}>Đang tải lịch sử…</Text>}
     {error && <Text accessibilityRole="alert" style={styles.error}>Không tải được lịch sử của một số hồ sơ.</Text>}
-    {!loading && !error && !entries.length && <EmptyState icon="history" message="Chưa có lịch sử xử lý." />}
-    <PaginatedList items={entries}>
-      {pageItems => pageItems.map(({ row, event }) => (
-        <Pressable key={JSON.stringify([row.id, event.id])} accessibilityRole="button"
+    {!loading && !error && !history.length && <EmptyState icon="history" message="Chưa có lịch sử xử lý." />}
+    <PaginatedList items={history}>
+      {pageItems => pageItems.map(({ row, events }) => (
+        <Pressable key={row.id} accessibilityRole="button"
           onPress={() => onSelect(row.id)} style={({ pressed }) => [styles.panel, local.record, pressed && styles.dimmed]}>
           <ClickableCardHeader><Text style={styles.cardTitle}>{row.subject || 'Hồ sơ văn thư'}</Text></ClickableCardHeader>
-          <View style={local.detailTags}>
-            <Text style={styles.badge}>{event.from ? recordStates[event.from] : 'Chưa vào sổ'}</Text>
-            <Text style={styles.muted} accessibilityLabel="chuyển sang">→</Text>
-            <Text style={styles.badge}>{recordStates[event.to]}</Text>
-          </View>
           {[
             ['Sổ văn thư', recordBooks[row.direction]],
             ['Số văn bản', recordNumber(row)],
-            ['Người thực hiện', names.get(event.actor) ?? event.actor],
-            ['Thời điểm', formatVietnamDateTime(event.at)],
-            ['Ghi chú', event.note],
-          ].filter(([, value]) => value).map(([label, value]) => (
+          ].map(([label, value]) => (
             <Text key={label} style={styles.muted}>
               <Text style={[styles.label, styles.metadataLabel]}>{label}: </Text>
               <Text style={styles.metadataValue}>{value}</Text>
             </Text>
+          ))}
+          {events.map(event => (
+            <View key={event.id} style={styles.detailRow}>
+              <Text style={styles.badge}>{recordStates[event.to]}</Text>
+              <Text style={styles.muted}>{formatVietnamDateTime(event.at)}</Text>
+              {[
+                ['Người thực hiện', names.get(event.actor) ?? event.actor],
+                ['Ghi chú', event.note],
+              ].filter(([, value]) => value).map(([label, value]) => (
+                <Text key={label} style={styles.muted}>
+                  <Text style={[styles.label, styles.metadataLabel]}>{label}: </Text>
+                  <Text style={styles.metadataValue}>{value}</Text>
+                </Text>
+              ))}
+            </View>
           ))}
         </Pressable>
       ))}
@@ -304,8 +313,7 @@ const local = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   body: { padding: 12 },
   detailInset: { marginStart: 8 },
-  detailHeading: { gap: 6 },
-  detailTags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  detailHeading: { gap: 14 },
   formContainer: { flexShrink: 1 },
   formScroll: { flexGrow: 0 },
   hidden: { display: 'none' },

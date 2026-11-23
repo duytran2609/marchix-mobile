@@ -44,7 +44,7 @@ for (const mode of ['pilot', 'structured', 'missing-project', 'legacy'] as const
         } })).ok()).toBe(true);
       }
       await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
-      await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)', exact: true }).click();
+      await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
       await page.getByRole('button', { name: /^Thông báo(?:,|$)/ }).click();
       await page.getByRole('button', { name: 'Chưa đọc: ' + title, exact: true }).first().click();

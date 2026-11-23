@@ -7,6 +7,7 @@ import { rememberAccount } from './recentAccounts';
 export type MemberSession = {
   kind: 'member'; email: string; name: string; photoURL: string | null; isAdmin: boolean; hasReviewGrant: boolean;
   canReadCash: boolean; canReviewCash: boolean; canReviewRequests: boolean; accountCreatedAt: string | undefined;
+  canManageProjects: boolean; canReadTeamPlans: boolean; canReadTeamKpi: boolean; canManageRecords: boolean;
 };
 export type Session =
   | { kind: 'loading' | 'signed-out' | 'denied' | 'error' }
@@ -38,6 +39,7 @@ export function useSession() {
         stopMembership = onSnapshot(doc(db, 'members', email), { includeMetadataChanges: true }, snapshot => {
           const member = snapshot.data();
           const isAdmin = member?.role === 'admin';
+          const hasGrant = (grant: string) => isAdmin || (Array.isArray(member?.grants) && member.grants.includes(grant));
           const allowed = snapshot.exists() && member?.enabled !== false;
           const name = member?.name || email;
           if (allowed && !snapshot.metadata.fromCache && rememberedName !== name) {
@@ -46,10 +48,10 @@ export function useSession() {
           }
           setSession(allowed
             ? { kind: 'member', email, name, photoURL: user.photoURL, isAdmin, accountCreatedAt: user.metadata.creationTime,
-                hasReviewGrant: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('taskReview')),
-                canReviewRequests: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('requestReview')),
-                canReadCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashRecord')),
-                canReviewCash: isAdmin || (Array.isArray(member?.grants) && member.grants.includes('cashReview')) }
+                hasReviewGrant: hasGrant('taskReview'), canReviewRequests: hasGrant('requestReview'),
+                canReadCash: hasGrant('cashRecord'), canReviewCash: hasGrant('cashReview'),
+                canManageProjects: hasGrant('projectManage'), canReadTeamPlans: hasGrant('weekPlanRead'),
+                canReadTeamKpi: hasGrant('kpiRead'), canManageRecords: hasGrant('recordManage') }
             : { kind: !snapshot.exists() && snapshot.metadata.fromCache ? 'error' : 'denied' });
         }, () => setSession({ kind: 'error' }));
       }

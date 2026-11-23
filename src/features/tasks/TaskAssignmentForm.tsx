@@ -17,7 +17,7 @@ import { editableStatuses, taskStatus } from './taskStatuses';
 import { taskUnsetLabel } from './taskLabels';
 import { shiftDay, todayInVietnam } from './taskDates';
 import { checklistWeight, maxChecklistWeight, validChecklistWeight } from './checklistProgress';
-import { auth, db, emulatorMode, pilotMode } from '../../services/firebase/firebase';
+import { auth, db, emulatorMode } from '../../services/firebase/firebase';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { Button } from '../../components/Button';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
@@ -99,9 +99,9 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
   const assignment = task ? getAssignmentComment(task) : undefined;
   const dueRequired = !task || Boolean(task.due);
   const workflowLocked = !!task && !editableStatus(task.status);
-  const canChangeApprover = !workflowLocked || (pilotMode && task?.status === 'Chờ duyệt');
+  const canChangeApprover = !workflowLocked || task?.status === 'Chờ duyệt';
   const [members, setMembers] = useState<TaskAssignee[] | null>(null);
-  const [projects, setProjects] = useState<AssignmentProject[]>([]);
+  const [projects, setProjects] = useState<AssignmentProject[] | undefined>();
   const [directoryError, setDirectoryError] = useState('');
   const [reload, setReload] = useState(0);
   const [title, setTitle] = useState(task?.title ?? initial?.title ?? '');
@@ -164,12 +164,24 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
     void listTaskAssignees().then(({ data }) => {
       if (!active) return;
       setMembers(data.members.sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.email.localeCompare(b.email)));
-      setProjects((data.projects ?? []).sort((a, b) => a.name.localeCompare(b.name, 'vi')));
+      setProjects(data.projects?.sort((a, b) => a.name.localeCompare(b.name, 'vi')));
     }).catch(err => {
       if (active) setDirectoryError(functionError(err, 'Không tải được danh sách thành viên.'));
     });
     return () => { active = false; };
   }, [reload]);
+
+  function reloadDirectory() {
+    setDirectoryError('');
+    setReload(value => value + 1);
+  }
+
+  const memberLoadingFeedback = directoryError ? <View style={styles.field}>
+    <Text accessibilityRole="alert" style={styles.error}>{directoryError}</Text>
+    <Pressable accessibilityRole="button" style={styles.back} onPress={reloadDirectory}>
+      <Text style={styles.actionText}>Tải lại thành viên</Text>
+    </Pressable>
+  </View> : <ActivityIndicator accessibilityLabel="Đang tải thành viên" color={colors.accent} />;
 
   function updateOption<K extends keyof AssignmentOptions>(key: K, value: AssignmentOptions[K]) {
     setOptions(current => ({ ...current, [key]: value }));
@@ -312,13 +324,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                   <FieldLabel style={styles.label} required={!workflowLocked}>Người thực hiện</FieldLabel>
                   {task && (workflowLocked || !members) ? <Text style={[styles.muted, !assigneeName && ui.unsetValue]}>
                     {assigneeName || taskUnsetLabel}</Text> : null}
-                  {workflowLocked ? null : directoryError ? <View style={styles.field}>
-                    <Text accessibilityRole="alert" style={styles.error}>{directoryError}</Text>
-                    <Pressable accessibilityRole="button" style={styles.back}
-                      onPress={() => { setDirectoryError(''); setReload(value => value + 1); }}>
-                      <Text style={styles.actionText}>Tải lại thành viên</Text>
-                    </Pressable>
-                  </View> : !members ? <ActivityIndicator accessibilityLabel="Đang tải thành viên" color={colors.accent} />
+                  {workflowLocked ? null : !members ? memberLoadingFeedback
                     : <MemberPicker title="Người thực hiện" multiple={!task} members={members} email={email} selected={assignees} disabled={saving} label="Tìm thành viên"
                         emptyMessage="Không có thành viên phù hợp."
                         onToggle={member => {
@@ -375,9 +381,12 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                 </> : <>
                   <View style={styles.field}>
                     <Text style={styles.label}>Dự án</Text>
-                    <Dropdown label="Dự án" hideLabel singleLineValue
+                    {projects ? <Dropdown label="Dự án" hideLabel singleLineValue
                       choices={[{ value: '', label: 'Chung toàn công ty' }, ...projects.map(project => ({ value: project.id, label: project.name }))]}
                       value={options.projectId} onChange={value => updateOption('projectId', value)} disabled={saving} />
+                      : members ? <Pressable accessibilityRole="button" style={styles.back} onPress={reloadDirectory}>
+                        <Text style={styles.actionText}>Tải lại danh sách dự án</Text>
+                      </Pressable> : null}
                   </View>
                   <View style={styles.field}>
                     <Text style={styles.label}>Chế độ hoàn thành</Text>
@@ -394,7 +403,12 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                       onToggle={member => {
                         if (member !== approver) setApprover(member);
                         else if (!workflowLocked) setApprover('');
-                      }} /> : <Text style={[styles.muted, !approverName && ui.unsetValue]}>{approverName || taskUnsetLabel}</Text>}
+                      }} /> : <>
+                        {approverName || !canChangeApprover ? <Text style={[styles.muted, !approverName && ui.unsetValue]}>
+                          {approverName || taskUnsetLabel}
+                        </Text> : null}
+                        {canChangeApprover ? memberLoadingFeedback : null}
+                      </>}
                   </View>
                   <View style={styles.field}>
                     <FieldLabel style={styles.label} required={!workflowLocked}>

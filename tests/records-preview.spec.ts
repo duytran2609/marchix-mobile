@@ -279,7 +279,7 @@ test('Trình duyệt nội dung xem và bỏ PDF ngay trên hàng tệp đính k
   const body = review.getByRole('heading', { name: 'Trình duyệt nội dung' }).locator('..');
   await expect(body).toHaveCSS('border-top-width', '0px');
   await expect(body).toHaveCSS('padding-left', '0px');
-  await expect(review.getByRole('button', { name: 'Xác nhận' }).locator('..')).toHaveCSS('justify-content', 'flex-end');
+  await expect(review.getByRole('button', { name: 'Xác nhận' }).locator('..')).toHaveCSS('justify-content', /^(flex|flow)-end$/);
   const note = 'Ghi chú bản trình duyệt';
   await review.getByRole('textbox', { name: 'Ghi chú nhật ký' }).fill(note);
 

@@ -13,7 +13,7 @@ test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
 async function openPayroll(page: Page, admin: boolean) {
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: admin ? 'Đăng nhập quản trị (mô phỏng)' : 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: admin ? 'Đăng nhập quản trị (mô phỏng)' : 'Đăng nhập bằng Google' }).click();
   await page.getByRole('button', { name: 'Mở menu' }).click();
   await page.getByRole('dialog').getByRole('button', { name: admin ? 'Nhân sự & lương' : 'Phiếu lương', exact: true }).click();
 }

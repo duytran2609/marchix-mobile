@@ -47,18 +47,21 @@ export async function saveSettings(tab: DocumentTab, values: FieldValues, email:
 export const protectedOwner = 'dungnlt.ops@gmail.com';
 
 export async function saveMember(values: FieldValues, currentEmail: string, id?: string) {
-  const email = String(values.email).toLowerCase();
-  if (!/^[^\s/@]+@[^\s/@]+\.[^\s/@]+$/.test(email)) throw new Error('Email không hợp lệ.');
-  const ref = doc(db, 'members', id ?? email);
+  const email = id ?? String(values.email).toLowerCase();
+  if (!id && !/^[^\s/@]+@[^\s/@]+\.[^\s/@]+$/.test(email)) throw new Error('Email không hợp lệ.');
+  const ref = doc(db, 'members', email);
   await runTransaction(db, async transaction => {
     const snapshot = await transaction.get(ref);
     if (!id && snapshot.exists()) throw new Error('Email đã tồn tại. Mở tài khoản hiện có để chỉnh sửa.');
     if (id && !snapshot.exists()) throw new Error('Tài khoản đã thay đổi. Hãy tải lại danh sách.');
-    const protectedAccount = [protectedOwner, currentEmail].includes(email) || [protectedOwner, currentEmail].includes(ref.id);
-    transaction.set(ref, {
-      name: values.name, email, role: protectedAccount ? 'admin' : values.role, enabled: protectedAccount || values.enabled,
+    const protectedAccounts = [protectedOwner, currentEmail];
+    const protectedAccount = protectedAccounts.includes(email) || protectedAccounts.includes(snapshot.get('email'));
+    const access = {
+      role: protectedAccount ? 'admin' : values.role, enabled: protectedAccount || values.enabled,
       grants: Object.keys(grants).filter(key => values[key]),
-    }, { merge: true });
+    };
+    if (id) transaction.update(ref, access);
+    else transaction.set(ref, { name: values.name, email, ...access });
   });
 }
 

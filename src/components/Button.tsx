@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
 import { FieldLabel } from './FieldLabel';
 
-export function Button({ label, onPress, secondary = false, disabled = false, selected, style, required, danger = false, leading }: {
+export function Button({ label, onPress, secondary = false, disabled = false, selected, style, labelStyle, required, danger = false, leading }: {
   label: string; onPress: () => void; secondary?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
   selected?: boolean;
   required?: boolean;
   danger?: boolean;
@@ -14,9 +15,9 @@ export function Button({ label, onPress, secondary = false, disabled = false, se
 }) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
-  const labelStyle = [styles.buttonLabel, secondary && styles.secondaryLabel, selected && styles.selectedLabel,
-    danger && styles.dangerLabel];
-  const content = required ? <FieldLabel required style={labelStyle}>{label}</FieldLabel> : <Text style={labelStyle}>{label}</Text>;
+  const textStyles = [styles.buttonLabel, secondary && styles.secondaryLabel, selected && styles.selectedLabel,
+    danger && styles.dangerLabel, labelStyle];
+  const content = required ? <FieldLabel required style={textStyles}>{label}</FieldLabel> : <Text style={textStyles}>{label}</Text>;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={required || leading ? label : undefined}
       accessibilityState={{ disabled }} aria-pressed={selected} disabled={disabled}

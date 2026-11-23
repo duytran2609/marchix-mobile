@@ -22,8 +22,8 @@ function validDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-export function ProjectEditor({ project, onCancel, onSaved }: {
-  project?: Project; onCancel: () => void; onSaved: (id: string) => void;
+export function ProjectEditor({ project, canChangeOwner, onCancel, onSaved }: {
+  project?: Project; canChangeOwner: boolean; onCancel: () => void; onSaved: (id: string) => void;
 }) {
   const styles = useScreenStyles();
   const popup = usePopupStyles();
@@ -46,6 +46,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
     if (pending.current) return;
     const profile = {
       ...Object.fromEntries(fields.map(field => [field, values[field].trim()])),
+      ...(!canChangeOwner && { owner: project?.owner ?? '', ownerEmail: project?.ownerEmail ?? '' }),
       status, budget: Number(budget || 0),
     } as ProjectProfile;
     if (!profile.name) return setError('Nhập tên dự án.');
@@ -97,7 +98,7 @@ export function ProjectEditor({ project, onCancel, onSaved }: {
               const multiline = multilineFields.includes(field);
               return <View key={field} style={popup.field}>
                 <FieldLabel style={styles.label} required={field === 'name'}>{label}</FieldLabel>
-                <TextInput accessibilityLabel={label} editable={!saving} value={values[field]}
+                <TextInput accessibilityLabel={label} editable={!saving && (canChangeOwner || (field !== 'owner' && field !== 'ownerEmail'))} value={values[field]}
                   autoCapitalize={field === 'ownerEmail' ? 'none' : 'sentences'}
                   keyboardType={field === 'ownerEmail' ? 'email-address' : 'default'}
                   multiline={multiline} maxLength={multiline ? 4000 : 320}

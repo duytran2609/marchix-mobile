@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { Button } from '../components/Button';
-import { CardChevron } from '../components/CardChevron';
+import { DeleteIconButton } from '../components/DeleteIconButton';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useToast } from '../components/Toast';
 import { signInWithGoogle } from '../features/auth/google';
-import { loadRecentAccounts } from '../features/auth/recentAccounts';
+import { clearRecentAccounts, loadRecentAccounts, removeRecentAccount } from '../features/auth/recentAccounts';
 import type { RecentAccount } from '../features/auth/recentAccounts';
 import type { Session } from '../features/auth/useSession';
 import { auth, checkAuthEmulator, configError, emulatorHost, emulatorMode, pilotMode } from '../services/firebase/firebase';
@@ -27,8 +27,10 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
   const screenStyles = useScreenStyles();
   const showToast = useToast();
   const [busy, setBusy] = useState(false);
+  const [removingAccounts, setRemovingAccounts] = useState(false);
   const [recentAccounts, setRecentAccounts] = useState<RecentAccount[]>([]);
-  const loginPending = useRef(false);
+  const actionPending = useRef(false);
+  const controlsDisabled = busy || removingAccounts;
 
   useEffect(() => {
     if (sessionKind !== 'signed-out' || configError) return;
@@ -42,8 +44,8 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
   }, [sessionKind]);
 
   async function login(email?: string) {
-    if (loginPending.current) return;
-    loginPending.current = true;
+    if (actionPending.current) return;
+    actionPending.current = true;
     setBusy(true);
     try {
       if (emulatorMode) {
@@ -61,13 +63,32 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
       showToast(emulatorMode ? `Không đăng nhập được qua ${emulatorHost}:9099. Kiểm tra Firebase Emulator đang chạy và điện thoại dùng cùng Wi-Fi với máy tính.`
         : err instanceof Error && !('code' in err) ? err.message : 'Đăng nhập Google chưa thành công. Vui lòng thử lại.', 'error');
     } finally {
-      loginPending.current = false;
+      actionPending.current = false;
       setBusy(false);
     }
   }
 
-  const googleLabel = busy ? 'Đang đăng nhập…'
-    : emulatorMode ? 'Đăng nhập Google (mô phỏng)' : 'Đăng nhập bằng Google';
+  async function removeAccounts(email?: string) {
+    if (actionPending.current) return;
+    actionPending.current = true;
+    setRemovingAccounts(true);
+    try {
+      if (email) {
+        await removeRecentAccount(email);
+        setRecentAccounts(accounts => accounts.filter(account => account.email.toLowerCase() !== email.toLowerCase()));
+      } else {
+        await clearRecentAccounts();
+        setRecentAccounts([]);
+      }
+    } catch {
+      showToast('Không xóa được tài khoản gần đây. Vui lòng thử lại.', 'error');
+    } finally {
+      actionPending.current = false;
+      setRemovingAccounts(false);
+    }
+  }
+
+  const googleLabel = busy ? 'Đang đăng nhập…' : 'Đăng nhập bằng Google';
 
   return (
     <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
@@ -94,30 +115,36 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
             {recentAccounts.length > 0 && <View style={styles.recentList}>
               <Text accessibilityRole="header" style={screenStyles.label}>Tài khoản gần đây</Text>
               {recentAccounts.map(account => (
-                <Pressable key={account.email} accessibilityRole="button"
-                  accessibilityLabel={`Đăng nhập với ${account.email}`}
-                  accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => void login(account.email)}
-                  style={({ pressed }) => [styles.account, pressed && styles.accountPressed, busy && screenStyles.dimmed]}>
-                  <MemberAvatar name={account.name} photoURL={account.photoURL} />
-                  <View style={styles.accountDetails}>
-                    <Text numberOfLines={1} style={screenStyles.label}>{account.name}</Text>
-                    <Text numberOfLines={2} style={screenStyles.muted}>{account.email}</Text>
-                  </View>
-                  <CardChevron />
-                </Pressable>
+                <View key={account.email} style={styles.account}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Đăng nhập với ${account.email}`}
+                    accessibilityState={{ disabled: controlsDisabled }} disabled={controlsDisabled}
+                    onPress={() => void login(account.email)}
+                    style={({ pressed }) => [styles.accountLogin, pressed && styles.accountPressed,
+                      controlsDisabled && screenStyles.dimmed]}>
+                    <MemberAvatar name={account.name} photoURL={account.photoURL} />
+                    <View style={styles.accountDetails}>
+                      <Text numberOfLines={1} style={screenStyles.label}>{account.name}</Text>
+                      <Text numberOfLines={2} style={screenStyles.muted}>{account.email}</Text>
+                    </View>
+                  </Pressable>
+                  <DeleteIconButton label={`Xóa ${account.email} khỏi tài khoản gần đây`}
+                    disabled={controlsDisabled} onPress={() => void removeAccounts(account.email)} />
+                </View>
               ))}
             </View>}
+            {recentAccounts.length > 0 && <Button label="Đăng xuất tất cả tài khoản" danger
+              style={styles.clearAccountsButton} disabled={controlsDisabled} onPress={() => void removeAccounts()} />}
             <Pressable accessibilityRole="button" accessibilityLabel={googleLabel}
-              accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={() => void login()}
+              accessibilityState={{ busy, disabled: controlsDisabled }} disabled={controlsDisabled} onPress={() => void login()}
               style={({ pressed }) => [styles.googleButton, pressed && styles.googlePressed]}>
               <Image source={require('../../assets/google-g.png')} resizeMode="contain" aria-hidden style={styles.googleIcon} />
               <Text style={styles.googleLabel}>{googleLabel}</Text>
             </Pressable>
             {emulatorMode && <View style={styles.demoButtons}>
               <Button label="Đăng nhập người giao việc (mô phỏng)" secondary
-                onPress={() => void login(demoAccounts.reviewer.email)} disabled={busy} />
+                onPress={() => void login(demoAccounts.reviewer.email)} disabled={controlsDisabled} />
               <Button label="Đăng nhập quản trị (mô phỏng)" secondary
-                onPress={() => void login(demoAccounts.admin.email)} disabled={busy} />
+                onPress={() => void login(demoAccounts.admin.email)} disabled={controlsDisabled} />
             </View>}
           </>}
       </View>
@@ -142,12 +169,17 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   centered: { textAlign: 'center' },
   recentList: { gap: 8 },
   account: {
-    minHeight: 56, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+    paddingRight: 4, borderRadius: 12,
     borderWidth: 1, borderColor: colors.line, backgroundColor: colors.background,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flexDirection: 'row', alignItems: 'center',
+  },
+  accountLogin: {
+    flex: 1, minWidth: 0, minHeight: 56, paddingLeft: 12, paddingVertical: 8,
+    borderTopLeftRadius: 11, borderBottomLeftRadius: 11, flexDirection: 'row', alignItems: 'center', gap: 10,
   },
   accountPressed: { backgroundColor: colors.surfaceMuted },
   accountDetails: { flex: 1, minWidth: 0 },
+  clearAccountsButton: { backgroundColor: '#C14946', borderColor: '#C14946' },
   googleButton: {
     minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
     borderWidth: 1, borderColor: '#747775', backgroundColor: '#FFFFFF',

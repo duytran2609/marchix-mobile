@@ -10,6 +10,7 @@ import { FieldLabel } from '../components/FieldLabel';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
+import { taskUnsetLabel } from '../features/tasks/taskLabels';
 import { TaskProgress } from '../features/tasks/TaskProgress';
 import { checklistWeight } from '../features/tasks/checklistProgress';
 import { commentMaxLength, reviewRatings, reviewTaskCompletion, submissionVersion } from '../features/tasks/tasks';
@@ -19,8 +20,9 @@ import { formatVietnamDateTime } from '../utils/dateTime';
 import { createThemedStyles } from '../theme/theme';
 import { useScreenStyles } from '../theme/screenStyles';
 
-export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onReviewed }: {
+export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onReviewed, onAssignReviewer }: {
   task: Task; active: boolean; needsReviewer: boolean; onBack: () => void; onReviewed: () => void;
+  onAssignReviewer?: () => void;
 }) {
   const screenStyles = useScreenStyles();
   const styles = useStyles();
@@ -29,7 +31,12 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<'approve' | 'rework' | null>(null);
   const result = task.comments?.find(comment => comment.by === task.assigneeEmail && comment.at === submissionVersion(task));
-  const submittedAt = formatVietnamDateTime(submissionVersion(task));
+  const due = task.due?.trim();
+  const metadata = [
+    ['Người thực hiện', task.assignee?.trim() || task.assigneeEmail?.trim()],
+    ['Hạn chót', due && formatTaskDate(due)],
+    ['Gửi duyệt lúc', formatVietnamDateTime(submissionVersion(task))],
+  ];
 
   async function decide(decision: 'approve' | 'rework') {
     if (busy || !active || needsReviewer || !taskAssignmentEnabled || (decision === 'approve' ? !rating : !note.trim())) return;
@@ -61,15 +68,10 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
             keyboardShouldPersistTaps="handled">
             <View style={screenStyles.panel}>
               <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
-              <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
-                <Text style={screenStyles.metadataLabel}>Người thực hiện · </Text>{task.assignee || task.assigneeEmail}
-              </Text>
-              <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
-                {task.due ? <><Text style={screenStyles.metadataLabel}>Hạn </Text>{formatTaskDate(task.due)}</> : 'Chưa đặt hạn'}
-              </Text>
-              {submittedAt ? <Text style={[screenStyles.muted, screenStyles.metadataValue]}>
-                <Text style={screenStyles.metadataLabel}>Gửi duyệt lúc </Text>{submittedAt}
-              </Text> : null}
+              {metadata.map(([label, value]) => <Text key={label} style={[screenStyles.muted, screenStyles.metadataValue]}>
+                <Text style={screenStyles.metadataLabel}>{label}: </Text>
+                {value || <Text style={screenStyles.unsetValue}>{taskUnsetLabel}</Text>}
+              </Text>)}
               <TaskProgress task={task} />
               {task.note ? <Text style={screenStyles.body}>{task.note}</Text> : null}
               {task.checklist?.map((item, index) => (
@@ -81,12 +83,15 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
               ))}
               <View style={screenStyles.detailRow}>
                 <Text style={[screenStyles.label, screenStyles.metadataLabel]}>Kết quả nhân viên gửi</Text>
-                {result?.text ? <Text style={[screenStyles.body, screenStyles.metadataValue]}>{result.text}</Text>
-                  : <EmptyState icon="note" message="Không có ghi chú kết quả." />}
+                {result?.text?.trim() ? <Text style={[screenStyles.body, screenStyles.metadataValue]}>{result.text}</Text>
+                  : <EmptyState icon="note" message={taskUnsetLabel} />}
               </View>
             </View>
             {!active ? <Text style={screenStyles.muted}>Lượt gửi duyệt này đã thay đổi. Quay về danh sách để kiểm tra lại.</Text>
-              : needsReviewer ? <Text style={screenStyles.muted}>Cần chỉ định người có quyền duyệt công việc này.</Text>
+              : needsReviewer ? <>
+                <Text style={screenStyles.muted}>Cần chỉ định người có quyền duyệt công việc này.</Text>
+                {taskAssignmentEnabled && onAssignReviewer && <Button label="Chỉ định người duyệt" onPress={onAssignReviewer} />}
+              </>
               : !taskAssignmentEnabled ? <Text style={screenStyles.muted}>Bản này chỉ cho xem kết quả gửi duyệt.</Text> : (
               <View style={screenStyles.panel}>
                 <Text accessibilityRole="header" style={screenStyles.cardTitle}>Đánh giá kết quả</Text>

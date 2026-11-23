@@ -32,7 +32,9 @@ export default function App() {
               ? <><MemberWorkspace key={session.email} email={session.email} name={session.name}
                   photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant}
                   accountCreatedAt={session.accountCreatedAt}
-                  canReadCash={session.canReadCash} canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests} />
+                  canReadCash={session.canReadCash} canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests}
+                  canManageProjects={session.canManageProjects} canReadTeamPlans={session.canReadTeamPlans}
+                  canReadTeamKpi={session.canReadTeamKpi} canManageRecords={session.canManageRecords} />
                 {showLoginReminder && <StartupReminder key={JSON.stringify([
                   session.email, session.isAdmin, session.canReadCash, session.canReviewCash, session.canReviewRequests,
                 ])} email={session.email} name={session.name} isAdmin={session.isAdmin} canReadCash={session.canReadCash}

@@ -213,7 +213,7 @@ exports.listMobileRequestMembers = onCall(async request => {
   const directory = await members.select('name', 'enabled', 'role', 'grants').get();
   return directory.docs.filter(row => isMemberEmail(row.id) && activeMember(row)).map(row => {
     const grants = row.get('grants');
-    return { email: row.id, name: memberName(row), canReview: row.get('role') === 'admin' ||
+    return { email: row.id, name: memberName(row), canReviewTasks: canReviewTasks(row), canReview: row.get('role') === 'admin' ||
       (Array.isArray(grants) && grants.includes('requestReview')) };
   });
 });
@@ -388,6 +388,29 @@ exports.createMobileTask = onCall(async request => {
   });
 });
 
+exports.deleteMobileTask = onCall(async request => {
+  const { email, db } = assignmentContext(request, 'xóa công việc');
+  const ref = db.collection('tasks').doc(getTaskId(request.data?.taskId));
+  const memberRef = db.collection('members').doc(email);
+  return db.runTransaction(async transaction => {
+    const [member, snapshot] = await transaction.getAll(memberRef, ref);
+    const task = snapshot.data();
+    if (!activeMember(member) || (task && task.assignedBy !== email)) {
+      throw new HttpsError('permission-denied', 'Chỉ người giao việc mới được xóa công việc này.');
+    }
+    if (!task) return;
+
+    const watchers = Array.isArray(task.watchers) ? task.watchers : [];
+    const recipients = new Set([task.assigneeEmail, task.approverEmail, ...watchers]);
+    const createdAt = new Date().toISOString();
+    transaction.delete(ref);
+    for (const to of recipients) {
+      writeTaskNotification(transaction, db, { from: email, to,
+        title: 'Công việc đã được xóa', body: task.title, createdAt });
+    }
+  });
+});
+
 exports.updateMobileTask = onCall(async request => {
   const { email, db } = assignmentContext(request);
   const data = request.data ?? {};
@@ -417,9 +440,11 @@ exports.updateMobileTask = onCall(async request => {
 
     const open = openStatuses.includes(task.status);
     const nextApprover = approverEmail ?? task.approverEmail ?? '';
+    const changeApprover = nextApprover !== (task.approverEmail || '') &&
+      (open || (task.status === 'Chờ duyệt' && !!nextApprover));
     const newMembers = [...new Set([
       ...(open && assigneeEmail !== task.assigneeEmail ? [assigneeEmail] : []),
-      ...(open && nextApprover && nextApprover !== task.approverEmail ? [nextApprover] : []),
+      ...(changeApprover && nextApprover ? [nextApprover] : []),
       ...details.watchers.filter(watcher => !task.watchers?.includes(watcher)),
     ])];
     const directory = newMembers.length ? await transaction.getAll(...newMembers.map(id => members.doc(id))) : [];
@@ -427,8 +452,8 @@ exports.updateMobileTask = onCall(async request => {
       throw new HttpsError('failed-precondition', 'Có thành viên không còn hoạt động. Hãy chọn lại.');
     }
     const byEmail = new Map(directory.map(row => [row.id, row]));
-    if (open && (nextApprover === assigneeEmail || (byEmail.has(nextApprover) &&
-        nextApprover !== task.approverEmail && !canReviewTasks(byEmail.get(nextApprover))))) {
+    if (((open || changeApprover) && nextApprover === (open ? assigneeEmail : task.assigneeEmail)) ||
+        (changeApprover && nextApprover && !canReviewTasks(byEmail.get(nextApprover)))) {
       throw new HttpsError('failed-precondition', 'Người duyệt phải có quyền duyệt và khác người thực hiện.');
     }
     if (details.projectId && details.projectId !== task.projectId &&
@@ -463,6 +488,7 @@ exports.updateMobileTask = onCall(async request => {
     }
     const change = { ...details, comments, updatedAt, updatedBy: email,
       ...(cadences.includes(details.repeat) && { spawned: true }) };
+    if (changeApprover) change.approverEmail = nextApprover;
     if (open) {
       const original = Array.isArray(task.checklist) ? task.checklist : [];
       const indices = checklist.flatMap(({ sourceIndex }) => sourceIndex == null ? [] : [sourceIndex]);
@@ -717,9 +743,8 @@ exports.reviewTaskCompletion = onCall(request => {
   }
 
   const access = assignmentContext(request, 'duyệt công việc');
-  const canReview = (task, member) => task.approverEmail
-    ? task.approverEmail === access.email && canReviewTasks(member)
-    : task.assignedBy === access.email;
+  const canReview = (task, member) => task.approverEmail === access.email &&
+    task.assigneeEmail !== access.email && canReviewTasks(member);
   return editTask(access, getTaskId(request.data?.taskId), canReview, async context => {
     const { task, id, transaction, db, email, now } = context;
     if (task.status !== 'Chờ duyệt' || (task.doneAt || task.updatedAt || '') !== submission) {

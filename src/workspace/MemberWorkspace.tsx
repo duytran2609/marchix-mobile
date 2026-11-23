@@ -12,7 +12,7 @@ import { useWorkspacePush } from '../features/notifications/workspacePush';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceBottomNav } from '../navigation/WorkspaceBottomNav';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
-import { maxPinnedTabs, usePinnedTabs } from '../navigation/usePinnedTabs';
+import { maxPinnedTabs, usePinnedTabs, usePinningEnabled } from '../navigation/usePinnedTabs';
 import type { PinnableTab } from '../navigation/usePinnedTabs';
 import { workflowRouteForLink, workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
@@ -21,11 +21,14 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
 import { workspaceHeaderPadding, WorkspaceHeader } from './WorkspaceHeader';
 
-export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt }: Omit<MemberSession, 'kind'>) {
+export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests,
+  canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords, accountCreatedAt }: Omit<MemberSession, 'kind'>) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
   const pinnedTabs = usePinnedTabs(email);
+  const pinning = usePinningEnabled(email);
+  const pinningEnabled = pinning.ready && pinning.value;
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [route, setRoute] = useState<WorkspaceRoute>({ screen: 'tong-quan' });
@@ -55,7 +58,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   }
 
   function togglePin(tab: PinnableTab) {
-    if (!pinnedTabs.ready) return;
+    if (!pinningEnabled || !pinnedTabs.ready) return;
     const pins = pinnedTabs.value;
     const pinned = pins.includes(tab);
     if (!pinned && pins.length >= maxPinnedTabs) {
@@ -116,15 +119,19 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
           <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
             accountCreatedAt={accountCreatedAt}
             canReadCash={canReadCash} canReviewCash={canReviewCash} canReviewRequests={canReviewRequests}
-            route={route} setRoute={setRoute}
+            canManageProjects={canManageProjects} canReadTeamPlans={canReadTeamPlans}
+            canReadTeamKpi={canReadTeamKpi} canManageRecords={canManageRecords}
+            route={route} setRoute={setRoute} pinning={pinning}
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}
             onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} />
         </View>
       </KeyboardScrollView>
-      <WorkspaceBottomNav pins={pinnedTabs.value} activeTab={activeTab} isAdmin={isAdmin} onSelect={selectTab} />
+      {pinningEnabled && (
+        <WorkspaceBottomNav pins={pinnedTabs.value} activeTab={activeTab} isAdmin={isAdmin} onSelect={selectTab} />
+      )}
       <WorkspaceDrawer open={menuOpen} activeTab={activeTab}
         isAdmin={isAdmin} name={name} photoURL={avatar}
-        pins={pinnedTabs.value} pinsReady={pinnedTabs.ready} onTogglePin={togglePin}
+        pins={pinnedTabs.value} onTogglePin={pinningEnabled && pinnedTabs.ready ? togglePin : undefined}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
     </>
   );

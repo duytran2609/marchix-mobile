@@ -21,9 +21,11 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { useToast } from '../components/Toast';
+import { watchMemberDirectory } from '../features/auth/memberDirectory';
+import type { DirectoryMember as Member } from '../features/auth/memberDirectory';
 import { displayDate, vnd } from '../features/cash/cash';
 import {
-  canActOnRequest, changeRequest, createRequest, loadRequestMembers, overtimeTaskLimit, overtimeTasks,
+  canActOnRequest, changeRequest, createRequest, overtimeTaskLimit, overtimeTasks,
   pendingRequest, requestTypes, watchRequests,
 } from '../features/requests/requests';
 import type { RequestAccess, RequestAction, RequestFields, StaffRequest } from '../features/requests/requests';
@@ -34,7 +36,6 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { formatVietnamDateTime } from '../utils/dateTime';
 
-type Member = Awaited<ReturnType<typeof loadRequestMembers>>[number];
 type RequestTasks = { tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void };
 const requestTypeChoices = requestTypes.map(value => ({ value, label: value }));
 const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
@@ -82,16 +83,11 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
   const toast = useToast();
   useEffect(() => watchRequests({ email, isAdmin, canReviewRequests }, setRows, () => setError(true)),
     [email, isAdmin, canReviewRequests, retry]);
-  useEffect(() => {
-    let active = true;
-    loadRequestMembers(isAdmin).then(items => {
-      if (active) {
-        setMembers(items.sort((a, b) => a.name.localeCompare(b.name, 'vi')));
-        setDirectoryState('ready');
-      }
-    }, () => { if (active) setDirectoryState('error'); });
-    return () => { active = false; };
-  }, [isAdmin, directoryRetry]);
+  const creating = selectedId === 'new';
+  useEffect(() => watchMemberDirectory(isAdmin, items => {
+    setMembers(items.sort((a, b) => a.name.localeCompare(b.name, 'vi')));
+    setDirectoryState('ready');
+  }, () => setDirectoryState('error'), creating), [isAdmin, directoryRetry, creating]);
 
   const memberName = (id: string) => id === email ? name : getMemberName(id, members);
   const selected = selectedId === 'new' ? 'new' : rows?.find(row => row.id === selectedId);
@@ -287,7 +283,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     setError('');
     try {
       if (action === 'reject' && !reply.trim()) throw new Error('Nhập lý do từ chối.');
-      if (action === 'route' && !approvers.some(member => member.email === approver)) {
+      if ((action === 'route' || (!row && approver)) &&
+          (directoryState !== 'ready' || !approvers.some(member => member.email === approver))) {
         throw new Error('Chọn người có quyền duyệt đơn.');
       }
       if (!row) await createRequest(fields(), approver, access.email);
@@ -439,8 +436,10 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
             <View style={shared.detailRow}>
               {!row || canRoute ? <>
                 <FieldLabel style={shared.label} required={canRoute}>Người duyệt</FieldLabel>
-                {!!approver && (directoryState !== 'ready' || !approvers.some(member => member.email === approver)) &&
-                  <Text style={shared.muted}>{getMemberName(approver, members)}</Text>}
+                {!!approver && directoryState === 'ready' && !approvers.some(member => member.email === approver) && <>
+                  <Text style={shared.muted}>{row ? `${getMemberName(approver, members)} · ` : ''}Người đã chọn không còn trong danh sách có quyền duyệt.</Text>
+                  {!row && <Button label="Bỏ chọn người duyệt" secondary disabled={busy} onPress={() => setApprover('')} />}
+                </>}
                 {directoryState === 'loading' && <ActivityIndicator accessibilityLabel="Đang tải người duyệt" color={colors.accent} />}
                 {directoryState === 'error' && <Button label="Tải lại danh sách người duyệt" secondary disabled={busy} onPress={retryDirectory} />}
                 {directoryState === 'ready' && <SearchableChoiceDropdown title="Người duyệt" label="Tìm người duyệt"

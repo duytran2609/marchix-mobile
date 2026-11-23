@@ -16,6 +16,7 @@ import type { Correspondence } from '../features/records/records';
 import { canActOnRequest, watchRequests } from '../features/requests/requests';
 import type { StaffRequest } from '../features/requests/requests';
 import { formatTaskDate } from '../features/tasks/taskDates';
+import { taskUnsetLabel } from '../features/tasks/taskLabels';
 import { TaskPriority } from '../features/tasks/TaskPriority';
 import { submissionVersion, watchReviewQueue } from '../features/tasks/tasks';
 import type { ReviewQueueTasks, Task } from '../features/tasks/tasks';
@@ -31,9 +32,10 @@ const reviewGroups = [
 ] as const;
 
 export function ReviewQueueScreen({
-  cashAccess, hasReviewGrant, canReviewRequests, onOpenCash, onOpenRequest, onOpenRecord,
+  cashAccess, hasReviewGrant, canReviewRequests, canManageRecords, onAssignTaskReviewer, onOpenCash, onOpenRequest, onOpenRecord,
 }: {
-  cashAccess: CashAccess; hasReviewGrant: boolean; canReviewRequests: boolean;
+  cashAccess: CashAccess; hasReviewGrant: boolean; canReviewRequests: boolean; canManageRecords: boolean;
+  onAssignTaskReviewer: (id: string) => void;
   onOpenCash: (id: string) => void; onOpenRequest: (id: string) => void; onOpenRecord: (id: string) => void;
 }) {
   const { email, isAdmin, canReadCash, canReviewCash } = cashAccess;
@@ -81,12 +83,12 @@ export function ReviewQueueScreen({
   }, [email, isAdmin, canReviewRequests, requestRetry]);
 
   useEffect(() => {
-    if (!isAdmin) return;
-    return watchRecords(email, isAdmin, rows => setRecords(rows.filter(row =>
+    if (!canManageRecords) return;
+    return watchRecords(email, canManageRecords, rows => setRecords(rows.filter(row =>
       row.direction === 'out' && (row.status === 'review' || row.status === 'signing') &&
-      recordActions(row, email, isAdmin).length > 0)
+      recordActions(row, email, canManageRecords).length > 0)
       .sort((a, b) => recordSortTime(b, true) - recordSortTime(a, true))), () => setRecords('error'));
-  }, [email, isAdmin, recordRetry]);
+  }, [email, canManageRecords, recordRetry]);
 
   function backToQueue() {
     setSelected(undefined);
@@ -98,6 +100,7 @@ export function ReviewQueueScreen({
     const active = !!live && submissionVersion(live) === submissionVersion(selected.task);
     return <ReviewDetailScreen key={selected.task.id} task={active ? live : selected.task} active={active}
       needsReviewer={selected.group === 'needsReviewer'}
+      onAssignReviewer={live?.assignedBy === email ? () => onAssignTaskReviewer(live.id) : undefined}
       onBack={backToQueue}
       onReviewed={() => {
         setTasks(current => current && {
@@ -134,7 +137,8 @@ export function ReviewQueueScreen({
               {rows ? <Text style={screenStyles.badge}>{rows.length}</Text> : null}
             </View>
             {!rows && !error ? <ActivityIndicator accessibilityLabel={`Đang tải: ${title}`} color={colors.accent} /> : null}
-            {rows?.length === 0 && !error ? <EmptyState icon="tasks" message="Không có công việc." /> : null}
+            {rows?.length === 0 && !error ? <EmptyState icon="tasks" message={key === 'mine' && hasReviewGrant
+              ? 'Chưa có công việc chờ duyệt được chỉ định cho bạn.' : 'Không có công việc.'} /> : null}
             <PaginatedList items={rows ?? []}>
               {pageItems => pageItems.map(task => (
                 <Pressable key={task.id} accessibilityRole="button"
@@ -143,9 +147,9 @@ export function ReviewQueueScreen({
                   onPress={() => setSelected({ task, group: key })}>
                   <ClickableCardHeader><Text style={screenStyles.cardTitle} numberOfLines={2}>{task.title}</Text></ClickableCardHeader>
                   <ApprovalMetadata fields={[
-                    { label: 'Người giao việc', person: personName(task.assignedBy), value: 'Chưa rõ' },
-                    { label: 'Người thực hiện', person: personName(task.assigneeEmail, task.assignee), value: 'Chưa chỉ định' },
-                    { label: 'Hạn chót', value: task.due ? formatTaskDate(task.due) : 'Chưa đặt' },
+                    { label: 'Người giao việc', person: personName(task.assignedBy?.trim()), value: taskUnsetLabel },
+                    { label: 'Người thực hiện', person: personName(task.assigneeEmail?.trim(), task.assignee?.trim()), value: taskUnsetLabel },
+                    { label: 'Hạn chót', value: task.due?.trim() ? formatTaskDate(task.due.trim()) : taskUnsetLabel },
                     { label: 'Mức độ ưu tiên', value: <TaskPriority priority={task.priority} /> },
                   ]} />
                 </Pressable>
@@ -175,7 +179,7 @@ export function ReviewQueueScreen({
             { label: 'Người duyệt', person: personName(row.approverEmail), value: 'Chưa chỉ định' },
           ],
         })} />}
-      {isAdmin && <ApprovalSection title="Văn thư chờ duyệt hoặc chờ ký" rows={records} emptyIcon="document"
+      {canManageRecords && <ApprovalSection title="Văn thư chờ duyệt hoặc chờ ký" rows={records} emptyIcon="document"
         onRetry={() => { setRecords(null); setRecordRetry(value => value + 1); }} onOpen={onOpenRecord}
         describe={row => ({
           title: row.subject || 'Văn bản đi',
@@ -215,7 +219,8 @@ function ApprovalMetadata({ fields }: { fields: ApprovalField[] }) {
       </View>
     ) : (
       <Text key={label} style={screenStyles.muted}>
-        <Text style={screenStyles.metadataLabel}>{label}: </Text>{value}
+        <Text style={screenStyles.metadataLabel}>{label}: </Text>
+        {value === taskUnsetLabel ? <Text style={screenStyles.unsetValue}>{value}</Text> : value}
       </Text>
     ))}
   </View>;

@@ -16,7 +16,7 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { formatMonthLabel, formatVietnamDateTime } from '../utils/dateTime';
 
-export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boolean }) {
+export function KpiScreen({ email, name, canReadTeam }: KpiMember & { canReadTeam: boolean }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
@@ -28,7 +28,7 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
   const [project, setProject] = useState('');
   const [showRules, setShowRules] = useState(false);
 
-  useEffect(() => watchKpi({ email, name }, isAdmin, setData, () => setError(true)), [email, name, isAdmin, retry]);
+  useEffect(() => watchKpi({ email, name }, canReadTeam, setData, () => setError(true)), [email, name, canReadTeam, retry]);
   useEffect(() => {
     const timer = setInterval(() => setToday(todayInVietnam()), 30000);
     return () => clearInterval(timer);
@@ -83,7 +83,7 @@ export function KpiScreen({ email, name, isAdmin }: KpiMember & { isAdmin: boole
     </PaginatedList> : <View style={ui.panel}>
       <EmptyState icon="chart" message="Chưa có việc nào có hạn trong tháng này." />
     </View>}
-    {isAdmin && rows.some(row => row.email.startsWith('ten:')) && <View style={ui.panel}>
+    {canReadTeam && rows.some(row => row.email.startsWith('ten:')) && <View style={ui.panel}>
       <Text style={ui.muted}>Một số việc chỉ có tên người làm. Hãy gắn tài khoản có email khi chọn người làm để KPI hiển thị đúng cho nhân viên.</Text>
     </View>}
   </>;
@@ -117,11 +117,11 @@ function KpiRules() {
   const styles = useStyles();
   return <View style={styles.rulesContent}>
     {ruleGroups.map(({ title, items, formula }) => <View key={title} style={styles.ruleGroup}>
-      <Text accessibilityRole="header" style={styles.rulesLabel}>{title}</Text>
-      {formula && <Text style={[ui.body, styles.formula]}>{formula}</Text>}
+      <Text accessibilityRole="header" style={ui.muted}>{title}</Text>
+      {formula && <Text style={ui.muted}>{formula}</Text>}
       {items.map(item => <View key={item} style={styles.ruleItem}>
-        <Text aria-hidden style={ui.body}>•</Text>
-        <Text style={[ui.body, styles.ruleText]}>{item}</Text>
+        <Text aria-hidden style={ui.muted}>•</Text>
+        <Text style={[ui.muted, styles.ruleText]}>{item}</Text>
       </View>)}
     </View>)}
   </View>;
@@ -168,7 +168,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   ruleGroup: { gap: 6, borderTopWidth: 1, borderColor: colors.line, paddingTop: 10 },
   ruleItem: { flexDirection: 'row', gap: 8 },
   ruleText: { flex: 1 },
-  formula: { fontWeight: '700' },
   rulesLabel: { color: colors.ink, fontWeight: '700' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
   person: { flexShrink: 1, gap: 4 },

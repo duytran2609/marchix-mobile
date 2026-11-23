@@ -23,6 +23,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/members/$(email())).data.get('role', '') == 'admin';
     }
 
+    function hasMemberGrant(grant) {
+      return activeMember() && (attendanceAdmin() || memberHasGrant(grant));
+    }
+
+    function memberHasGrant(grant) {
+      let grants = get(/databases/$(database)/documents/members/$(email())).data.get('grants', []);
+      return grants is list && grant in grants;
+    }
+
     function openStatus(status) {
       return status in ['Chưa làm', 'Đang làm', 'Vướng'];
     }
@@ -66,23 +75,41 @@ service cloud.firestore {
       function memberFields() {
         return ['name', 'email', 'role', 'enabled', 'grants'];
       }
-      function validSettingsMember(data) {
-        return data.name is string && data.name.size() > 0 && data.name.size() <= 250
-          && data.email is string && data.email.size() <= 250
-          && data.email.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$')
-          && data.role in ['admin', 'staff'] && data.enabled is bool
-          && data.grants is list && data.grants.size() <= 4
-          && data.grants.hasOnly(['taskReview', 'requestReview', 'cashReview', 'cashRecord'])
+      function validDisplayName(name) {
+        return name is string && name.size() <= 250 && name.matches('(?s).*[^\\s].*');
+      }
+      function validMemberAccess(data) {
+        return data.role in ['admin', 'staff'] && data.enabled is bool
+          && data.grants is list && data.grants.size() <= 8
+          && data.grants.hasOnly(['taskReview', 'requestReview', 'cashReview', 'cashRecord',
+            'projectManage', 'weekPlanRead', 'kpiRead', 'recordManage'])
           && (!(id in [email(), 'dungnlt.ops@gmail.com']) || (data.enabled && data.role == 'admin'));
       }
       allow get: if verified() && email() == id;
       allow read: if attendanceAdmin();
       allow create: if attendanceAdmin() && request.resource.data.keys().hasOnly(memberFields())
-        && request.resource.data.email == id && validSettingsMember(request.resource.data);
+        && request.resource.data.email == id && id.size() <= 250 && id.matches('^[^ @/]+@[^ @/]+[.][^ @/]+$')
+        && validDisplayName(request.resource.data.name) && validMemberAccess(request.resource.data);
       allow update: if attendanceAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(memberFields())
-        && request.resource.data.email == resource.data.get('email', id)
-        && validSettingsMember(request.resource.data);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'enabled', 'grants'])
+        && validMemberAccess(request.resource.data);
+      allow update: if activeMember() && email() == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && validDisplayName(request.resource.data.name);
+    }
+
+    // Private contact email, keyed by Firebase Auth UID.
+    match /memberProfiles/{uid} {
+      function ownsProfile() {
+        return activeMember() && request.auth.uid == uid;
+      }
+      function validContact(data) {
+        let address = data.get('contactEmail', '');
+        return data.keys().hasOnly(['contactEmail']) && address is string && address.size() <= 254
+          && address.matches('^[^\\s@/]+@[^\\s@/]+[.][^\\s@/]+$');
+      }
+      allow get: if ownsProfile();
+      allow create, update: if ownsProfile() && validContact(request.resource.data);
     }
 
     // memberAvatars/{email} stores one raster image (up to 768 KiB) per active member.
@@ -337,7 +364,7 @@ service cloud.firestore {
       allow get: if activeMember() && isCashFile(resource.data) && canReadFile(resource.data);
       allow create: if activeMember() && isCashFile(request.resource.data) && validCashFile(request.resource.data);
       allow get: if activeMember() && readableRecordAttachment(resource.data);
-      allow create: if attendanceAdmin() && validRecordAttachment(request.resource.data);
+      allow create: if recordAdmin() && validRecordAttachment(request.resource.data);
 
       match /chunks/{chunkId} {
         function filePath() {
@@ -373,7 +400,7 @@ service cloud.firestore {
         allow read: if activeMember() && readableCashChunk();
         allow create: if activeMember() && validCashChunk(request.resource.data);
         allow read: if activeMember() && readableRecordAttachment(get(filePath()).data);
-        allow create: if attendanceAdmin() && validRecordChunk(request.resource.data);
+        allow create: if recordAdmin() && validRecordChunk(request.resource.data);
       }
     }
 
@@ -548,7 +575,7 @@ service cloud.firestore {
           && isoDate(data.updatedAt);
       }
 
-      allow read: if activeMember() && (attendanceAdmin() || resource.data.email == email());
+      allow read: if activeMember() && (hasMemberGrant('weekPlanRead') || resource.data.email == email());
       allow create: if activeMember() && validWeekPlan(request.resource.data);
       allow update: if activeMember() && resource.data.email == email()
         && request.resource.data.week == resource.data.week && validWeekPlan(request.resource.data);
@@ -803,10 +830,13 @@ service cloud.firestore {
       }
 
       allow read: if activeMember();
-      allow create: if projectAdmin() && validProject(request.resource.data)
-        && request.resource.data.keys().hasOnly(profileFields());
-      allow update: if projectAdmin() && validProject(request.resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(profileFields());
+      allow create: if hasMemberGrant('projectManage') && validProject(request.resource.data)
+        && request.resource.data.keys().hasOnly(profileFields())
+        && (projectAdmin() || (request.resource.data.ownerEmail == '' && request.resource.data.owner == ''));
+      allow update: if hasMemberGrant('projectManage') && validProject(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(profileFields())
+        && (projectAdmin() || (request.resource.data.ownerEmail == resource.data.get('ownerEmail', '')
+          && request.resource.data.owner == resource.data.get('owner', '')));
       allow update: if projectAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators'])
         && request.resource.data.collaborators is list && request.resource.data.collaborators.size() <= 50;
@@ -952,7 +982,7 @@ service cloud.firestore {
       return mail is string && mail != '' && get(/databases/$(database)/documents/members/$(mail)).data.get('enabled', true) == true;
     }
     function recordMember() { return activeMember(); }
-    function recordAdmin() { return attendanceAdmin(); }
+    function recordAdmin() { return hasMemberGrant('recordManage'); }
     function recordReadable(d) {
       return recordAdmin() || (recordMember() && (d.assigneeEmail == email() || email() in d.get('watchers',[])));
     }
@@ -1212,7 +1242,7 @@ service cloud.firestore {
 
     // KPI snapshots are written by the existing server-side monthly closing job.
     match /kpi/{id} {
-      allow read: if activeMember() && (attendanceAdmin() || resource.data.email == email());
+      allow read: if activeMember() && (hasMemberGrant('kpiRead') || resource.data.email == email());
     }
 
     match /tasks/{id} {

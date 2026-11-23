@@ -326,6 +326,17 @@ try {
   invalidBatch.update(requestRef(reviewerDb), decision);
   invalidBatch.set(expenseRef, { ...expense, amount: expense.amount + 1 });
   await denied(invalidBatch.commit());
+  await updateDoc(reviewerProfile, { grants: reviewerGrants.filter(grant => grant !== 'requestReview') });
+  try {
+    await denied(getDocFromServer(requestRef(reviewerDb)));
+    const revokedBatch = writeBatch(reviewerDb);
+    revokedBatch.update(requestRef(reviewerDb), decision);
+    revokedBatch.set(expenseRef, expense);
+    await denied(revokedBatch.commit());
+    await denied(setDoc(doc(db, 'requests', requestId + '-revoked'), requestData));
+  } finally {
+    await updateDoc(reviewerProfile, { grants: reviewerGrants });
+  }
   const approvalBatch = writeBatch(reviewerDb);
   approvalBatch.update(requestRef(reviewerDb), decision);
   approvalBatch.set(expenseRef, expense);
@@ -349,6 +360,33 @@ try {
     name: 'Quản trị demo', email: 'quantri@example.test', role: 'admin', enabled: false, grants: [],
   }, { merge: true }));
   console.log('PASS: chỉ quản trị được truy cập nhóm cài đặt quản trị và không thể tự khóa.');
+  const ownMember = doc(otherDb, 'members', colleague);
+  const originalMember = (await getDocFromServer(ownMember)).data();
+  const contact = (client, uid = getAuth(otherDb.app).currentUser.uid) => doc(client, 'memberProfiles', uid);
+  const address = 'lien-he@example.test';
+  const editProfile = writeBatch(otherDb);
+  editProfile.update(ownMember, { name: 'Tên cá nhân kiểm thử' });
+  editProfile.set(contact(otherDb), { contactEmail: address });
+  await editProfile.commit();
+  try {
+    assert.deepEqual((await getDocFromServer(ownMember)).data(), { ...originalMember, name: 'Tên cá nhân kiểm thử' });
+    assert.equal((await getDocFromServer(contact(otherDb))).get('contactEmail'), address);
+    await denied(updateDoc(ownMember, { name: '   ' }));
+    await denied(updateDoc(ownMember, { email: address }));
+    await denied(updateDoc(ownMember, { name: 'Tên hợp lệ', grants: ['taskReview'] }));
+    await denied(updateDoc(doc(db, 'members', colleague), { name: 'Tên người khác' }));
+    await denied(updateDoc(doc(adminDb, 'members', colleague), { name: 'Tên do quản trị sửa' }));
+    await denied(getDocFromServer(contact(db)));
+    await denied(getDocFromServer(contact(adminDb)));
+    await denied(setDoc(contact(db), { contactEmail: address }));
+    await denied(setDoc(contact(outsiderDb, getAuth(outsiderDb.app).currentUser.uid), { contactEmail: address }));
+    await denied(setDoc(contact(otherDb), { contactEmail: 'sai email' }));
+    await denied(setDoc(contact(otherDb), { contactEmail: address, role: 'admin' }));
+  } finally {
+    await updateDoc(ownMember, { name: originalMember.name });
+    await setDoc(contact(otherDb), { contactEmail: colleague });
+  }
+  console.log('PASS: chỉ chủ tài khoản hoạt động sửa được tên và email liên hệ của mình.');
   await getDocsFromServer(collection(adminDb, 'tasks'));
   await getDocsFromServer(collection(adminDb, 'kpi'));
   await getDocsFromServer(query(collection(db, 'kpi'), where('email', '==', staff)));
@@ -373,6 +411,38 @@ try {
   await denied(setDoc(planRef(db), { ...plan, priorities: 'x'.repeat(2001) }));
   await denied(deleteDoc(planRef(db)));
   console.log('PASS: kế hoạch tuần cá nhân và quyền đọc của quản trị.');
+  const delegatedProject = doc(otherDb, 'projects', 'rules-delegated-' + Date.now());
+  const profile = { name: 'Dự án kiểm thử quyền', owner: '', ownerEmail: '',
+    status: 'Đang chạy', budget: 0, startDate: '', deadline: '', goal: '', phase: '', risks: '', note: '' };
+  const delegatedRecord = doc(otherDb, 'correspondence', 'in-2025-1');
+  try {
+    await denied(setDoc(delegatedProject, profile));
+    await denied(getDocFromServer(delegatedRecord));
+    await updateDoc(colleagueProfile, { grants: withGrant(colleagueGrants, 'weekPlanRead') });
+    assert.ok((await getDocFromServer(planRef(otherDb))).exists());
+    await denied(getDocsFromServer(collection(otherDb, 'kpi')));
+    await denied(getDocFromServer(delegatedRecord));
+    await updateDoc(colleagueProfile, { grants: withGrant(colleagueGrants,
+      'weekPlanRead', 'kpiRead', 'projectManage', 'recordManage') });
+    await getDocsFromServer(collection(otherDb, 'kpi'));
+    assert.ok((await getDocFromServer(delegatedRecord)).exists());
+    await denied(setDoc(delegatedProject, { ...profile, owner: 'Đồng nghiệp demo', ownerEmail: colleague }));
+    await setDoc(delegatedProject, profile);
+    await updateDoc(delegatedProject, { note: 'Hồ sơ đã cập nhật' });
+    await denied(updateDoc(delegatedProject, { ownerEmail: colleague }));
+    await denied(updateDoc(delegatedProject, { collaborators: [colleague] }));
+    await denied(setDoc(planRef(otherDb), plan));
+    await denied(setDoc(doc(otherDb, 'kpi', 'delegated-test'), { email: staff, month: '2026-11', pct: 100 }));
+    await denied(getDocsFromServer(collection(otherDb, 'members')));
+    await denied(getDocFromServer(doc(otherDb, 'settings', 'payroll')));
+  } finally {
+    await updateDoc(colleagueProfile, { grants: colleagueGrants });
+  }
+  await denied(updateDoc(delegatedProject, { note: 'Sau khi thu hồi quyền' }));
+  await denied(getDocsFromServer(collection(otherDb, 'kpi')));
+  await denied(getDocFromServer(planRef(otherDb)));
+  await denied(getDocFromServer(delegatedRecord));
+  console.log('PASS: cấp và thu hồi bốn quyền nghiệp vụ đã giới hạn theo chức năng.');
   const attendanceNote = client => doc(client, 'members', staff, 'attendanceNotes', date);
   const previousNote = await getDocFromServer(attendanceNote(db));
   await denied(setDoc(attendanceNote(otherDb), { text: 'Ghi chú' }));

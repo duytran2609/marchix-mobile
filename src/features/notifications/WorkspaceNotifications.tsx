@@ -175,8 +175,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
 }
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
-  bellButton: { width: 44, height: 44, borderRadius: 11, backgroundColor: colors.accentSoft,
-    alignItems: 'center', justifyContent: 'center' },
+  bellButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   bellIcon: { alignItems: 'center' },
   bellBody: { width: 14, height: 14, borderWidth: 2, borderBottomWidth: 0,
     borderColor: colors.accent, borderTopLeftRadius: 7, borderTopRightRadius: 7 },

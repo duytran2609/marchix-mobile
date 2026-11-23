@@ -107,6 +107,43 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
   }
 });
 
+test('Phê duyệt hiển thị thông tin công việc còn trống bằng chữ mờ', async ({ page, request }) => {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const id = `review-unset-${Date.now()}`;
+  const url = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks/${id}`;
+  const headers = { Authorization: 'Bearer owner' };
+  const title = `Công việc thiếu thông tin ${id}`;
+  try {
+    expect((await request.patch(url, { headers, data: { fields: {
+      title: { stringValue: title }, status: { stringValue: 'Chờ duyệt' },
+      approverEmail: { stringValue: 'quantri@example.test' },
+    } } })).ok()).toBe(true);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto(previewUrl);
+    await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
+
+    const card = page.getByRole('button', { name: `Xem công việc: ${title}`, exact: true })
+      .or(page.getByRole('button', { name: `Duyệt công việc: ${title}`, exact: true }));
+    async function expectUnsetFields(container: typeof card, labels: string[]) {
+      for (const label of labels) {
+        const field = container.getByText(`${label}: Chưa thiết lập`, { exact: true });
+        await expect(field.getByText('Chưa thiết lập', { exact: true })).toHaveCSS('color', 'rgb(118, 118, 118)');
+      }
+    }
+    await expectUnsetFields(card, ['Người giao việc', 'Người thực hiện', 'Hạn chót', 'Mức độ ưu tiên']);
+    await card.click();
+    const detail = page.getByRole('dialog', { name: 'Chi tiết phê duyệt công việc' });
+    await expectUnsetFields(detail, ['Người thực hiện', 'Hạn chót', 'Gửi duyệt lúc']);
+    await expect(detail.getByText('Kết quả nhân viên gửi', { exact: true }).locator('..')
+      .getByText('Chưa thiết lập', { exact: true })).toBeVisible();
+  } finally {
+    await request.delete(url, { headers });
+  }
+});
+
 test('Người giao trả lời trao đổi và người thực hiện thấy trích dẫn', async ({ page, browser }) => {
   const sender = await browser.newPage({ ...devices['iPhone 13'] });
   await acknowledgeStartupReminder(sender);
@@ -115,7 +152,7 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
   const reply = 'Bạn bổ sung ảnh minh họa nhé.';
   try {
     await Promise.all([page.goto(previewUrl), sender.goto(previewUrl)]);
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     await sender.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click();
     for (const view of [page, sender]) {
       await openTasks(view);
@@ -154,7 +191,7 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
 test('Văn thư nằm sau Dự án và hiển thị hồ sơ được giao hoặc theo dõi', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
   await page.getByRole('button', { name: 'Mở menu' }).click();
   const drawer = page.getByRole('dialog');
   const labels = await drawer.getByRole('button').allTextContents();
@@ -212,7 +249,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
   }
 
   try {
-    await openRequests(page, 'Đăng nhập Google (mô phỏng)');
+    await openRequests(page, 'Đăng nhập bằng Google');
     for (const label of ['Đơn chờ duyệt', 'Đơn đã duyệt']) {
       await expect(page.getByText(label, { exact: true }).locator('..')).toHaveCSS('background-color', 'rgb(240, 234, 253)');
     }
@@ -394,7 +431,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
 test('Thống kê bảng công in đậm số với phần chữ nét thường', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
   await page.getByRole('button', { name: 'Mở menu' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
   const panel = page.getByRole('heading', { name: 'Bảng công của bạn' }).locator('../..');
@@ -472,7 +509,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
       setting: 'denied',
     });
     await page.goto(previewUrl);
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     await openAttendance(page);
     const personalHeading = page.getByRole('heading', { name: 'Bảng công của bạn' });
     await expect(personalHeading).toBeVisible();
@@ -701,7 +738,7 @@ test('Chấm công trong app, kiểm tra bán kính và điều chỉnh công t�
 test('Dự án lọc công việc theo dự án và mở popup trên trang Công việc', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
   async function openProject() {
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Dự án', exact: true }).click();
@@ -773,7 +810,7 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
   }
 
   try {
-    await openOverview(page, 'Đăng nhập Google (mô phỏng)');
+    await openOverview(page, 'Đăng nhập bằng Google');
     const taskRing = page.getByLabel(/\d+ công việc/);
     await expect(taskRing).toBeVisible();
     const legendRow = page.getByRole('button', { name: /^Đang làm \d+$/ });
@@ -812,7 +849,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(previewUrl);
   const accountLookup = page.waitForResponse(response => response.url().includes('/accounts:lookup') && response.ok());
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
   const { users } = await (await accountLookup).json();
   const accountCreatedAt = Number(users[0].createdAt);
   expect(accountCreatedAt).toBeGreaterThan(0);
@@ -854,7 +891,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   const role = profileName.locator('..').getByText('Nhân viên', { exact: true });
   await expect(role).toBeVisible();
   expect((await role.boundingBox())!.y).toBeGreaterThan((await profileName.boundingBox())!.y);
-  const emailLabel = page.getByText('Email', { exact: true });
+  const emailLabel = page.getByText('Email liên hệ', { exact: true });
   const emailValue = page.getByText('nhanvien@example.test', { exact: true });
   await expect(emailValue).toBeVisible();
   const activity = page.getByText('Thời gian hoạt động', { exact: true }).locator('..');
@@ -896,16 +933,48 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await expect(lightModeLabel).toHaveCSS('font-weight', '500');
   await appearance.getByRole('radio', { name: 'Tối' }).click();
   await expect(heading).toHaveCSS('color', 'rgb(245, 240, 252)');
-  await page.getByRole('radio', { name: 'Trước 1 ngày' }).click();
+  const reminderSwitch = page.getByRole('switch', { name: 'Nhắc hạn công việc', exact: true });
+  const reminderTiming = page.getByRole('radiogroup', { name: 'Thời điểm nhắc hạn' });
+  await expect(reminderSwitch).toHaveAttribute('aria-checked', 'false');
+  await expect(reminderTiming).toBeHidden();
+  await reminderSwitch.click();
+  await reminderTiming.getByRole('radio', { name: 'Trước 3 ngày' }).click();
   await expect.poll(() => page.evaluate(() => [
     localStorage.getItem('marchix:theme'),
     localStorage.getItem('marchix:due-reminders:nhanvien@example.test'),
-  ])).toEqual(['dark', '1']);
+  ])).toEqual(['dark', '3']);
   await page.reload();
   await openMenu.click();
   await drawer.getByRole('button', { name: 'Cài đặt' }).click();
   await expect(appearance.getByRole('radio', { name: 'Tối' })).toBeChecked();
-  await expect(page.getByRole('radio', { name: 'Trước 1 ngày' })).toBeChecked();
+  await expect(reminderTiming.getByRole('radio', { name: 'Trước 3 ngày' })).toBeChecked();
+  await reminderSwitch.click();
+  await expect(reminderTiming).toBeHidden();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('marchix:due-reminders:nhanvien@example.test')))
+    .toBe('off:3');
+  await page.reload();
+  await openMenu.click();
+  await drawer.getByRole('button', { name: 'Cài đặt' }).click();
+  await expect(reminderSwitch).toHaveAttribute('aria-checked', 'false');
+  await expect(reminderTiming).toBeHidden();
+  await reminderSwitch.click();
+  await expect(reminderTiming.getByRole('radio', { name: 'Trước 3 ngày' })).toBeChecked();
+
+  const customTiming = reminderTiming.getByRole('radio', { name: 'Tùy chỉnh' });
+  const customDays = page.getByRole('textbox', { name: 'Số ngày trước hạn' });
+  const saveTiming = page.getByRole('button', { name: 'Lưu thời điểm' });
+  await customTiming.click();
+  await customDays.fill('366');
+  await expect(saveTiming).toBeDisabled();
+  await customDays.fill('7');
+  await saveTiming.click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('marchix:due-reminders:nhanvien@example.test')))
+    .toBe('7');
+  await page.reload();
+  await openMenu.click();
+  await drawer.getByRole('button', { name: 'Cài đặt' }).click();
+  await expect(customTiming).toBeChecked();
+  await expect(customDays).toHaveValue('7');
 
   await openMenu.click();
   await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
@@ -945,7 +1014,7 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await logout.click();
   await confirmation.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
   await expect(drawer).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Đăng nhập bằng Google' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Tài khoản gần đây' })).toBeVisible();
   await page.getByRole('button', { name: 'Đăng nhập với nhanvien@example.test' }).click();
@@ -953,6 +1022,38 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
   await expect(page.getByText('nhanvien@example.test', { exact: true })).toBeVisible();
   await expect(avatarImage).toHaveCount(1);
+});
+
+test('Xóa từng tài khoản gần đây và xóa tất cả trên màn hình đăng nhập', async ({ page }) => {
+  await page.goto(previewUrl);
+  const googleLogin = page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true });
+  await expect(googleLogin).toBeVisible();
+  await page.evaluate(() => {
+    localStorage.setItem('marchix:recent-accounts:v1:demo-marchix-mobile', JSON.stringify([
+      { email: 'nhanvien@example.test', name: 'Nhân viên demo', photoURL: null },
+      { email: 'quantri@example.test', name: 'Quản trị demo', photoURL: null },
+    ]));
+  });
+  await page.reload();
+
+  const staffLogin = page.getByRole('button', { name: 'Đăng nhập với nhanvien@example.test', exact: true });
+  const adminLogin = page.getByRole('button', { name: 'Đăng nhập với quantri@example.test', exact: true });
+  const clearAll = page.getByRole('button', { name: 'Đăng xuất tất cả tài khoản', exact: true });
+  await expect(staffLogin).toBeVisible();
+  await page.getByRole('button', { name: 'Xóa nhanvien@example.test khỏi tài khoản gần đây', exact: true }).click();
+  await expect(staffLogin).toBeHidden();
+  await expect(adminLogin).toBeVisible();
+  await page.reload();
+  await expect(adminLogin).toBeVisible();
+  await expect(staffLogin).toBeHidden();
+
+  await clearAll.click();
+  const recentHeading = page.getByRole('heading', { name: 'Tài khoản gần đây' });
+  await expect(recentHeading).toBeHidden();
+  await page.reload();
+  await expect(googleLogin).toBeVisible();
+  await expect(recentHeading).toBeHidden();
+  await expect(clearAll).toBeHidden();
 });
 
 test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới hạn theo vai trò', async ({ page, browser, request }) => {
@@ -991,7 +1092,7 @@ test('KPI đọc điểm đã chốt, tính điểm theo dự án và giới h�
         [key, typeof value === 'number' ? { integerValue: String(value) } : { stringValue: value }])) },
     })));
     for (const response of seeded) expect(response.ok()).toBe(true);
-    await openKpi(page, 'Đăng nhập Google (mô phỏng)');
+    await openKpi(page, 'Đăng nhập bằng Google');
     const rules = page.getByRole('button', { name: /^Cách tính KPI/ });
     const rulesFrame = rules.locator('..');
     await expect(rulesFrame).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -1088,7 +1189,7 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
       email: employee, week, priorities: 'Nội dung cũ', blockers: 'Hỗ trợ từ kế hoạch trên web', updatedAt: new Date().toISOString(),
     }) } })).ok()).toBeTruthy();
 
-    await openPlanning(page, 'Đăng nhập Google (mô phỏng)');
+    await openPlanning(page, 'Đăng nhập bằng Google');
     await expect(page.getByText(/^(?:Thứ [2-7]|Chủ nhật), \d{2}\/\d{2}\/\d{4}$/)).toBeVisible();
     const suggestion = page.getByRole('button', { name: new RegExp(title) });
     await expect(suggestion).toBeVisible();
@@ -1244,6 +1345,12 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const memberAvatar = page.getByRole('button', { name: /Nhân viên kiểm thử/ }).getByTestId('member-avatar');
     await expect(memberAvatar).toHaveCSS('border-top-width', '1px');
     await expect(memberAvatar).toHaveCSS('border-top-color', 'rgb(0, 0, 0)');
+    await page.getByRole('button', { name: /Nhân viên kiểm thử/ }).click();
+    const editAccountPopup = page.getByRole('dialog', { name: 'Chỉnh sửa tài khoản', exact: true });
+    await expect(editAccountPopup).toBeVisible();
+    await expect(editAccountPopup.getByRole('textbox', { name: 'Tên hiển thị' })).toHaveCount(0);
+    await expect(editAccountPopup.getByRole('textbox', { name: 'Email', exact: true })).toHaveCount(0);
+    await editAccountPopup.getByRole('button', { name: 'Hủy', exact: true }).click();
 
     await openTab(labels[2]);
     const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
@@ -1553,7 +1660,7 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
       expect(result.ok).toBeTruthy();
     }
     await page.goto(previewUrl);
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     const openMenu = page.getByRole('button', { name: 'Mở menu' });
     const drawer = page.getByRole('dialog');
     await openMenu.click();
@@ -1680,7 +1787,7 @@ test('Popup giao và sửa việc hiển thị mức ưu tiên và các trạng 
 
 test('Công việc giữ bộ lọc và chế độ Kanban khi mở chi tiết', async ({ page }) => {
   await page.goto(previewUrl);
-  await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
   await openTasks(page);
   const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
   const status = page.getByRole('button', { name: /^Trạng thái:/ });
@@ -1817,7 +1924,7 @@ test('Gantt dùng màu riêng và chạm để làm nổi bật từng công vi�
       expect(response.ok()).toBe(true);
     }
     await page.goto(previewUrl);
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     await openTasks(page);
     await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
     const [bar, marker] = titles.map(title => page.getByRole('button', { name: `Làm nổi bật trên biểu đồ: ${title}`, exact: true }));
@@ -1867,7 +1974,7 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
   try {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto(previewUrl);
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     await openTasks(page);
     const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
     await expect(search).toBeVisible({ timeout: 15_000 });
@@ -1939,6 +2046,24 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
   }
 });
 
+test('bỏ ngay việc con đã chọn trong form giao việc', async ({ page }) => {
+  await page.goto(previewUrl);
+  await page.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click();
+  await openTasks(page);
+  await page.getByRole('button', { name: '+ Giao việc', exact: true }).click();
+  const form = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Giao việc mới', exact: true }) });
+  await form.getByRole('button', { name: 'Tùy chọn', exact: true }).click();
+  for (const title of ['Việc con giữ lại', 'Việc con cần bỏ']) {
+    await form.getByRole('textbox', { name: 'Tên việc con', exact: true }).fill(title);
+    await form.getByRole('button', { name: '+ Thêm việc con' }).click();
+  }
+  const removeChild = form.getByRole('button', { name: 'Bỏ việc con 2', exact: true });
+  await removeChild.click();
+  await expect(form.getByRole('textbox', { name: 'Tên việc con 2', exact: true })).toHaveCount(0);
+  await expect(removeChild).toHaveCount(0);
+  await expect(form.getByRole('textbox', { name: 'Tên việc con 1', exact: true })).toHaveValue('Việc con giữ lại');
+});
+
 test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng công việc', async ({ browser, page }) => {
   test.setTimeout(90_000);
   const receiver = await browser.newContext({ ...devices['iPhone 13'] });
@@ -1958,7 +2083,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await Promise.all([page.goto(previewUrl), receiverPage.goto(previewUrl)]);
     await Promise.all([
       page.getByRole('button', { name: 'Đăng nhập người giao việc (mô phỏng)' }).click(),
-      receiverPage.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click(),
+      receiverPage.getByRole('button', { name: 'Đăng nhập bằng Google' }).click(),
     ]);
     await Promise.all([openTasks(page), openTasks(receiverPage)]);
     const received = receiverPage.getByRole('button', { name: `Mở công việc: ${title}` });
@@ -2347,7 +2472,7 @@ test('Google mô phỏng, cập nhật tiến độ và đồng bộ giữa hai 
   } }) });
   expect(fixture.ok).toBeTruthy();
   const openTask = (target: typeof page) => target.getByRole('button', { name: `Mở công việc: ${task}` });
-  const login = (target: typeof page) => target.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)' }).click();
+  const login = (target: typeof page) => target.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
 
   const other = await browser.newContext({ ...devices['iPhone 13'] });
   try {

@@ -3,9 +3,10 @@ import {
   limit, query, runTransaction, where, writeBatch,
 } from 'firebase/firestore';
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { taskRoleNotices } from '../../../functions/taskRoleNotices';
-import { auth, db, taskAssignmentEnabled } from '../../services/firebase/firebase';
-import type { AssignmentInput, AttachmentUpload, ReviewRating, Task } from './tasks';
+import { auth, db, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
+import type { AssignmentInput, AssignmentProject, AttachmentUpload, ReviewRating, Task, TaskAssignee } from './tasks';
 import { checklistProgress as percent } from './checklistProgress';
 
 export const taskCategoryMaxLength = 160;
@@ -15,6 +16,11 @@ const updated = (email: string, now: string) => ({ updatedBy: email, updatedAt: 
 const reviewer = (row: { role?: string; grants?: string[] }) =>
   row.role === 'admin' || (Array.isArray(row.grants) && row.grants.includes('taskReview'));
 
+type TaskDirectory = { members: TaskAssignee[]; projects?: AssignmentProject[] };
+export const fetchTaskDirectory = httpsCallable<void, TaskDirectory>(
+  taskFunctions, 'listMobileTaskAssignees', { timeout: 15000 },
+);
+
 function email() {
   const user = auth.currentUser;
   if (!taskAssignmentEnabled || !user?.emailVerified || !user.email) {
@@ -23,9 +29,13 @@ function email() {
   return user.email;
 }
 
-async function directory() {
-  const snapshot = await getDocsFromServer(collection(db, 'members'));
-  return snapshot.docs.filter(row => row.get('enabled') !== false).map(row => {
+async function directory(): Promise<{ data: TaskDirectory; fromFunction: boolean }> {
+  const snapshot = await getDocsFromServer(collection(db, 'members')).catch(error => {
+    if (error?.code === 'permission-denied') return null;
+    throw error;
+  });
+  if (!snapshot) return { data: (await fetchTaskDirectory()).data, fromFunction: true };
+  const members = snapshot.docs.filter(row => row.get('enabled') !== false).map(row => {
     const data = row.data();
     const name = typeof data.name === 'string' ? data.name.trim() : '';
     const photoURL = [data.photoURL, data.avatarUrl, data.avatarURL].find(url =>
@@ -33,12 +43,15 @@ async function directory() {
     return { email: row.id, name: name && !name.includes('@') ? name : 'Thành viên Marchix',
       photoURL, canReview: reviewer(data) };
   });
+  return { data: { members }, fromFunction: false };
 }
 
 export async function pilotDirectory() {
   email();
-  const [members, projects] = await Promise.all([directory(), getDocsFromServer(collection(db, 'projects'))]);
-  return { data: { members, projects: projects.docs.flatMap(project => {
+  const { data, fromFunction } = await directory();
+  if (fromFunction) return { data };
+  const projects = await getDocsFromServer(collection(db, 'projects')).catch(() => null);
+  return { data: { members: data.members, projects: projects?.docs.flatMap(project => {
     const name = project.get('name');
     return typeof name === 'string' && name.trim() ? [{ id: project.id, name }] : [];
   }) } };
@@ -126,7 +139,7 @@ export async function pilotCreate(input: AssignmentInput) {
   if (!targets.length || targets.length > 30 || !input.title.trim()) throw new Error('Nhập tên và chọn người thực hiện.');
   const files = uploadBytes(input.attachments ?? [], targets.length);
   const tasks = collection(db, 'tasks');
-  const [members, existing] = await Promise.all([directory(), getDocsFromServer(
+  const [{ data: { members } }, existing] = await Promise.all([directory(), getDocsFromServer(
     query(tasks, where('assignedBy', '==', by), where('mobileAssignmentId', '==', input.taskId), limit(1)),
   )]);
   const people = new Map(members.map(member => [member.email, member]));
@@ -166,13 +179,23 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
   const [assigneeEmail] = input.assigneeEmails;
   const category = assignmentCategory(input.category);
   const files = uploadBytes(input.attachments ?? []);
-  const people = new Map((await directory()).map(member => [member.email, member]));
+  const { data: { members }, fromFunction } = await directory();
+  const people = new Map(members.map(member => [member.email, member]));
   const ref = doc(db, 'tasks', input.taskId);
   await runTransaction(db, async tx => {
     const task = (await tx.get(ref)).data() as Task | undefined;
     if (task?.assignedBy !== by) throw new Error('Chỉ người giao việc mới được chỉnh sửa công việc này.');
     if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
     if ((task.updatedAt ?? '') !== input.revision) throw new Error('Công việc vừa thay đổi. Hãy mở lại để chỉnh sửa.');
+    const pendingReviewer = task.status === 'Chờ duyệt' && input.approverEmail !== task.approverEmail
+      ? input.approverEmail : undefined;
+    if (pendingReviewer) {
+      const member = fromFunction ? undefined : (await tx.get(doc(db, 'members', pendingReviewer))).data();
+      const canReview = fromFunction ? people.get(pendingReviewer)?.canReview : member && member.enabled !== false && reviewer(member);
+      if (pendingReviewer === task.assigneeEmail || !canReview) {
+        throw new Error('Người duyệt phải có quyền duyệt và khác người thực hiện.');
+      }
+    }
     const now = new Date(Math.max(Date.now(), (Date.parse(input.revision) || 0) + 1)).toISOString();
     const comments = [...(task.comments ?? [])];
     const index = comments.findIndex(comment => comment.by === by &&
@@ -222,11 +245,8 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
           throw new Error('Hãy lưu thông tin công việc trước, rồi cập nhật trạng thái riêng.');
         }
       }
-    } else if (task.status === 'Chờ duyệt' && input.approverEmail) {
-      if (input.approverEmail === task.assigneeEmail || !people.get(input.approverEmail)?.canReview) {
-        throw new Error('Người duyệt phải có quyền duyệt và khác người thực hiện.');
-      }
-      patch.approverEmail = input.approverEmail;
+    } else if (pendingReviewer) {
+      patch.approverEmail = pendingReviewer;
     }
     for (const { to, title, body } of taskRoleNotices(task, { ...task, ...patch })) {
       writeTaskNotice(tx, by, to, ref.id, title, body, now);
@@ -285,8 +305,11 @@ export async function pilotReview(input: { taskId: string; submission: string; d
   const reviewNote = input.note.trim();
   if (reviewNote.length > 1000 || (approved ? !input.rating : !reviewNote)) throw new Error('Hãy nhập thông tin duyệt công việc.');
   await runTransaction(db, async tx => {
-    const task = (await tx.get(ref)).data() as Task | undefined;
-    if (!task || task.approverEmail !== by || task.assigneeEmail === by || task.status !== 'Chờ duyệt' ||
+    const [snapshot, profile] = await Promise.all([tx.get(ref), tx.get(doc(db, 'members', by))]);
+    const task = snapshot.data() as Task | undefined;
+    const member = profile.data();
+    if (!member || member.enabled === false || !reviewer(member) ||
+        !task || task.approverEmail !== by || task.assigneeEmail === by || task.status !== 'Chờ duyệt' ||
         (task.doneAt || task.updatedAt || '') !== input.submission) throw new Error('Lượt gửi duyệt này đã thay đổi hoặc bạn không có quyền duyệt.');
     const now = new Date().toISOString();
     const change: Record<string, unknown> = { status: approved ? 'Xong' : 'Đang làm',

@@ -25,7 +25,7 @@ export type WorkspaceRoute =
   | { screen: 'ca-nhan' }
   | { screen: 'van-thu'; recordId?: string }
   | ProjectRoute
-  | { screen: 'task-detail'; task: TaskSelection; backTo?: 'tong-quan' };
+  | { screen: 'task-detail'; task: TaskSelection; backTo?: 'tong-quan' | 'cho-duyet' };
 
 export const workspaceTabs = [
   { id: 'tong-quan', label: 'Tổng quan' },

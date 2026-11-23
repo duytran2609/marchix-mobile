@@ -44,7 +44,10 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(target.getByRole('heading', { name: /Sổ thu chi/ })).toBeVisible();
   }
   try {
-    await openCash(page, 'Đăng nhập Google (mô phỏng)');
+    await openCash(page, 'Đăng nhập bằng Google');
+    const memberExport = button(page, 'Xuất Excel');
+    await expect(memberExport).toBeVisible();
+    await expect(memberExport).toBeDisabled();
     async function expectSameRow(left: RegExp, right: RegExp, scope: Page | Locator = page) {
       const first = await scope.getByRole('button', { name: left }).boundingBox();
       const second = await scope.getByRole('button', { name: right }).boundingBox();
@@ -224,8 +227,13 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await admin.getByRole('button', { name: /^Trạng thái:/ }).click();
     await admin.getByRole('radio', { name: 'Chờ duyệt', exact: true }).click();
     await expect(entry(admin)).toHaveCount(0);
+    const exportButton = button(admin, 'Xuất Excel');
+    const ledgerTitle = await admin.getByRole('heading', { name: 'Sổ thu chi', exact: true }).boundingBox();
+    const exportBounds = await exportButton.boundingBox();
+    expect(ledgerTitle && exportBounds && ledgerTitle.x + ledgerTitle.width <= exportBounds.x &&
+      ledgerTitle.y < exportBounds.y + exportBounds.height && exportBounds.y < ledgerTitle.y + ledgerTitle.height).toBe(true);
     const download = admin.waitForEvent('download');
-    await button(admin, 'Xuất CSV theo tháng và dự án').click();
+    await exportButton.click();
     expect((await download).suggestedFilename()).toMatch(/^so-thu-chi-\d{4}-\d{2}\.csv$/);
   } finally {
     await Promise.all([admin.close(), reviewer.close()]);

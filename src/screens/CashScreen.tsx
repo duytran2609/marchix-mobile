@@ -448,18 +448,21 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
             </View>
           </View>
           <View style={styles.panel}>
-            <View style={local.ledgerTitle}>
-              <Text accessibilityRole="header" style={styles.cardTitle}>Sổ thu chi</Text>
-              <Text style={styles.muted}>{visible.length} khoản</Text>
+            <View style={local.ledgerHeader}>
+              <View style={local.ledgerTitle}>
+                <Text accessibilityRole="header" style={styles.cardTitle}>Sổ thu chi</Text>
+                <Text style={styles.muted}>{visible.length} khoản</Text>
+              </View>
+              <Button label={exporting ? 'Đang xuất…' : 'Xuất Excel'} secondary
+                onPress={() => void download()} disabled={!isAdmin || exporting || !base.length} />
             </View>
+            {!isAdmin && <Text style={styles.muted}>Chỉ quản trị viên có thể xuất Excel.</Text>}
             <View style={local.pair}>
               <Picker label="Loại" value={type} choices={[blank('Thu và chi'), { id: 'thu', name: 'Chỉ khoản thu' }, { id: 'chi', name: 'Chỉ khoản chi' }]}
                 onChange={setType} style={local.half} highlightSelection />
               <Picker label="Trạng thái" value={status} choices={[blank('Mọi trạng thái'), ...options(cashStatuses)]}
                 onChange={setStatus} style={local.half} highlightSelection />
             </View>
-            {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất CSV theo tháng và dự án'}
-              secondary onPress={() => void download()} disabled={exporting || !base.length} />}
             {!visible.length && <EmptyState icon="search" message="Chưa có khoản nào khớp bộ lọc." />}
             <PaginatedList items={visible} resetKey={JSON.stringify([month, project, type, status])}>
             {pageItems => pageItems.map(row => <Pressable key={row.id} accessibilityRole="button"
@@ -529,7 +532,8 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   popupContent: { borderWidth: 0, borderRadius: 0 },
   entryTag: { alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
     backgroundColor: colors.accentSoft, fontSize: 12 },
-  ledgerTitle: { gap: 2 },
+  ledgerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  ledgerTitle: { flexShrink: 1, gap: 2 },
   positive: { color: colors.success },
   negative: { color: colors.danger },
   field: { gap: 6 },

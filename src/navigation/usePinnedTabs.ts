@@ -18,3 +18,11 @@ function parsePins(value: string | null): PinnableTab[] {
 export function usePinnedTabs(email: string) {
   return useStoredPreference(`marchix:pinned-tabs:${email}`, defaultPins, parsePins, JSON.stringify);
 }
+
+function parsePinningEnabled(value: string | null): boolean {
+  return value !== 'false';
+}
+
+export function usePinningEnabled(email: string) {
+  return useStoredPreference(`marchix:pinning-enabled:${email}`, true, parsePinningEnabled, String);
+}

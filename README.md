@@ -37,7 +37,7 @@ npm.cmd run seed
 npm.cmd run web -- --localhost --port 8081
 ```
 
-1. Mở [bản thử](http://localhost:8081) và bấm **Đăng nhập Google (mô phỏng)**. App mở **Tổng quan**.
+1. Mở [bản thử](http://localhost:8081) và bấm **Đăng nhập bằng Google**. App mở **Tổng quan**.
 2. Vào **Menu → Công việc**, mở **Kiểm tra giao diện trên điện thoại**, đổi trạng thái hoặc phần trăm, rồi bấm **Lưu tiến độ**.
 3. Mở lại công việc hoặc xem document `tasks/kiem-tra-giao-dien` trong [Emulator Suite](http://127.0.0.1:4000). Lệnh seed đưa các bản ghi demo về trạng thái ban đầu.
 4. Mở **Đối chiếu checklist phát hành**, đánh dấu mục còn lại và kiểm tra tiến độ lên 100%. Chọn **Báo hoàn thành**, sau đó lọc **Chờ duyệt** trong danh sách để mở lại việc.
@@ -141,7 +141,9 @@ Giao việc trên staging mặc định tắt. Để bật trên dự án stagin
 `listMobileTaskAssignees`, `createMobileTask` và `downloadMobileTaskAttachment`, rồi đặt
 `EXPO_PUBLIC_ENABLE_TASK_ASSIGNMENT=true` khi build app cho cùng dự án.
 Các callable yêu cầu email đã xác minh và thành viên đang hoạt động. Form hiển thị tên và ảnh hồ sơ, hoặc chữ cái đầu nếu thiếu ảnh. Firebase Auth cần quyền đọc hồ sơ để dùng ảnh tài khoản Google khi hồ sơ thành viên thiếu ảnh. Công việc và tệp của tất cả người nhận được lưu trong cùng một giao dịch. Callable tải tệp kiểm tra người thực hiện và liên kết tệp với công việc.
-Trong Pilot, chỉ cần đặt `EXPO_PUBLIC_ENABLE_TASK_ASSIGNMENT=true` cùng cấu hình Firebase và Google OAuth của Pilot khi build. Bản này dùng các quyền Firestore của Quản lý Marchix.
+Trong Pilot, đặt `EXPO_PUBLIC_ENABLE_TASK_ASSIGNMENT=true` cùng cấu hình Firebase và Google OAuth của Pilot khi build. Bản này dùng các quyền Firestore của Quản lý Marchix.
+Khi tài khoản Pilot không có quyền đọc trực tiếp danh sách `members`, hai form giao việc và chỉnh sửa dùng callable `listMobileTaskAssignees`. Triển khai callable trên dự án Pilot với `MARCHIX_TASK_ASSIGNMENT_ENABLED=true` để các tài khoản đó tải được danh sách.
+Để bật thao tác xóa công việc trên staging hoặc Pilot, triển khai thêm callable `deleteMobileTask` với `MARCHIX_TASK_ASSIGNMENT_ENABLED=true`. Callable kiểm tra người giao việc và ghi thông báo cho những người liên quan trong cùng giao dịch xóa.
 
 - Trạng thái chỉnh được gồm **Chưa làm**, **Đang làm**, **Vướng**. Tiến độ nhập từ 0 đến 100. Mốc 100% vẫn là tiến độ, còn báo hoàn thành và duyệt là thao tác nghiệp vụ riêng.
 - Bản Emulator và Pilot cho phép đánh dấu việc con và tự tính tiến độ. Sau khi gửi duyệt, trạng thái, tiến độ và checklist được khóa; phần trao đổi vẫn dùng được. Công việc cũ chỉ ghi tên người làm cần được bổ sung `assigneeEmail` trước khi đưa lên mobile.

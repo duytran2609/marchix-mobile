@@ -30,7 +30,7 @@ export function DueTaskReminders({ tasks, email, window, onOpen }: {
   }, [window]);
 
   if (window === 'off') return null;
-  const days = new Set(Array.from({ length: Number(window) + 1 }, (_, index) => shiftDay(today, index)));
+  const days = new Set(Array.from({ length: window + 1 }, (_, index) => shiftDay(today, index)));
   const dueTasks = tasks.filter((task): task is Task & { due: string } =>
     task.assigneeEmail === email && task.status !== 'Xong' && task.status !== 'Chờ duyệt' &&
     Boolean(task.due && days.has(task.due)))

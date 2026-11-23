@@ -1,7 +1,8 @@
 import { collection, doc, onSnapshot, query, runTransaction, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, pilotMode, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
-import { pilotAddAttachments, pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
+import { watchMemberDirectory } from '../auth/memberDirectory';
+import { fetchTaskDirectory, pilotAddAttachments, pilotChecklist, pilotCreate, pilotDirectory, pilotDownload, pilotReport, pilotReview, pilotUpdate } from './pilotTasks';
 import { editableStatuses } from './taskStatuses';
 export { taskCategoryMaxLength } from './pilotTasks';
 export { editableStatuses, taskStatuses } from './taskStatuses';
@@ -158,7 +159,6 @@ export function watchReviewQueue(email: string, isAdmin: boolean, hasReviewGrant
   let managed: Task[] | undefined;
   let designated: Task[] | undefined = readDesignated ? undefined : [];
   let reviewers: Set<string> | undefined;
-  let directoryReady = !pilotMode;
 
   function compare(left: Task, right: Task) {
     return submissionVersion(right).localeCompare(submissionVersion(left)) || left.title.localeCompare(right.title, 'vi');
@@ -168,15 +168,27 @@ export function watchReviewQueue(email: string, isAdmin: boolean, hasReviewGrant
     if (!managed || !designated) return;
     const mine = (browseAll ? managed : designated).filter(task =>
       hasReviewGrant && task.approverEmail === email && task.assigneeEmail !== email);
-    const needsReviewer = directoryReady ? managed.filter(task =>
+    const needsReviewer = managed.filter(task =>
       !task.approverEmail || task.approverEmail === task.assigneeEmail ||
-      (reviewers && !reviewers.has(task.approverEmail))) : undefined;
-    onTasks({ mine: mine.sort(compare), needsReviewer: needsReviewer?.sort(compare) });
+      reviewers?.has(task.approverEmail) === false);
+    onTasks({ mine: mine.sort(compare), needsReviewer: needsReviewer.sort(compare) });
   }
 
+  let stopDirectory: (() => void) | undefined;
   const managedQuery = browseAll ? query(tasks, pending) : query(tasks, where('assignedBy', '==', email), pending);
   const stopManaged = onSnapshot(managedQuery, snapshot => {
     managed = snapshot.docs.map(row => ({ ...row.data(), id: row.id } as Task));
+    const needsDirectory = managed.some(task => task.approverEmail && task.approverEmail !== task.assigneeEmail);
+    if (!needsDirectory) {
+      stopDirectory?.();
+      stopDirectory = undefined;
+      reviewers = undefined;
+    } else if (!stopDirectory) {
+      stopDirectory = watchMemberDirectory(isAdmin, members => {
+        reviewers = new Set(members.filter(member => member.canReviewTasks).map(member => member.email));
+        publish();
+      }, onError);
+    }
     publish();
   }, () => {
     managed = [];
@@ -188,21 +200,6 @@ export function watchReviewQueue(email: string, isAdmin: boolean, hasReviewGrant
     publish();
   }, () => {
     designated = [];
-    onError();
-    publish();
-  }) : undefined;
-  const stopDirectory = pilotMode ? onSnapshot(collection(db, 'members'), { includeMetadataChanges: true }, snapshot => {
-    if (snapshot.metadata.fromCache) return;
-    reviewers = new Set(snapshot.docs.filter(row => {
-      const member = row.data();
-      return member.enabled !== false && (member.role === 'admin' ||
-        (Array.isArray(member.grants) && member.grants.includes('taskReview')));
-    }).map(row => row.id));
-    directoryReady = true;
-    publish();
-  }, () => {
-    reviewers = undefined;
-    directoryReady = true;
     onError();
     publish();
   }) : undefined;
@@ -285,9 +282,7 @@ export const reviewTaskCompletion = pilotMode ? pilotReview : httpsCallable<{
   note: string;
 }>(taskFunctions, 'reviewTaskCompletion', { timeout: 30000 });
 
-export const listTaskAssignees = pilotMode ? pilotDirectory : httpsCallable<void, { members: TaskAssignee[]; projects?: AssignmentProject[] }>(
-  taskFunctions, 'listMobileTaskAssignees', { timeout: 15000 },
-);
+export const listTaskAssignees = pilotMode ? pilotDirectory : fetchTaskDirectory;
 
 export function newTaskId() {
   return doc(collection(db, 'tasks')).id;
@@ -307,6 +302,8 @@ export const createTask = pilotMode ? pilotCreate : httpsCallable<AssignmentInpu
 export const updateTask = pilotMode ? pilotUpdate : httpsCallable<AssignmentInput & { revision: string; retainedFileIds: string[] }>(
   taskFunctions, 'updateMobileTask', { timeout: 90000 },
 );
+
+export const deleteTask = httpsCallable<{ taskId: string }, void>(taskFunctions, 'deleteMobileTask');
 
 export const downloadTaskAttachment = pilotMode ? pilotDownload : httpsCallable<{ taskId: string; fileId: string }, { base64: string }>(
   taskFunctions, 'downloadMobileTaskAttachment', { timeout: 45000 },

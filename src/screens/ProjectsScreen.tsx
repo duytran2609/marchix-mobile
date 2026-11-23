@@ -23,12 +23,12 @@ const sections = [
   ['overview', 'Tổng quan'], ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'], ['library', 'Trao đổi & tài liệu'],
 ] as const;
 
-export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, onProjectExpense, onProjectCash, email, name, isAdmin, canReadCash,
+export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, onProjectExpense, onProjectCash, email, name, isAdmin, canManageProjects, canReadCash,
   tasks, tasksError, onRetryTasks }: {
   route: ProjectRoute; onNavigate: (route: ProjectRoute) => void; onOpenTask: (task: Task) => void;
   onDragChange: (dragging: boolean) => void; email: string; name: string; isAdmin: boolean;
   onProjectExpense: (seed: ProjectExpenseSeed) => void; onProjectCash: (projectId: string, cashId: string) => void;
-  canReadCash: boolean; tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void;
+  canManageProjects: boolean; canReadCash: boolean; tasks: Task[] | null; tasksError: boolean; onRetryTasks: () => void;
 }) {
   const styles = useScreenStyles();
   const information = useInformationStyles();
@@ -64,7 +64,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
   const resolvedRoute = { ...route, projectId: project?.id };
   return <>
     <PageHeader title="DỰ ÁN">
-      {isAdmin && <Button label="+ Thêm dự án" onPress={() => setEditor('new')} />}
+      {canManageProjects && <Button label="+ Thêm dự án" onPress={() => setEditor('new')} />}
     </PageHeader>
     <View role="region" accessibilityLabel="Danh sách dự án" style={styles.panel}>
       <Text accessibilityRole="header" style={styles.cardTitle}>Danh sách dự án</Text>
@@ -88,7 +88,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
       <View role="region" accessibilityLabel="Thông tin dự án" style={styles.panel}>
         <View style={local.projectTitleRow}>
           <Text accessibilityRole="header" style={[styles.heading, local.projectTitle]}>{project.name}</Text>
-          {isAdmin && <Button label="Chỉnh sửa" secondary style={local.editButton}
+          {canManageProjects && <Button label="Chỉnh sửa" secondary style={local.editButton}
             onPress={() => setEditor(project)} />}
         </View>
         <Text style={styles.badge}>{project.status || 'Chưa cập nhật trạng thái'}</Text>
@@ -156,7 +156,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
         </>}
       </View>
     </>}
-    {isAdmin && editor && <ProjectEditor project={editor === 'new' ? undefined : editor}
+    {canManageProjects && editor && <ProjectEditor project={editor === 'new' ? undefined : editor} canChangeOwner={isAdmin || editor === 'new'}
       onCancel={() => setEditor(null)} onSaved={projectId => {
         setEditor(null);
         if (editor === 'new') navigate({ projectId, section: 'overview' });

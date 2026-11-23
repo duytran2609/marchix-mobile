@@ -22,7 +22,7 @@ import { TaskDetailPopup } from './TaskDetailScreen';
 
 type WeeklyPlanProps = {
   email: string;
-  isAdmin: boolean;
+  canReadTeam: boolean;
   tasks: Task[] | null;
   tasksError: boolean;
   onRetryTasks: () => void;
@@ -94,7 +94,7 @@ function WeekArrow({ label, direction, disabled, onPress }: {
   </Pressable>;
 }
 
-function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTask, week, saving, onSavingChange, draftStorage }:
+function WeekContent({ email, canReadTeam, tasks, tasksError, onRetryTasks, onOpenTask, week, saving, onSavingChange, draftStorage }:
   WeeklyPlanProps & {
     week: string; saving: boolean; onSavingChange: (saving: boolean) => void;
     draftStorage: DraftStorage; onOpenTask: (id: string) => void;
@@ -108,7 +108,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const savingRef = useRef(false);
 
-  useEffect(() => watchWeekPlans(week, email, isAdmin, setPlans, () => setPlanError(true)), [week, email, isAdmin, retry]);
+  useEffect(() => watchWeekPlans(week, email, canReadTeam, setPlans, () => setPlanError(true)), [week, email, canReadTeam, retry]);
 
   const suggested = suggestWeekTasks(tasks ?? [], email, week, shiftDay(week, 6));
   const existing = plans?.get(email);
@@ -192,7 +192,7 @@ function WeekContent({ email, isAdmin, tasks, tasksError, onRetryTasks, onOpenTa
         </Text>}
       </>}
     </View>
-    {isAdmin && <TeamPlans plans={planError ? null : plans} />}
+    {canReadTeam && <TeamPlans plans={planError ? null : plans} />}
   </>;
 }
 

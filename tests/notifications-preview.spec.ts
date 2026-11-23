@@ -45,7 +45,7 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
     await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081', {
       timeout: 90_000, waitUntil: 'domcontentloaded',
     });
-    await page.getByRole('button', { name: 'Đăng nhập Google (mô phỏng)', exact: true }).click();
+    await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).click();
     await openNote('Thông báo thử giao việc');
     await expect(page.getByRole('heading', { name: 'Cập nhật hướng dẫn bàn giao', exact: true })).toBeVisible();
     await openNote('Thông báo thử đơn từ');
