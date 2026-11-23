@@ -55,13 +55,14 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     }
     await expectSameRow(/^Tháng:/, /^Dự án:/);
     await expectSameRow(/^Loại:/, /^Trạng thái:/);
-    await expect(page.getByRole('heading', { name: 'Tổng quan' })).toBeVisible();
+    const summary = page.getByRole('heading', { name: 'Tổng quan', exact: true }).locator('..');
+    await expect(summary).toBeVisible();
     for (const [label, background, color] of [
       ['Đã thu', 'rgb(221, 243, 237)', 'rgb(11, 97, 85)'],
       ['Đã chi', 'rgb(251, 232, 229)', 'rgb(158, 52, 43)'],
       ['Chi chờ duyệt', 'rgb(255, 240, 213)', 'rgb(135, 80, 9)'],
     ]) {
-      const tile = status(page, label).locator('..');
+      const tile = status(summary, label).locator('..');
       await expect(tile).toHaveCSS('background-color', background);
       await expect(tile.getByText(/\d.*₫/)).toHaveCSS('color', color);
     }

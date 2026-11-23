@@ -432,8 +432,13 @@ test('Thống kê bảng công in đậm số với phần chữ nét thường'
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
-  await page.getByRole('button', { name: 'Mở menu' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+  const openMenu = page.getByRole('button', { name: 'Mở menu' });
+  const attendanceItem = page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true });
+  await expect(async () => {
+    if (!(await attendanceItem.isVisible())) await openMenu.click();
+    await expect(attendanceItem).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
+  await attendanceItem.click();
   const panel = page.getByRole('heading', { name: 'Bảng công của bạn' }).locator('../..');
   const number = /^\d+(?:[.,]\d+)?$/;
   for (const [label, unit, count] of [
@@ -1665,7 +1670,10 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
     const drawer = page.getByRole('dialog');
     await openMenu.click();
     await drawer.getByRole('button', { name: 'Cài đặt' }).click();
-    await page.getByRole('radio', { name: 'Trước 1 ngày' }).click();
+    const reminderSwitch = page.getByRole('switch', { name: 'Nhắc hạn công việc' });
+    await expect(reminderSwitch).not.toBeChecked();
+    await reminderSwitch.click();
+    await expect(page.getByRole('radio', { name: 'Trước 1 ngày' })).toBeChecked();
     await openMenu.click();
     await drawer.getByRole('button', { name: 'Công việc' }).click();
     await page.getByRole('button', { name: /công việc đến hạn.*Xem/i }).click();
@@ -1674,9 +1682,12 @@ test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn 
     }
     await page.getByRole('button', { name: new RegExp(`^${cases[0].title}`) }).click();
     await expect(page.getByRole('heading', { name: cases[0].title })).toBeVisible();
+    await page.getByRole('button', { name: 'Đóng chi tiết công việc' }).click();
     await openMenu.click();
     await drawer.getByRole('button', { name: 'Cài đặt' }).click();
-    await page.getByRole('radio', { name: 'Tắt' }).click();
+    await expect(reminderSwitch).toBeChecked();
+    await reminderSwitch.click();
+    await expect(reminderSwitch).not.toBeChecked();
     await openMenu.click();
     await drawer.getByRole('button', { name: 'Công việc' }).click();
     await expect(page.getByRole('button', { name: /công việc đến hạn.*Xem/i })).toHaveCount(0);

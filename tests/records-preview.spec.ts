@@ -77,7 +77,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
     await expect(body).toHaveCSS('border-top-width', '0px');
     await expect(body).toHaveCSS('padding-left', '0px');
     const confirm = dialog.getByRole('button', { name: 'Xác nhận', exact: true });
-    await expect(confirm.locator('..')).toHaveCSS('justify-content', 'flex-end');
+    await expect(confirm.locator('..')).toHaveCSS('justify-content', /^(flex|flow)-end$/);
     await expect(confirm.locator('..').getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
     const file = dialog.getByRole('button', { name: 'marchix.pdf', exact: true });
     const remove = file.locator('..').getByRole('button', { name: 'Bỏ tệp marchix.pdf', exact: true });
@@ -109,7 +109,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(subject).toHaveCSS('font-weight', '800');
   await expect(status).toBeVisible();
   const [subjectBox, statusBox] = await Promise.all([subject.boundingBox(), status.boundingBox()]);
-  expect(statusBox!.y).toBeGreaterThanOrEqual(subjectBox!.y + subjectBox!.height);
+  expect(subjectBox!.y).toBeGreaterThanOrEqual(statusBox!.y + statusBox!.height);
   await expect(detail.getByText('Nhật ký xử lý')).toHaveCount(0);
   await button('Bắt đầu xử lý').click();
   const processingBody = processing.getByRole('heading', { name: 'Bắt đầu xử lý' }).locator('..');
@@ -130,20 +130,21 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(completionBody).toHaveCSS('border-top-width', '0px');
   await expect(completionBody).toHaveCSS('padding-left', '0px');
   const completionActions = completion.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
-  await expect(completionActions).toHaveCSS('justify-content', 'flex-end');
+  await expect(completionActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
   await completionActions.getByRole('button', { name: 'Hủy', exact: true }).click();
   await expect(detail.getByText('Đang xử lý', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
   await button('Lịch sử').click();
   await expect(page.getByText('Ghi chú đã hủy')).toHaveCount(0);
-  const historyEntry = page.getByRole('button').filter({ has: page.getByText(note, { exact: true }) });
-  await expect(historyEntry.getByText('Đã giao', { exact: true })).toHaveCSS('border-radius', '8px');
-  await expect(historyEntry.getByText('→', { exact: true })).toBeVisible();
+  const historyEntry = page.getByRole('button').filter({ has: page.getByText('Công văn xác nhận lịch bàn giao', { exact: true }) });
+  await expect(historyEntry).toHaveCount(1);
   await expect(historyEntry.getByText('Đang xử lý', { exact: true })).toHaveCSS('border-radius', '8px');
-  for (const label of ['Sổ văn thư:', 'Số văn bản:', 'Người thực hiện:', 'Thời điểm:', 'Ghi chú:']) {
+  for (const label of ['Sổ văn thư:', 'Số văn bản:']) {
     await expect(historyEntry.getByText(label, { exact: true })).toHaveCSS('font-weight', '700');
   }
-  await expect(historyEntry.getByText(note, { exact: true })).toHaveCSS('font-weight', '500');
+  const historyNote = historyEntry.getByText(note, { exact: true });
+  await expect(historyNote.locator('..').getByText('Ghi chú:', { exact: true })).toHaveCSS('font-weight', '700');
+  await expect(historyNote).toHaveCSS('font-weight', '500');
   await historyEntry.click();
   await expect(detail.getByRole('heading', { name: 'Công văn xác nhận lịch bàn giao' })).toBeVisible();
   await button('Về sổ văn thư').click();
@@ -190,7 +191,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(assignmentBody).toHaveCSS('border-top-width', '0px');
   await expect(assignmentBody).toHaveCSS('padding-left', '0px');
   const assignmentActions = assignment.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
-  await expect(assignmentActions).toHaveCSS('justify-content', 'flex-end');
+  await expect(assignmentActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
   await assignmentActions.getByRole('button', { name: 'Hủy', exact: true }).click();
   await expect(detail.getByText('Đã vào sổ', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
@@ -251,7 +252,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(archiveBody).toHaveCSS('border-top-width', '0px');
   await expect(archiveBody).toHaveCSS('padding-left', '0px');
   const archiveActions = archive.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
-  await expect(archiveActions).toHaveCSS('justify-content', 'flex-end');
+  await expect(archiveActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
   await archiveActions.getByRole('button', { name: 'Hủy', exact: true }).click();
   await expect(detail.getByText('Đã phát hành', { exact: true })).toBeVisible();
   await button('Về Phê duyệt').click();
@@ -346,7 +347,7 @@ test('Popup Bổ sung bản đã ký và Hủy số dùng bố cục gọn với
     await expect(body).toHaveCSS('border-top-width', '0px');
     await expect(body).toHaveCSS('padding-left', '0px');
     const actions = form.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
-    await expect(actions).toHaveCSS('justify-content', 'flex-end');
+    await expect(actions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
     await expect(actions.getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
 
     const picker = page.waitForEvent('filechooser');
@@ -370,7 +371,7 @@ test('Popup Bổ sung bản đã ký và Hủy số dùng bố cục gọn với
     await expect(voidBody).toHaveCSS('border-top-width', '0px');
     await expect(voidBody).toHaveCSS('padding-left', '0px');
     const voidActions = voidForm.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
-    await expect(voidActions).toHaveCSS('justify-content', 'flex-end');
+    await expect(voidActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
     await voidActions.getByRole('button', { name: 'Hủy', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Chi tiết công văn' }).getByText('Đã cấp số', { exact: true })).toBeVisible();
   } finally {

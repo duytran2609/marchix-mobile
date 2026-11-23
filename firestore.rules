@@ -24,12 +24,14 @@ service cloud.firestore {
     }
 
     function hasMemberGrant(grant) {
-      return activeMember() && (attendanceAdmin() || memberHasGrant(grant));
+      return verified() && memberCanUseGrant(
+        get(/databases/$(database)/documents/members/$(email())).data, grant);
     }
 
-    function memberHasGrant(grant) {
-      let grants = get(/databases/$(database)/documents/members/$(email())).data.get('grants', []);
-      return grants is list && grant in grants;
+    function memberCanUseGrant(data, grant) {
+      let grants = data.get('grants', []);
+      return data.get('enabled', true) != false
+        && (data.get('role', '') == 'admin' || grants is list && grant in grants);
     }
 
     function openStatus(status) {
