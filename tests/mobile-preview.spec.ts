@@ -1,5 +1,5 @@
 import { test, acknowledgeStartupReminder } from './helpers/startupReminder';
-import { devices, expect } from '@playwright/test';
+import { devices, expect, type Response } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { read, utils } from 'xlsx';
 import { formatTaskDate, shiftDay, todayInVietnam } from '../src/features/tasks/taskDates';
@@ -816,15 +816,14 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
-  async function openProject() {
-    await page.getByRole('button', { name: 'Mở menu' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Dự án', exact: true }).click();
+  async function selectDemoProject() {
     await page.getByRole('region', { name: 'Danh sách dự án' })
       .getByRole('button', { name: /^Chọn dự án:/ }).click();
     await page.getByRole('radiogroup', { name: 'Chọn dự án' })
       .getByRole('radio', { name: 'Marchix Mobile · Demo', exact: true }).click();
   }
-  await openProject();
+  await page.getByRole('button', { name: 'Tất cả dự án', exact: true }).click();
+  await selectDemoProject();
   const list = page.getByRole('region', { name: 'Danh sách dự án' });
   const profile = page.getByRole('region', { name: 'Thông tin dự án' });
   await expect(page.getByRole('heading', { name: 'DỰ ÁN', exact: true })).toBeVisible();
@@ -877,7 +876,9 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(popup).toBeHidden();
   await expect(page.getByRole('heading', { name: 'CÔNG VIỆC', exact: true })).toBeVisible();
 
-  await openProject();
+  await page.getByRole('button', { name: 'Mở menu' }).click();
+  await page.getByTestId('workspace-drawer').getByRole('button', { name: 'Dự án', exact: true }).click();
+  await selectDemoProject();
   await tabList.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await work.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại' }).click();
   await expect(popup.getByRole('heading', { name: 'Kiểm tra giao diện trên điện thoại' })).toBeVisible();
@@ -1257,7 +1258,8 @@ test('Kế hoạch tuần lọc việc theo hạn, chọn tuần trên lịch v�
   const calendarDay = shiftDay(nextWeek, 2);
   const employee = 'nhanvien@example.test';
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
-  const documents = `http://${host}:8080/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const documents = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
   const headers = { Authorization: 'Bearer owner' };
   const plan = `${documents}/weekPlans/${employee}_${week}`;
   const farPlan = `${documents}/weekPlans/${employee}_${farWeek}`;
@@ -1783,7 +1785,9 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
 });
 
 test('Nhắc hạn chỉ hiện việc được giao trong khoảng đã chọn và mở được chi tiết', async ({ page }) => {
-  const collection = 'http://127.0.0.1:8080/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks';
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
+  const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
+  const collection = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents/tasks`;
   const headers = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' };
   const today = todayInVietnam();
   const cases = [
@@ -2135,14 +2139,14 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
       const { color, fontSize, fontWeight } = getComputedStyle(input, '::placeholder');
       return { color, fontSize, fontWeight };
     });
-    const lightPlaceholder = { color: 'rgb(130, 130, 130)', fontSize: '15px', fontWeight: '400' };
+    const lightPlaceholder = { color: 'rgb(130, 130, 130)', fontSize: '16px', fontWeight: '400' };
     await expect.poll(placeholderStyle).toEqual(lightPlaceholder);
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect.poll(placeholderStyle).toEqual({ ...lightPlaceholder, color: 'rgb(140, 140, 140)' });
     await page.emulateMedia({ colorScheme: 'light' });
     await search.fill('Kiểm tra giao diện Kanban');
     await expect(search).toHaveCSS('font-weight', '500');
-    await expect(search).toHaveCSS('font-size', '16px');
+    await expect(search).toHaveCSS('font-size', '17px');
     await page.getByRole('button', { name: 'Xóa từ khóa tìm tên công việc' }).click();
     await expect(search).toHaveValue('');
     await expect.poll(placeholderStyle).toEqual(lightPlaceholder);
@@ -2235,6 +2239,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
   const receiver = await browser.newContext({ ...devices['iPhone 13'] });
   const title = `Kiểm thử giao việc ${Date.now()}`;
   const attachment = { name: 'Tài liệu bàn giao.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(950 * 1024, 0xab) };
+  const isAttachmentResponse = (response: Response) => response.url().endsWith('/downloadMobileTaskAttachment') &&
+    response.request().method() === 'POST';
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
   const port = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080;
   const documents = `http://${host}:${port}/v1/projects/demo-marchix-mobile/databases/(default)/documents`;
@@ -2435,7 +2441,12 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(page.getByRole('textbox', { name: 'Nội dung trao đổi' })).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).toBeDisabled();
     await page.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
-    await page.getByRole('button', { name: `Xem tệp ${attachment.name}` }).click();
+    const [senderAttachmentResponse] = await Promise.all([
+      page.waitForResponse(isAttachmentResponse),
+      page.getByRole('button', { name: `Xem tệp ${attachment.name}` }).click(),
+    ]);
+    expect(senderAttachmentResponse.ok()).toBe(true);
+    await senderAttachmentResponse.finished();
     await expect(page.getByRole('heading', { name: attachment.name, exact: true })).toBeVisible();
     const senderDownloadEvent = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Tải xuống', exact: true }).click();
@@ -2505,13 +2516,16 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await detail.getByRole('button', { name: 'Gửi trao đổi' }).click();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
     await expect(discussion.getByText('Nhân viên demo', { exact: true })).toBeVisible();
-    const downloadResponse = receiverPage.waitForResponse(response => response.url().endsWith('/downloadMobileTaskAttachment') &&
-      response.request().method() === 'POST');
     const attachmentCard = receiverPage.getByRole('button', { name: `Xem tệp ${attachment.name}` });
     const iconBox = await attachmentCard.getByText('BIN', { exact: true }).boundingBox();
     const filenameBox = await attachmentCard.getByText(attachment.name, { exact: true }).boundingBox();
     expect(iconBox!.x).toBeLessThan(filenameBox!.x);
-    await attachmentCard.click();
+    const [downloadResponse] = await Promise.all([
+      receiverPage.waitForResponse(isAttachmentResponse),
+      attachmentCard.click(),
+    ]);
+    expect(downloadResponse.ok()).toBe(true);
+    await downloadResponse.finished();
     await expect(receiverPage.getByRole('heading', { name: attachment.name, exact: true })).toBeVisible();
     const downloading = receiverPage.waitForEvent('download');
     await receiverPage.getByRole('button', { name: 'Tải xuống', exact: true }).click();
@@ -2519,7 +2533,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     expect(download.suggestedFilename()).toBe(attachment.name);
     expect((await readFile((await download.path())!)).equals(attachment.buffer)).toBeTruthy();
     await receiverPage.getByRole('button', { name: 'Đóng xem trước', exact: true }).click();
-    const downloadRequest = (await downloadResponse).request();
+    const downloadRequest = downloadResponse.request();
     const { data } = downloadRequest.postDataJSON();
     const otherId = taskIds.find(id => id !== data.taskId);
     const unauthorized = await receiverPage.request.post(downloadRequest.url(), {

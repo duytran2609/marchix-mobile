@@ -96,7 +96,11 @@ async function appoint(page: Page, card: ReturnType<Page['getByRole']>, name: st
   await page.getByText('Tùy chọn', { exact: true }).click();
   await page.getByRole('button', { name: /^Người duyệt:/ }).click();
   await page.getByRole('dialog', { name: 'Người duyệt', exact: true }).getByRole('checkbox', { name, exact: true }).click();
-  await page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
+  const [saved] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/updateMobileTask') && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click(),
+  ]);
+  expect(saved.ok(), await saved.text()).toBe(true);
   await expect(page.getByRole('heading', { name: 'Chỉnh sửa công việc' })).toBeHidden();
   await openSection(page, 'Phê duyệt');
 }

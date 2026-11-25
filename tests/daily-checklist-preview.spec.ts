@@ -38,7 +38,9 @@ test('Việc hàng ngày tự cập nhật từ chấm công, thông báo và c�
     } } } });
     await update(requestPath, { type: stringify('Nghỉ phép'), reason: stringify('Xin nghỉ phép'),
       from: stringify(day), to: stringify(day), status: stringify('Chờ duyệt'),
-      createdBy: stringify(other), approverEmail: stringify(email) });
+      createdBy: stringify(other), approverEmail: stringify(email),
+      // Model a request routed by the admin to themself so the trigger does not send a second inbox fixture.
+      updatedBy: stringify(email) });
     const cashFields = { type: stringify('chi'), status: stringify('Chờ chi'), amount: { integerValue: '200000' },
       date: stringify(day), dueDate: stringify(day), createdBy: stringify(other), approvedBy: stringify(colleague) };
     await update(cashPath, { ...cashFields, projectId: stringify('') });
