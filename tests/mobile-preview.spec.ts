@@ -2346,7 +2346,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     }
     expect(new Set(fileIds).size).toBe(2);
     await expect(form).toBeHidden();
-    await expect(page.getByText('Đã giao việc cho 2 người.')).toBeVisible();
+    const assignmentToast = page.getByText('Đã giao việc cho 2 người.', { exact: true });
+    await expect(assignmentToast).toBeVisible();
     const sent = page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true });
     await expect(sent).toHaveCount(2);
     const assignee = page.getByRole('button', { name: /^Người thực hiện:/ });
@@ -2463,6 +2464,7 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     const checkResponse = await checkRequest;
     expect(checkResponse.ok(), await checkResponse.text()).toBeTruthy();
     await expect(checked).toBeChecked({ timeout: 15000 });
+    await expect(assignmentToast).toBeHidden({ timeout: 5000 });
     await sent.click();
     await expect(page.getByRole('checkbox', { name: 'Kiểm tra trước khi bàn giao' })).toBeChecked();
     await page.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();

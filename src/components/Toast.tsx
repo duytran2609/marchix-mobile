@@ -59,13 +59,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       Animated.timing(toast.opacity, { ...exitTiming, toValue: 0 }),
     ]);
     let dismissing = false;
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    const removeToast = () => setToast(current => current === toast ? null : current);
     const dismiss = () => {
       if (dismissing) return;
       dismissing = true;
       clearTimeout(timer);
       slideAndFadeIn.stop();
+      // A background browser tab can pause the frames needed to finish the exit animation.
+      exitTimer = setTimeout(removeToast, exitTiming.duration + 50);
       slideAndFadeOut.start(({ finished }) => {
-        if (finished) setToast(current => current === toast ? null : current);
+        if (finished) removeToast();
       });
     };
     const timer = setTimeout(dismiss, 3000);
@@ -74,6 +78,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return () => {
       dismissCurrent.current = null;
       clearTimeout(timer);
+      clearTimeout(exitTimer);
       slideAndFadeIn.stop();
       slideAndFadeOut.stop();
     };
