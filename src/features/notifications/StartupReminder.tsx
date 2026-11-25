@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from '../../components/Button';
 import { createThemedStyles } from '../../theme/theme';
+import { dateKey } from '../attendance/attendance';
+import { hasAttendanceRecord } from '../attendance/attendanceStore';
 import { canAct, cashStatus, watchCash } from '../cash/cash';
 import type { CashAccess } from '../cash/cash';
 import { canActOnRequest, pendingRequest, watchRequests } from '../requests/requests';
@@ -11,11 +14,11 @@ import type { Task } from '../tasks/tasks';
 
 type ReminderRow = { id: string; text: string; overdue?: boolean };
 export function StartupReminder({
-  name, email, isAdmin, canReadCash, canReviewCash, canReviewRequests, onClose,
-}: CashAccess & { name: string; canReviewRequests: boolean; onClose: () => void }) {
+  name, email, isAdmin, canReadCash, canReviewCash, canReviewRequests, onClose, onCheckIn,
+}: CashAccess & { name: string; canReviewRequests: boolean; onClose: () => void; onCheckIn: (date: string) => void }) {
   const styles = useStyles();
-  const [rows, setRows] = useState<ReminderRow[] | null>(null);
-  const loaded = rows !== null;
+  const [reminder, setReminder] = useState<{ rows: ReminderRow[]; checkInDate: string | null } | null>(null);
+  const loaded = reminder !== null;
 
   useEffect(() => {
     if (loaded) return;
@@ -24,9 +27,11 @@ export function StartupReminder({
     let tasks: Task[] | undefined;
     let cash = isAdmin || canReviewCash ? undefined : 0;
     let requests = isAdmin || canReviewRequests ? undefined : 0;
+    let checkInDate: string | null | undefined;
+    let active = true;
 
     function publish() {
-      if (!tasks || cash === undefined || requests === undefined) return;
+      if (!active || !tasks || cash === undefined || requests === undefined || checkInDate === undefined) return;
       const today = todayInVietnam();
       const open = tasks.filter(task => editableStatus(task.status) && task.due);
       const mine = open.filter(task => task.assigneeEmail === email);
@@ -53,7 +58,8 @@ export function StartupReminder({
           next.push({ id: 'team-overdue', overdue: true, text: `Nhân viên đang có ${teamOverdue.length} việc quá hạn${people}.` });
         }
       }
-      setRows(next);
+      if (checkInDate) next.unshift({ id: 'check-in', text: 'Bạn chưa chấm công vào hôm nay.' });
+      setReminder({ rows: next, checkInDate });
     }
 
     function receiveTasks(items: Task[]) {
@@ -72,14 +78,20 @@ export function StartupReminder({
       requests = items.filter(row => isAdmin ? row.status === pendingRequest : canActOnRequest(row, 'approve', requestAccess)).length;
       publish();
     }, () => { requests = 0; publish(); }) : undefined;
-    return () => { stopTasks(); stopCash?.(); stopRequests?.(); };
+    const attendanceDate = dateKey(new Date());
+    void hasAttendanceRecord(email, attendanceDate).then(
+      exists => { checkInDate = exists ? null : attendanceDate; publish(); },
+      () => { checkInDate = null; publish(); },
+    );
+    return () => { active = false; stopTasks(); stopCash?.(); stopRequests?.(); };
   }, [email, isAdmin, canReadCash, canReviewCash, canReviewRequests, loaded]);
 
   useEffect(() => {
-    if (rows?.length === 0) onClose();
-  }, [rows, onClose]);
+    if (reminder?.rows.length === 0) onClose();
+  }, [reminder, onClose]);
 
-  if (!rows?.length) return null;
+  if (!reminder?.rows.length) return null;
+  const { rows, checkInDate } = reminder;
   const title = `Chào ${name} — cần chú ý hôm nay`;
   return <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
     <SafeAreaView style={styles.overlay}>
@@ -93,10 +105,13 @@ export function StartupReminder({
             <Text style={styles.message}>{row.text}</Text>
           </View>)}
         </ScrollView>
-        <Pressable accessibilityRole="button" onPress={onClose}
-          style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-          <Text style={styles.buttonLabel}>Đã xem</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable accessibilityRole="button" onPress={onClose}
+            style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
+            <Text style={styles.buttonLabel}>Đã xem</Text>
+          </Pressable>
+          {checkInDate && <Button label="Chấm công" onPress={() => onCheckIn(checkInDate)} />}
+        </View>
       </View>
     </SafeAreaView>
   </Modal>;
@@ -116,7 +131,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   warningIcon: { color: colors.warning, fontSize: 13, lineHeight: 18 },
   dangerIcon: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   message: { flex: 1, color: colors.ink, fontSize: 13, lineHeight: 18 },
-  button: { alignSelf: 'flex-end', justifyContent: 'center', paddingHorizontal: 12, minHeight: 44,
+  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
+  button: { justifyContent: 'center', paddingHorizontal: 12, minHeight: 44,
     borderWidth: 1, borderColor: colors.line, borderRadius: 8 },
   buttonLabel: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   pressed: { backgroundColor: colors.surfaceMuted },

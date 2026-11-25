@@ -22,9 +22,10 @@ const plugins = lanApk || pilot ? [] : ['expo-dev-client'];
 const pushProjectId = (staging || pilot) ? process.env.MARCHIX_EAS_PROJECT_ID?.trim() : undefined;
 const easProjectId = iosSimulator ? '436bf79b-03e4-4e26-9edf-326d49861910' : pushProjectId || (pilot ? process.env.MARCHIX_EXPO_PROJECT_ID?.trim() : undefined);
 const googleServicesFile = pushProjectId ? process.env.MARCHIX_GOOGLE_SERVICES_FILE?.trim() : undefined;
+const appIcon = './assets/marhub-app-icon-multicolor.png';
 if (pushProjectId) plugins.push(['expo-notifications', { defaultChannel: 'workspace' }]);
 plugins.push(['expo-location', {
-  locationWhenInUsePermission: 'Cho phép Quản lý Marchix kiểm tra vị trí văn phòng khi bạn chấm công.',
+  locationWhenInUsePermission: 'Cho phép MarHub kiểm tra vị trí văn phòng khi bạn chấm công.',
 }]);
 plugins.push(config => withGradleProperties(config, mod => {
   const key = 'android.packagingOptions.pickFirsts';
@@ -73,17 +74,17 @@ if ((staging || pilot) && iosClientId) {
 }
 
 module.exports = {
-  name: pilot ? 'Quản lý Marchix Pilot' : staging ? 'Quản lý Marchix Staging' : 'Quản lý Marchix Demo',
+  name: 'MarHub',
   slug: iosSimulator ? 'duy-tran' : 'marchix-mobile',
   ...(iosSimulator ? { owner: 'duytran2609s-team' } : {}),
   version: pilot ? '0.6.5' : '0.4.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
-  icon: './assets/icon.png',
+  icon: appIcon,
   android: { package: id, ...(googleServicesFile ? { googleServicesFile } : {}),
     ...(pilot ? { versionCode: 16, allowBackup: false } : lanApk ? { versionCode: 5 } : {}) },
   ios: { bundleIdentifier: id, supportsTablet: false },
-  web: { favicon: './assets/favicon.png' },
+  web: { favicon: appIcon },
   ...(easProjectId ? { extra: {
     eas: { projectId: easProjectId },
     ...(pushProjectId ? { workspacePushEnabled: true } : {}),

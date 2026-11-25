@@ -6,7 +6,7 @@ import type { ScrollViewProps } from 'react-native';
 const inputMargin = 12;
 type ScrollInstance = ComponentRef<typeof ScrollView>;
 
-type RevealBelow = (anchor: ComponentRef<typeof View>, space: number, onReady: () => void) => (() => void) | undefined;
+type RevealBelow = (anchor: ComponentRef<typeof View>, space: number, onPositionChange: () => void) => () => void;
 export const ScrollViewportContext = createContext<RevealBelow | null>(null);
 
 function visibleOffset(top: number, height: number, offset: number, viewportHeight: number) {
@@ -23,28 +23,49 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
   const height = useRef(0);
   const offset = useRef(0);
   const [endSpace, setEndSpace] = useState<{ height: number; reveal: () => void } | null>(null);
+  const updateDropdownPosition = useRef<(() => void) | null>(null);
   useImperativeHandle(ref, () => scroll.current!, []);
 
-  const revealBelow: RevealBelow = useCallback((anchor, space, onReady) => {
+  const revealBelow: RevealBelow = useCallback((anchor, space, onPositionChange) => {
+    let positionFrame: number | undefined;
+    let tracking = false;
+    function updatePosition() {
+      if (!tracking || positionFrame !== undefined) return;
+      positionFrame = requestAnimationFrame(() => {
+        positionFrame = undefined;
+        onPositionChange();
+      });
+    }
+
+    // On native, the scroll command and the updated anchor position can arrive in different frames.
+    updateDropdownPosition.current = updatePosition;
+    function stopTracking() {
+      tracking = false;
+      if (positionFrame !== undefined) cancelAnimationFrame(positionFrame);
+      if (updateDropdownPosition.current === updatePosition) updateDropdownPosition.current = null;
+    }
+
     const view = scroll.current;
     const viewport = view?.getBoundingClientRect();
     const button = anchor.getBoundingClientRect();
     const room = viewport ? Math.min(space, viewport.height - button.height - 8) : 0;
     if (!view || !viewport || room <= 0 || viewport.bottom - button.bottom >= room) {
-      onReady();
-      return;
+      tracking = true;
+      updatePosition();
+      return stopTracking;
     }
 
     const needed = button.bottom + room - viewport.bottom;
+    const targetOffset = view.scrollTop + needed;
     const contentBottom = view.getInnerViewRef()?.getBoundingClientRect().bottom ?? viewport.bottom;
     const extra = Math.ceil(needed - Math.max(0, contentBottom - viewport.bottom));
-    let pendingFrame: number | undefined;
     const reservation = {
       height: extra,
       reveal() {
-        if (pendingFrame !== undefined) return;
-        view.scrollTo({ x: view.scrollLeft, y: view.scrollTop + needed, animated: false });
-        pendingFrame = requestAnimationFrame(onReady);
+        if (tracking || updateDropdownPosition.current !== updatePosition) return;
+        tracking = true;
+        view.scrollTo({ x: view.scrollLeft, y: targetOffset, animated: false });
+        updatePosition();
       },
     };
 
@@ -52,7 +73,7 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
     if (extra > 0) setEndSpace(reservation);
     else reservation.reveal();
     return () => {
-      if (pendingFrame !== undefined) cancelAnimationFrame(pendingFrame);
+      stopTracking();
       if (extra > 0) setEndSpace(current => current === reservation ? null : current);
     };
   }, []);
@@ -105,6 +126,7 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
       }}
       onScroll={event => {
         offset.current = event.nativeEvent.contentOffset.y;
+        updateDropdownPosition.current?.();
         onScroll?.(event);
       }}>
       {children}

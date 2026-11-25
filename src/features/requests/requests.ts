@@ -7,10 +7,11 @@ export const pendingRequest = 'Chờ duyệt';
 export const overtimeTaskLimit = 10;
 export type OvertimeTask = { id: string; title: string };
 type OvertimeDetails = { hours: number } & ({ tasks: OvertimeTask[] } | { taskId: string; taskTitle: string });
+type RequestTimeRange = { from: string; to: string };
 export type RequestFields = {
   type: string; reason: string; from: string; to: string; days: number; amount: number; month: string;
-  trip?: { destination: string; host: string; estimatedCost: number };
-  leaveTime?: { from: string; to: string };
+  trip?: { destination: string; host: string; estimatedCost: number; time?: RequestTimeRange };
+  leaveTime?: RequestTimeRange;
   overtime?: OvertimeDetails;
 };
 export type StaffRequest = RequestFields & {

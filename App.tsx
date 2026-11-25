@@ -5,7 +5,6 @@ import { KeyboardSafeAreaView } from './src/components/KeyboardViewport';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { ToastProvider } from './src/components/Toast';
 import { useSession } from './src/features/auth/useSession';
-import { StartupReminder } from './src/features/notifications/StartupReminder';
 import { usePreference } from './src/features/settings/usePreference';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { configError } from './src/services/firebase/firebase';
@@ -29,17 +28,13 @@ export default function App() {
             <StatusBar style={dark ? 'light' : 'dark'} />
             <OfflineBanner />
             {!configError && session.kind === 'member'
-              ? <><MemberWorkspace key={session.email} email={session.email} name={session.name}
+              ? <MemberWorkspace key={session.email} email={session.email} name={session.name}
                   photoURL={session.photoURL} isAdmin={session.isAdmin} hasReviewGrant={session.hasReviewGrant}
                   accountCreatedAt={session.accountCreatedAt}
                   canReadCash={session.canReadCash} canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests}
                   canManageProjects={session.canManageProjects} canReadTeamPlans={session.canReadTeamPlans}
-                  canReadTeamKpi={session.canReadTeamKpi} canManageRecords={session.canManageRecords} />
-                {showLoginReminder && <StartupReminder key={JSON.stringify([
-                  session.email, session.isAdmin, session.canReadCash, session.canReviewCash, session.canReviewRequests,
-                ])} email={session.email} name={session.name} isAdmin={session.isAdmin} canReadCash={session.canReadCash}
-                  canReviewCash={session.canReviewCash} canReviewRequests={session.canReviewRequests} onClose={dismissLoginReminder} />}
-              </>
+                  canReadTeamKpi={session.canReadTeamKpi} canManageRecords={session.canManageRecords}
+                  showLoginReminder={showLoginReminder} onDismissLoginReminder={dismissLoginReminder} />
               : <SignInScreen sessionKind={session.kind} />}
           </KeyboardSafeAreaView>
         </ToastProvider>

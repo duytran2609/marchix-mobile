@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
+import type { ComponentRef, ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../components/EmptyState';
 import { TextInput } from '../components/TextInput';
@@ -315,29 +315,31 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
       </View>
     ) : null}
   </>;
-  const discussion = <View style={[screenStyles.stack, tab !== 'discussion' && styles.hidden]}>
-    <Text accessibilityRole="header" style={screenStyles.cardTitle}>Trao đổi</Text>
-    <TaskDiscussion task={liveTask} email={email} name={name} members={members} />
-  </View>;
+  function renderDetail(history: ReactNode, composer: ReactNode) {
+    const discussionHidden = tab !== 'discussion';
+    const hasComposer = !discussionHidden && Boolean(composer);
+    const discussion = <View style={discussionHidden && styles.hidden}>{history}</View>;
 
-  return (
-    <View style={inPopup ? styles.popupBody : screenStyles.stack}>
+    return <View style={inPopup ? styles.popupBody : screenStyles.stack}>
       {inPopup ? <>
         <View style={[styles.popupSection, styles.popupTabs]}>{header}</View>
-        <KeyboardScrollView ref={scroll} testID="task-detail-scroll"
-          style={[styles.popupScroll, !isGeneral && { maxHeight: generalHeight }]}
-          contentContainerStyle={[screenStyles.stack, styles.popupScrollContent]}
-          onContentSizeChange={isGeneral ? (_, height) => setGeneralHeight(height) : undefined}
-          keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-          {general && <View style={styles.popupSection}>{general}</View>}
-          {generalActions}
-          {description}
-          {discussion}
-        </KeyboardScrollView>
-        {editButton && <View style={styles.popupActions}>
-          {remindButton}
-          {editButton}
-        </View>}
+        <View style={[styles.popupContent, hasComposer && { maxHeight: generalHeight }]}>
+          <KeyboardScrollView ref={scroll} testID="task-detail-scroll"
+            style={[styles.popupScroll, !isGeneral && !hasComposer && { maxHeight: generalHeight }]}
+            contentContainerStyle={[screenStyles.stack, styles.popupScrollContent, hasComposer && styles.beforeComposer]}
+            onContentSizeChange={isGeneral ? (_, height) => setGeneralHeight(height) : undefined}
+            keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+            {general && <View style={styles.popupSection}>{general}</View>}
+            {generalActions}
+            {description}
+            {discussion}
+          </KeyboardScrollView>
+          {editButton && <View style={[styles.popupActions, hasComposer && styles.beforeComposer]}>
+            {remindButton}
+            {editButton}
+          </View>}
+          {composer && <View style={discussionHidden ? styles.hidden : styles.popupComposer}>{composer}</View>}
+        </View>
       </> : <>
         <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />
         <View style={screenStyles.panel}>
@@ -347,6 +349,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
         </View>
         {generalActions}
         {discussion}
+        {composer && <View style={discussionHidden && styles.hidden}>{composer}</View>}
       </>}
       {canEditAssignment && assignmentDraft ? <TaskAssignmentForm email={email} task={assignmentDraft}
         onClose={() => setAssignmentDraft(undefined)} onSaved={() => {
@@ -357,7 +360,11 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
           setSavedAssignment(assignmentDraft);
           showToast('Đã lưu thay đổi công việc.');
         }} /> : null}
-    </View>
+    </View>;
+  }
+
+  return (
+    <TaskDiscussion task={liveTask} email={email} name={name} members={members}>{renderDetail}</TaskDiscussion>
   );
 }
 
@@ -412,6 +419,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   popupBody: { flexShrink: 1, minHeight: 0, paddingTop: 16, gap: 14 },
+  popupContent: { flexShrink: 1, minHeight: 0, gap: 14 },
   popupTabs: { marginHorizontal: 16, flexShrink: 0 },
   popupActions: { flexDirection: 'row', gap: 8,
     paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
@@ -422,6 +430,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupSection: { gap: 14 },
   popupScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   popupScrollContent: { paddingHorizontal: 16, paddingBottom: 16 },
+  beforeComposer: { paddingBottom: 0 },
+  popupComposer: { paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskNote: { paddingVertical: 20 },
   hidden: { display: 'none' },

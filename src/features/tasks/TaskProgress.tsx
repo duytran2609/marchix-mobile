@@ -26,24 +26,30 @@ export function statusTone(status: string, colors: Palette) {
 }
 
 export function TaskProgress({ task, previewStatus, previewProgress, variant }: {
-  task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list' | 'detail';
+  task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list' | 'detail' | 'kanban';
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const status = previewStatus ?? taskStatus(task);
-  const tone = statusTone(status, colors);
   const progress = taskProgressValue(task, status, previewProgress);
+  const value = <Text style={styles.progressValue}>{progress}%</Text>;
+  const track = <View accessibilityRole="progressbar" accessibilityLabel="Tiến độ công việc"
+    aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}
+    style={[styles.track, variant && styles.fullHeightTrack, variant === 'list' && styles.listTrack,
+      variant === 'kanban' && styles.kanbanTrack]}>
+    <View style={[styles.progressFill, { width: `${progress}%` }]} />
+  </View>;
+
+  if (variant === 'kanban') return <View style={styles.progressHeader}>{track}{value}</View>;
+
+  const tone = statusTone(status, colors);
   return (
     <View style={styles.progressBlock}>
       <View style={styles.progressHeader}>
         <Text style={[styles.pill, { color: tone.text, backgroundColor: tone.background }]}>{status}</Text>
-        <Text style={styles.progressValue}>{progress}%</Text>
+        {value}
       </View>
-      <View accessibilityRole="progressbar" accessibilityLabel="Tiến độ công việc"
-        aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}
-        style={[styles.track, variant && styles.fullHeightTrack, variant === 'list' && styles.listTrack]}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
-      </View>
+      {track}
     </View>
   );
 }
@@ -56,5 +62,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   track: { height: 5, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
   fullHeightTrack: { height: 7 },
   listTrack: { marginTop: 3 },
+  kanbanTrack: { flex: 1, minWidth: 12 },
   progressFill: { height: '100%', borderRadius: 4, backgroundColor: colors.accent },
 }));

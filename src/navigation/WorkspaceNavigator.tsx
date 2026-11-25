@@ -87,7 +87,9 @@ export function WorkspaceNavigator({
   if (route.screen === 'luong') return <PayrollScreen key={JSON.stringify([email, isAdmin, route.month])}
     email={email} isAdmin={isAdmin} initialMonth={route.month}
     onOpenAdvance={(requestId, month) => { setRoute({ screen: 'don-tu', requestId, fromPayrollMonth: month }); onScrollTop(); }} />;
-  if (route.screen === 'cham-cong') return <AttendanceScreen key={`${email}-${isAdmin}`} email={email} name={name} isAdmin={isAdmin} />;
+  if (route.screen === 'cham-cong') return <AttendanceScreen key={`${email}-${isAdmin}`} email={email} name={name}
+    isAdmin={isAdmin} checkInDate={route.checkInDate}
+    onCheckInHandled={() => setRoute(current => current === route ? { screen: 'cham-cong' } : current)} />;
   if (route.screen === 'don-tu') return <RequestsScreen key={JSON.stringify([email, isAdmin, canReviewRequests, route.requestId])}
     email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
     initialRequestId={route.requestId}

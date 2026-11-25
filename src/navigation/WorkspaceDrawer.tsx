@@ -30,7 +30,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
 }) {
   const styles = useStyles();
   const { width } = useWindowDimensions();
-  const drawerWidth = width < 600 ? Math.min(width * 0.65, 248) : 280;
+  const drawerWidth = width < 600 ? Math.min(width, Math.max(208, width * 0.65), 248) : 280;
   const progress = useRef(new Animated.Value(0)).current;
   const logoutTrigger = useRef<ComponentRef<typeof Pressable>>(null);
   const [visible, setVisible] = useState(false);
@@ -89,8 +89,9 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
           <SafeAreaView style={styles.fill} edges={['top', 'bottom', 'left']}>
             <View style={styles.header}>
               <View style={styles.brandRow}>
-                <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain"
-                  accessible accessibilityLabel="Logo Marchix" style={styles.logo} />
+                <Image source={require('../../assets/marhub-app-icon-multicolor.png')} resizeMode="contain"
+                  accessible accessibilityLabel="Logo MarHub" style={styles.logo} />
+                <Text numberOfLines={1} adjustsFontSizeToFit style={styles.brandName}>MarHub</Text>
                 <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} tone="accent" />
               </View>
               <Button label="Web Quản lý Marchix ↗" secondary disabled={confirming} onPress={onOpenWeb} />
@@ -175,8 +176,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   drawer: { zIndex: 1, backgroundColor: colors.paper, elevation: 12, boxShadow: '8px 0 24px rgba(33, 25, 53, 0.15)' },
   header: { gap: 8, paddingHorizontal: 20, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: colors.line },
-  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  logo: { width: 56, height: 56, transform: [{ scale: 1.4 }] },
+  brandRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -8 },
+  logo: { width: 44, height: 44, borderRadius: 11, marginRight: 8, flexShrink: 0 },
+  brandName: { flex: 1, minWidth: 0, color: colors.accent, fontSize: 20, fontWeight: '800' },
   logoutButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background },
   list: { padding: 12, gap: 4 },

@@ -23,7 +23,7 @@ export function SettingsSwitch({ label, checked, disabled, onChange }: {
         backgroundColor: checked ? colors.accent : colors.line,
         alignItems: checked ? 'flex-end' : 'flex-start',
       }]}>
-        <View testID="settings-switch-thumb" style={[styles.thumb, { borderColor: colors.placeholder }]} />
+        <View testID="settings-switch-thumb" style={styles.thumb} />
       </View>
     </Pressable>
   );
@@ -33,5 +33,9 @@ const styles = StyleSheet.create({
   toggle: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.5 },
   track: { width: 40, height: 14, borderRadius: 7, justifyContent: 'center' },
-  thumb: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#FFFFFF' },
+  thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      web: { boxShadow: 'inset 0 0 0 0.5px #000000' },
+      default: { borderWidth: StyleSheet.hairlineWidth, borderColor: '#000000' },
+    }) },
 });

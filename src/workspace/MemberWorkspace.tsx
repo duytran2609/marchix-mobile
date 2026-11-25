@@ -8,6 +8,7 @@ import { watchMemberAvatar } from '../features/auth/memberAvatar';
 import type { MemberSession } from '../features/auth/useSession';
 import { notificationTaskTarget } from '../features/notifications/notifications';
 import type { WorkspaceNotification } from '../features/notifications/notifications';
+import { StartupReminder } from '../features/notifications/StartupReminder';
 import { useWorkspacePush } from '../features/notifications/workspacePush';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceBottomNav } from '../navigation/WorkspaceBottomNav';
@@ -22,7 +23,11 @@ import { createThemedStyles } from '../theme/theme';
 import { workspaceHeaderPadding, WorkspaceHeader } from './WorkspaceHeader';
 
 export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests,
-  canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords, accountCreatedAt }: Omit<MemberSession, 'kind'>) {
+  canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords, accountCreatedAt,
+  showLoginReminder, onDismissLoginReminder }: Omit<MemberSession, 'kind'> & {
+  showLoginReminder: boolean;
+  onDismissLoginReminder: () => void;
+}) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
@@ -41,7 +46,8 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
 
   useEffect(() => watchMemberAvatar(email, setCustomAvatar), [email]);
 
-  const scrollRoute = route.screen === 'cho-duyet' || route.screen === 'cong-viec' ? route.screen : route;
+  const scrollRoute = route.screen === 'cho-duyet' || route.screen === 'cong-viec' || route.screen === 'cham-cong'
+    ? route.screen : route;
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [scrollRoute]);
@@ -55,6 +61,13 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     setMenuOpen(false);
     setShowAssignment(false);
     setRoute(current => current.screen === tab ? current : { screen: tab });
+  }
+
+  function checkInFromReminder(date: string) {
+    setMenuOpen(false);
+    setShowAssignment(false);
+    setRoute({ screen: 'cham-cong', checkInDate: date });
+    onDismissLoginReminder();
   }
 
   function togglePin(tab: PinnableTab) {
@@ -133,6 +146,9 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         isAdmin={isAdmin} name={name} photoURL={avatar}
         pins={pinnedTabs.value} onTogglePin={pinningEnabled && pinnedTabs.ready ? togglePin : undefined}
         onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
+      {showLoginReminder && <StartupReminder key={JSON.stringify([isAdmin, canReadCash, canReviewCash, canReviewRequests])}
+        email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
+        canReviewRequests={canReviewRequests} onClose={onDismissLoginReminder} onCheckIn={checkInFromReminder} />}
     </>
   );
 }

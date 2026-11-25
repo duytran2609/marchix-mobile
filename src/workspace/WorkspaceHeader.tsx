@@ -46,7 +46,7 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
   const menuLineSize = { width: PixelRatio.roundToNearestPixel(18), height: PixelRatio.roundToNearestPixel(2) };
   const brandDetails = (
     <View style={styles.brandDetails}>
-      <Text style={styles.brandName}>Marchix</Text>
+      <Text style={styles.brandName}>MarHub</Text>
       <Text style={screenStyles.muted}>Quản lý nội bộ</Text>
     </View>
   );
@@ -73,7 +73,7 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
         </View>
       </View> : <>
         <View style={styles.brandRow}>
-          <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain" aria-hidden style={styles.logo} />
+          <Image source={require('../../assets/marhub-app-icon-multicolor.png')} resizeMode="contain" aria-hidden style={styles.logo} />
           {brandDetails}
           {environment}
         </View>
@@ -95,7 +95,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   clockTime: { color: colors.ink, fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   menuLine: { flexShrink: 0, borderRadius: 1, backgroundColor: colors.accent },
-  logo: { width: 56, height: 56, transform: [{ scale: 1.4 }] },
+  logo: { width: 56, height: 56, borderRadius: 14 },
   brandDetails: { flex: 1, minWidth: 76 },
   brandName: { fontSize: 19, fontWeight: '800', color: colors.ink },
 }));

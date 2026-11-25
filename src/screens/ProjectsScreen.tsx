@@ -98,11 +98,17 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
             ['Thời gian', (project.startDate ? formatTaskDate(project.startDate) : 'Chưa có ngày bắt đầu') + ' → ' +
               (project.deadline ? formatTaskDate(project.deadline) : 'Chưa có ngày kết thúc')],
             ['Người phụ trách', project.owner || project.ownerEmail || 'Chưa có'],
+            ['Mục tiêu / kết quả bàn giao', project.goal || 'Chưa cập nhật'],
+            ['Giai đoạn hiện tại', project.phase || 'Chưa cập nhật'],
+            ['Rủi ro / cần quyết định', project.risks || 'Chưa cập nhật'],
+            ['Mô tả ngắn', project.note || 'Chưa cập nhật'],
           ].map(([label, value], index) => <View key={label} style={[information.row, index > 0 && information.divider]}>
             <Text style={information.label}>{label}</Text>
             <Text selectable style={information.value}>{value}</Text>
           </View>)}
         </View>
+      </View>
+      <View role="region" accessibilityLabel={sections.find(([id]) => id === section)?.[1]} style={styles.panel}>
         <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
           style={[local.tabs, { backgroundColor: colors.surfaceMuted }]}>
           {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
@@ -114,19 +120,11 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
             </Text>
           </Pressable>)}
         </View>
-      </View>
-      <View role="region" accessibilityLabel={sections.find(([id]) => id === section)?.[1]} style={styles.panel}>
         {section === 'finance' ? <ProjectFinance key={`${project.id}-${canReadCash}`} project={project}
           canReadCash={canReadCash} isAdmin={isAdmin} email={email}
           onExpense={onProjectExpense} onCash={id => onProjectCash(project.id, id)} />
           : section === 'library' ? <ProjectCollaboration key={project.id} project={project} email={email} isAdmin={isAdmin}
             tasks={projectTasks ?? []} onOpenTask={onOpenTask} /> : <>
-          {section === 'overview' && <View style={local.metadata}>
-            <Detail label="Mục tiêu / kết quả bàn giao" value={project.goal} />
-            <Detail label="Giai đoạn hiện tại" value={project.phase} />
-            <Detail label="Rủi ro / cần quyết định" value={project.risks} />
-            <Detail label="Mô tả ngắn" value={project.note} />
-          </View>}
           {taskError ? <View style={styles.stack}>
             <Text accessibilityRole="alert" style={styles.error}>Không tải được đầy đủ công việc dự án.</Text>
             <Button label="Thử lại" secondary onPress={() => {
@@ -164,13 +162,6 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
   </>;
 }
 
-function Detail({ label, value }: { label: string; value?: string }) {
-  const styles = useScreenStyles();
-  return <Text selectable style={styles.muted}>
-    <Text style={styles.metadataLabel}>{label}: </Text>{value || 'Chưa cập nhật'}
-  </Text>;
-}
-
 const local = StyleSheet.create({
   projectTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   projectTitle: { flex: 1, minWidth: 0 },
@@ -180,5 +171,4 @@ const local = StyleSheet.create({
     justifyContent: 'center' },
   detailTab: { flex: 1.45 },
   tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  metadata: { gap: 4 },
 });

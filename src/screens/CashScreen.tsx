@@ -453,10 +453,9 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
                 <Text accessibilityRole="header" style={styles.cardTitle}>Sổ thu chi</Text>
                 <Text style={styles.muted}>{visible.length} khoản</Text>
               </View>
-              <Button label={exporting ? 'Đang xuất…' : 'Xuất Excel'} secondary
-                onPress={() => void download()} disabled={!isAdmin || exporting || !base.length} />
+              {isAdmin && <Button label={exporting ? 'Đang xuất…' : 'Xuất Excel'} secondary labelStyle={styles.metadataLabel}
+                onPress={() => void download()} disabled={exporting || !base.length} />}
             </View>
-            {!isAdmin && <Text style={styles.muted}>Chỉ quản trị viên có thể xuất Excel.</Text>}
             <View style={local.pair}>
               <Picker label="Loại" value={type} choices={[blank('Thu và chi'), { id: 'thu', name: 'Chỉ khoản thu' }, { id: 'chi', name: 'Chỉ khoản chi' }]}
                 onChange={setType} style={local.half} highlightSelection />

@@ -51,6 +51,11 @@ const getMemberName = (email: string | undefined, members: Member[]) =>
 const displayRequestDate = (date: string, time?: string) =>
   [time, displayDate(date)].filter(Boolean).join(' ');
 
+function overtimeClock(hours: number) {
+  const totalMinutes = Math.round(hours * 60);
+  return [Math.floor(totalMinutes / 60), totalMinutes % 60].map(part => String(part).padStart(2, '0')).join(':');
+}
+
 function RequestStatus({ status }: { status: string }) {
   const shared = useScreenStyles();
   const styles = useStyles();
@@ -192,8 +197,9 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   const [type, setType] = useState(row?.type || requestTypes[0]);
   const [from, setFrom] = useState(row?.from || today);
   const [to, setTo] = useState(row?.to || row?.from || today);
-  const [fromTime, setFromTime] = useState(row?.leaveTime?.from ?? '');
-  const [toTime, setToTime] = useState(row?.leaveTime?.to ?? '');
+  const requestTime = row?.type === 'Công tác' ? row.trip?.time : row?.leaveTime;
+  const [fromTime, setFromTime] = useState(requestTime?.from ?? '');
+  const [toTime, setToTime] = useState(requestTime?.to ?? '');
   const [days, setDays] = useState(() => {
     if (row?.type === 'Đề xuất khác') return String(row.days ?? 1).replace('.', ',');
     const span = rangeDays(row?.from || today, row?.to || row?.from || today);
@@ -205,7 +211,9 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   const [destination, setDestination] = useState(row?.trip?.destination ?? '');
   const [host, setHost] = useState(row?.trip?.host ?? '');
   const [cost, setCost] = useState(row?.trip?.estimatedCost ? String(row.trip.estimatedCost) : '');
-  const [hours, setHours] = useState(row?.overtime?.hours.toString().replace('.', ',') ?? '');
+  const savedHours = row?.overtime?.hours;
+  const savedOvertimeClock = savedHours === undefined ? '' : overtimeClock(savedHours);
+  const [overtimeTime, setOvertimeTime] = useState(savedOvertimeClock);
   const [selectedTasks, setSelectedTasks] = useState(() => overtimeTasks(row?.overtime));
   const [reason, setReason] = useState(row?.reason || '');
   const [approver, setApprover] = useState(row?.approverEmail || '');
@@ -235,25 +243,28 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     const money = Number(amount);
     if (!advance && !overtime && ((!validDuration(duration) && !(type === 'Đề xuất khác' && duration === 0)) ||
         (range && Math.ceil(duration) !== rangeDays(from, to)))) {
-      throw new Error('Nhập số ngày hợp lệ theo bước 0,5 ngày.');
+      throw new Error(trip ? 'Chọn khoảng ngày công tác từ 1 đến 366 ngày.' : 'Nhập số ngày hợp lệ theo bước 0,5 ngày.');
     }
     if (advance && (!Number.isSafeInteger(money) || money <= 0)) throw new Error('Nhập số tiền tạm ứng lớn hơn 0.');
     if (advance && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Nhập tháng lương theo dạng YYYY-MM.');
     const result: RequestFields = { type, reason: reason.trim(), from, to: overtime ? from : to,
       days: advance || overtime ? 0 : duration, amount: advance ? money : 0, month };
-    if (leave && (fromTime || toTime)) {
-      if (!fromTime || !toTime) throw new Error('Chọn cả giờ bắt đầu và giờ kết thúc nghỉ phép.');
+    const time = range && (fromTime || toTime) ? { from: fromTime, to: toTime } : undefined;
+    if (time) {
+      if (!fromTime || !toTime) throw new Error(`Chọn cả giờ bắt đầu và giờ kết thúc ${type.toLowerCase()}.`);
       if (from === to && fromTime >= toTime) throw new Error('Giờ kết thúc phải sau giờ bắt đầu.');
-      result.leaveTime = { from: fromTime, to: toTime };
+      if (leave) result.leaveTime = time;
     }
     if (trip) {
       if (!destination.trim()) throw new Error('Nhập địa điểm công tác.');
-      result.trip = { destination: destination.trim(), host: host.trim(), estimatedCost: Number(cost) };
+      result.trip = { destination: destination.trim(), host: host.trim(), estimatedCost: Number(cost), ...(time && { time }) };
     }
     if (overtime) {
-      const hoursText = hours.trim();
-      const extraHours = Number(hoursText.replace(',', '.'));
-      if (!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(hoursText) || extraHours <= 0 || extraHours > 24) {
+      const [hours, minutes] = overtimeTime.split(':').map(Number);
+      // Keep the original value when editing an older request with fractional minutes.
+      const extraHours = savedHours !== undefined && overtimeTime === savedOvertimeClock
+        ? savedHours : (hours * 60 + minutes) / 60;
+      if (!(extraHours > 0 && extraHours <= 24)) {
         throw new Error('Nhập số giờ làm thêm lớn hơn 0 và tối đa 24 giờ.');
       }
       if (!selectedTasks.length) throw new Error('Chọn công việc phụ trách.');
@@ -320,13 +331,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function dateField(field: 'from' | 'to', label: string, value: string) {
-    if (leave) return <View style={styles.field}>
+    if (range) return <View style={styles.field}>
       <FieldLabel style={shared.label} required>{label}</FieldLabel>
-      <View style={styles.leaveDateRow}>
+      <View style={styles.dateTimeRow}>
+        <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
+          disabled={busy} style={styles.rangeDate} onChange={day => selectDate(field, day)} />
         <TimeFields label={label} value={field === 'from' ? fromTime : toTime} compact
           disabled={busy} onChange={field === 'from' ? setFromTime : setToTime} />
-        <DateCalendarButton label={label} value={value} min={field === 'to' ? from : undefined}
-          disabled={busy} style={styles.leaveDate} onChange={day => selectDate(field, day)} />
       </View>
     </View>;
     return <View style={styles.dateRow}>
@@ -364,7 +375,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                   }} />
               </View>
               {advance ? <>
-                {input('Số tiền tạm ứng (VND)', groupDigits(amount), value => setAmount(digitsOnly(value)),
+                {input('Số tiền tạm ứng (VNĐ)', groupDigits(amount), value => setAmount(digitsOnly(value)),
                   { keyboardType: 'number-pad', maxLength: 24, required: true })}
                 <FieldLabel style={shared.label} required>Trừ vào lương tháng</FieldLabel>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Đổi tháng năm, ${displayMonth(month)}`}
@@ -379,8 +390,10 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </> : <>
                 {dateField('from', overtime ? 'Ngày' : 'Từ ngày', from)}
                 {overtime ? <>
-                  {input('Số giờ làm thêm', hours, setHours, { inputMode: 'decimal', placeholder: 'Ví dụ: 2,5', maxLength: 12,
-                    required: true, stepBounds: { min: Number.MIN_VALUE, max: 24 } })}
+                  <View style={styles.field}>
+                    <FieldLabel style={shared.label} required>Số giờ làm thêm</FieldLabel>
+                    <TimeFields label="Số giờ làm thêm" value={overtimeTime} duration disabled={busy} onChange={setOvertimeTime} />
+                  </View>
                   <FieldLabel style={shared.label} required>Công việc phụ trách · Đã chọn {selectedTasks.length}</FieldLabel>
                   {tasksError ? <Button label="Tải lại công việc" secondary disabled={busy} onPress={onRetryTasks} />
                     : tasks === null && <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />}
@@ -402,13 +415,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                     }} />}
                 </> : <>
                   {dateField('to', 'Đến ngày', to)}
-                  {input('Số ngày', days, changeDays, { inputMode: 'decimal', maxLength: 5, required: type !== 'Đề xuất khác',
+                  {!trip && input('Số ngày', days, changeDays, { inputMode: 'decimal', maxLength: 5, required: type !== 'Đề xuất khác',
                     stepBounds: { min: type === 'Đề xuất khác' ? 0 : 0.5, max: 366 } })}
                 </>}
                 {trip && <>
                   {input('Địa điểm công tác', destination, setDestination, { maxLength: 250, required: true })}
                   {input('Đơn vị làm việc', host, setHost, { maxLength: 250 })}
-                  {input('Chi phí dự kiến (VND)', groupDigits(cost), value => setCost(digitsOnly(value)),
+                  {input('Chi phí dự kiến (VNĐ)', groupDigits(cost), value => setCost(digitsOnly(value)),
                     { keyboardType: 'number-pad', maxLength: 24 })}
                 </>}
               </>}
@@ -420,8 +433,8 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                 {detail('Số tiền tạm ứng', vnd.format(row.amount || 0))}
                 {!!row.month && detail('Trừ vào lương tháng', displayMonth(row.month))}
               </> : <>
-                {detail(overtime ? 'Ngày' : 'Từ ngày', displayRequestDate(row.from, row.leaveTime?.from))}
-                {!overtime && !!row.to && detail('Đến ngày', displayRequestDate(row.to, row.leaveTime?.to))}
+                {detail(overtime ? 'Ngày' : 'Từ ngày', displayRequestDate(row.from, requestTime?.from))}
+                {!overtime && !!row.to && detail('Đến ngày', displayRequestDate(row.to, requestTime?.to))}
                 {!overtime && typeof row.days === 'number' && detail('Số ngày', row.days.toLocaleString('vi-VN'))}
                 {overtime && row.overtime && detail('Số giờ làm thêm', row.overtime.hours.toLocaleString('vi-VN'))}
               </>}
@@ -470,13 +483,13 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
           <Text accessibilityLiveRegion="polite" style={shared.label}>{monthPickerYear}</Text>
           <Button label="Năm sau" secondary disabled={busy || monthPickerYear >= 9999} onPress={() => setMonthPickerYear(monthPickerYear + 1)} />
         </View>
-        <View style={shared.choices}>
+        <View style={[shared.choices, styles.monthGrid]}>
           {months.map(item => {
             const value = String(monthPickerYear).padStart(4, '0') + '-' + item;
-            return <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Tháng ${item}`}
-              accessibilityState={{ selected: value === month }} style={[shared.choice, value === month && shared.selected]}
+            return <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Tháng ${Number(item)}`}
+              accessibilityState={{ selected: value === month }} style={[shared.choice, styles.monthChoice, value === month && shared.selected]}
               disabled={busy} onPress={() => { setMonth(value); setMonthPickerYear(null); }}>
-              <Text style={[shared.label, shared.metadataValue]}>{item}</Text>
+              <Text style={[shared.label, shared.metadataValue]}>{Number(item)}</Text>
             </Pressable>;
           })}
         </View>
@@ -497,12 +510,14 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   dateWithDelete: { paddingRight: 48 },
   deleteRequest: { position: 'absolute', right: 4, bottom: 6 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  leaveDateRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  leaveDate: { flexGrow: 1, flexBasis: 106 },
+  dateTimeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  rangeDate: { flexGrow: 1, flexBasis: 116 },
   dateLabel: { width: 76 },
   dropdown: { flex: 1 },
   picker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   pickerIcon: { color: colors.accent, fontSize: 20 },
+  monthGrid: { width: '100%', maxWidth: 240, alignSelf: 'center', justifyContent: 'center' },
+  monthChoice: { width: 54, paddingHorizontal: 4, alignItems: 'center' },
   pending: { color: colors.warning, backgroundColor: colors.warningSoft },
   approved: { color: colors.success, backgroundColor: colors.successSoft },
   rejected: { color: colors.danger, backgroundColor: colors.dangerSoft },

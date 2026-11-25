@@ -95,9 +95,12 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
       <View style={styles.card}>
         <View style={styles.title}>
           <View style={styles.mark}>
-            <Image source={require('../../assets/marchix-mark.png')} resizeMode="contain" aria-hidden style={styles.logo} />
+            <Image source={require('../../assets/marhub-app-icon-multicolor.png')} resizeMode="contain" aria-hidden style={styles.logo} />
           </View>
-          <Text style={[screenStyles.eyebrow, styles.centered]}>QUẢN LÝ MARCHIX</Text>
+          <View style={styles.brandText}>
+            <Text style={styles.appName}>MarHub</Text>
+            <Text style={[screenStyles.muted, styles.centered]}>Không gian làm việc của Marchix</Text>
+          </View>
           <Text accessibilityRole="header" style={styles.heading}>Đăng nhập</Text>
         </View>
         {configError ? <Text accessibilityRole="alert" style={[screenStyles.error, styles.centered]}>{configError}</Text>
@@ -110,7 +113,7 @@ export function SignInScreen({ sessionKind }: { sessionKind: Session['kind'] }) 
           </> : <>
             <Text style={[screenStyles.muted, styles.centered]}>{emulatorMode
               ? 'Bản thử dùng tài khoản Google mô phỏng và dữ liệu công việc giả.'
-              : pilotMode ? 'Dùng tài khoản Google đang dùng trên web để vào Quản lý Marchix.'
+              : pilotMode ? 'Dùng tài khoản Google đang dùng trên web để vào MarHub.'
                 : 'Dùng tài khoản Google đã được quản trị Marchix cấp quyền trên staging.'}</Text>
             {recentAccounts.length > 0 && <View style={styles.recentList}>
               <Text accessibilityRole="header" style={screenStyles.label}>Tài khoản gần đây</Text>
@@ -164,7 +167,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     width: 68, height: 68, borderRadius: 20, marginBottom: 8,
     alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft,
   },
-  logo: { width: 64, height: 64 },
+  logo: { width: 64, height: 64, borderRadius: 18 },
+  brandText: { alignItems: 'center', gap: 3, marginBottom: 4 },
+  appName: { color: colors.accent, fontSize: 38, fontWeight: '800', textAlign: 'center' },
   heading: { color: colors.ink, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   centered: { textAlign: 'center' },
   recentList: { gap: 8 },

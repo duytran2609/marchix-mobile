@@ -9,18 +9,22 @@ const hours = timeOptions(24);
 const minutes = timeOptions(60);
 const hourOptions = [{ value: '', label: 'Chọn giờ' }, ...hours];
 const compactHourOptions = [{ value: '', label: 'Giờ' }, ...hours];
+const durationHours = [...hours, { value: '24', label: '24' }];
 
-export function TimeFields({ label, value, disabled, compact, onChange }: {
-  label: string; value: string; disabled: boolean; compact?: boolean; onChange: (value: string) => void;
+export function TimeFields({ label, value, disabled, compact, duration, onChange }: {
+  label: string; value: string; disabled: boolean; compact?: boolean; duration?: boolean;
+  onChange: (value: string) => void;
 }) {
   const [hour = '', minute = ''] = value.split(':');
+  const hourChoices = duration ? durationHours : compact ? compactHourOptions : hourOptions;
+  const fullDay = duration && hour === '24';
   return <View style={[styles.row, compact && styles.compact]}>
-    <Dropdown label={label + ' · Giờ'} hideLabel value={hour} choices={compact ? compactHourOptions : hourOptions}
-      style={styles.field} disabled={disabled} highlightSelection={!compact}
-      onChange={nextHour => onChange(nextHour ? nextHour + ':' + (minute || '00') : '')} />
+    <Dropdown label={label + ' · Giờ'} hideLabel value={hour} choices={hourChoices}
+      fallbackLabel={duration ? 'Giờ' : undefined} style={styles.field} disabled={disabled} highlightSelection={!compact && !duration}
+      onChange={nextHour => onChange(nextHour ? `${nextHour}:${duration && nextHour === '24' ? '00' : minute || '00'}` : '')} />
     <Dropdown label={label + ' · Phút'} hideLabel value={minute} choices={minutes}
-      fallbackLabel={compact ? 'Phút' : 'Chọn phút'} style={styles.field} disabled={disabled || !hour}
-      highlightSelection={!compact}
+      fallbackLabel={compact || duration ? 'Phút' : 'Chọn phút'} style={styles.field} disabled={disabled || !hour || fullDay}
+      highlightSelection={!compact && !duration}
       onChange={nextMinute => onChange(hour + ':' + nextMinute)} />
   </View>;
 }

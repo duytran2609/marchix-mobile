@@ -61,6 +61,28 @@ test('Sổ thu chi chuyển trang, đổi số dòng và đặt lại trang khi 
     expect(optionBounds!.y - (triggerBounds!.y + triggerBounds!.height)).toBeLessThan(12);
     await expect(options.getByRole('radio', { name: '100 dòng', exact: true })).toBeInViewport();
     await expect(page.getByText('5 dòng', { exact: true })).toHaveCount(2);
+
+    await page.keyboard.press('Escape');
+    await expect(options).toBeHidden();
+    await pageSize.click();
+    await expect(options).toBeVisible();
+    await expect(options.getByRole('radio', { name: '100 dòng', exact: true })).toBeInViewport();
+    const openTrigger = page.getByRole('button', { name: 'Số dòng mỗi trang: 5 dòng', exact: true, includeHidden: true });
+    // Simulate a scroll update arriving after the menu has opened, as can happen on Android.
+    await openTrigger.evaluate(element => {
+      let scroller = element.parentElement;
+      while (scroller && scroller.scrollTop < 24) scroller = scroller.parentElement;
+      if (!scroller) throw new Error('Expected a scrolled list');
+      scroller.scrollTop -= 24;
+    });
+    await expect.poll(async () => {
+      const [trigger, option] = await Promise.all([
+        openTrigger.boundingBox(),
+        options.getByRole('radio', { name: '5 dòng', exact: true }).boundingBox(),
+      ]);
+      const gap = trigger && option ? option.y - (trigger.y + trigger.height) : 0;
+      return gap > 0 && gap < 12;
+    }).toBe(true);
     await options.getByRole('radio', { name: '10 dòng', exact: true }).click();
     await expect(page.getByText('Trang 1 / 2', { exact: true })).toBeVisible();
     await expect(entries).toHaveCount(10);

@@ -163,8 +163,15 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
       await expect(detail.getByRole('progressbar', { name: 'Tiến độ công việc' })).toBeHidden();
       await detail.getByRole('button', { name: 'Trao đổi & tài liệu', exact: true }).click();
     }
-    await page.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill(original);
-    await page.getByRole('button', { name: 'Gửi trao đổi' }).click();
+    const compose = page.getByRole('textbox', { name: 'Nội dung trao đổi' });
+    const send = page.getByRole('button', { name: 'Gửi trao đổi' });
+    const history = page.getByTestId('task-detail-scroll');
+    await expect(history.getByRole('textbox', { name: 'Nội dung trao đổi' })).toHaveCount(0);
+    await expect(history.getByRole('button', { name: 'Gửi trao đổi' })).toHaveCount(0);
+    const historyBox = (await history.boundingBox())!;
+    expect((await compose.boundingBox())!.y).toBeGreaterThanOrEqual(historyBox.y + historyBox.height);
+    await compose.fill(original);
+    await send.click();
     const originalText = sender.getByText(original, { exact: true });
     const respond = originalText.locator('..')
       .getByRole('button', { name: 'Trả lời trao đổi của Nhân viên demo' });
@@ -228,6 +235,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
   const headers = { Authorization: 'Bearer owner' };
   let id = '';
   let overtimeId = '';
+  let tripId = '';
   const requestCard = (target: typeof page) => target.getByTestId(`request-${id}`);
 
   async function findRequest(reason: string) {
@@ -265,6 +273,19 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
       expect((await popup.boundingBox())!.width).toBeCloseTo(popupWidth);
       await expect(typeButton).toHaveCSS('background-color', neutralBackground);
     }
+    async function selectTimePart(label: string, value: string) {
+      await popup.getByRole('button', { name: new RegExp(`^${label}:`) }).click();
+      await page.getByRole('radiogroup', { name: label, exact: true }).getByRole('radio', { name: value, exact: true }).click();
+    }
+    async function expectDateBeforeTime() {
+      for (const label of ['Từ ngày', 'Đến ngày']) {
+        const [date, hour, minute] = await Promise.all([',', ' · Giờ:', ' · Phút:'].map(suffix =>
+          popup.getByRole('button', { name: new RegExp(`^${label}${suffix}`) }).boundingBox()));
+        expect(date!.x).toBeLessThan(hour!.x);
+        expect(hour!.x).toBeLessThan(minute!.x);
+      }
+    }
+    await expectDateBeforeTime();
     const today = todayInVietnam();
     const days = popup.getByRole('textbox', { name: 'Số ngày', exact: true });
     await days.fill('2,5');
@@ -286,15 +307,41 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await dateCalendar.getByRole('button', { name: 'Ngày ' + formatTaskDate(today), exact: true }).click();
     await expect(days).toHaveValue('1');
     await selectType('Công tác');
-    await expect(popup.getByLabel('Địa điểm công tác')).toBeVisible();
+    await expectDateBeforeTime();
+    await expect(days).toHaveCount(0);
+    const tripEnd = shiftDay(today, 1);
+    await dateButton.click();
+    if (today.slice(0, 7) !== tripEnd.slice(0, 7)) {
+      await dateCalendar.getByRole('button', { name: 'Tháng sau', exact: true }).click();
+    }
+    await dateCalendar.getByRole('button', { name: 'Ngày ' + formatTaskDate(tripEnd), exact: true }).click();
+    await selectTimePart('Từ ngày · Giờ', '08');
+    await selectTimePart('Từ ngày · Phút', '15');
+    await selectTimePart('Đến ngày · Giờ', '12');
+    await selectTimePart('Đến ngày · Phút', '30');
+    const tripReason = 'Công tác kiểm thử ' + Date.now();
+    await popup.getByLabel('Địa điểm công tác').fill('Hà Nội');
+    await popup.getByLabel('Mục đích / nội dung công tác').fill(tripReason);
+    await popup.getByRole('button', { name: 'Gửi đơn' }).click();
+    await expect(popup).toHaveCount(0);
+    const savedTrip = await findRequest(tripReason);
+    tripId = savedTrip.name.split('/').at(-1);
+    expect(savedTrip.fields.days).toEqual({ integerValue: '2' });
+    expect(savedTrip.fields.trip.mapValue.fields.time.mapValue.fields).toEqual({
+      from: { stringValue: '08:15' }, to: { stringValue: '12:30' },
+    });
+    await page.getByTestId(`request-${tripId}`).click();
+    await expect(page.getByRole('button', { name: 'Từ ngày · Giờ: 08', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đến ngày · Phút: 30', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Đóng đơn' }).click();
+    await page.getByRole('button', { name: '+ Tạo đơn' }).click();
     await selectType('Làm thêm giờ');
     await expect(popup.getByRole('button', { name: /^Ngày,/ })).toBeVisible();
     await expect(popup.getByRole('button', { name: /^Đến ngày,/ })).toHaveCount(0);
-    const hours = popup.getByRole('textbox', { name: 'Số giờ làm thêm', exact: true });
-    await hours.pressSequentially('2,5');
-    await expect(hours).toHaveValue('2,5');
-    await hours.fill('1.25');
-    await expect(hours).toHaveValue('1.25');
+    await selectTimePart('Số giờ làm thêm · Giờ', '24');
+    await expect(popup.getByRole('button', { name: 'Số giờ làm thêm · Phút: 00', exact: true })).toBeDisabled();
+    await selectTimePart('Số giờ làm thêm · Giờ', '01');
+    await selectTimePart('Số giờ làm thêm · Phút', '15');
     const taskTitle = 'Kiểm tra giao diện trên điện thoại';
     await popup.getByRole('button', { name: /^Công việc phụ trách:/ }).click();
     const taskDropdown = page.getByRole('dialog', { name: 'Công việc phụ trách', exact: true });
@@ -314,6 +361,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await expect(popup).toHaveCount(0);
     const savedOvertime = await findRequest(overtimeReason);
     overtimeId = savedOvertime.name.split('/').at(-1);
+    expect(savedOvertime.fields.overtime.mapValue.fields.hours).toEqual({ doubleValue: 1.25 });
     expect(savedOvertime.fields.overtime.mapValue.fields.tasks.arrayValue.values
       .map((item: { mapValue: { fields: { id: { stringValue: string } } } }) => item.mapValue.fields.id.stringValue))
       .toEqual(['kiem-tra-giao-dien', 'cap-nhat-huong-dan']);
@@ -330,14 +378,21 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await page.getByLabel('Lý do / nội dung').fill(reason);
     await page.getByRole('button', { name: 'Gửi đơn' }).click();
     await expect(page.getByRole('alert')).toContainText('Nhập số tiền tạm ứng');
-    await page.getByLabel('Số tiền tạm ứng (VND)').fill('750000');
-    await expect(page.getByLabel('Số tiền tạm ứng (VND)')).toHaveValue('750.000');
+    await page.getByLabel('Số tiền tạm ứng (VNĐ)').fill('750000');
+    await expect(page.getByLabel('Số tiền tạm ứng (VNĐ)')).toHaveValue('750.000');
     const month = today.slice(5, 7);
     const year = today.slice(0, 4);
     await popup.getByRole('button', { name: `Đổi tháng năm, ${month}/${year}` }).click();
     const monthCalendar = page.getByRole('dialog', { name: 'Trừ vào lương tháng' });
+    const monthButtons = monthCalendar.getByRole('button', { name: /^Tháng \d+$/ });
+    await expect(monthButtons).toHaveText(Array.from({ length: 12 }, (_, index) => String(index + 1)));
+    const [leftMonth, rightMonth, calendar] = await Promise.all([
+      monthButtons.nth(0).boundingBox(), monthButtons.nth(3).boundingBox(), monthCalendar.boundingBox(),
+    ]);
+    expect(leftMonth!.y).toBeCloseTo(rightMonth!.y);
+    expect((leftMonth!.x + rightMonth!.x + rightMonth!.width) / 2).toBeCloseTo(calendar!.x + calendar!.width / 2);
     await monthCalendar.getByRole('button', { name: 'Năm sau' }).click();
-    await monthCalendar.getByRole('button', { name: 'Tháng 01' }).click();
+    await monthCalendar.getByRole('button', { name: 'Tháng 1', exact: true }).click();
     await expect(popup.getByRole('button', { name: `Đổi tháng năm, 01/${Number(year) + 1}` })).toBeVisible();
     await page.getByRole('button', { name: 'Gửi đơn' }).click();
     await expect(page.getByRole('heading', { name: 'Tạo đơn', exact: true })).toHaveCount(0);
@@ -425,6 +480,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
       await request.delete(documents + '/requests/' + id, { headers });
     }
     if (overtimeId) await request.delete(documents + '/requests/' + overtimeId, { headers });
+    if (tripId) await request.delete(documents + '/requests/' + tripId, { headers });
   }
 });
 
@@ -765,23 +821,29 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
     .toContainText('10/11/2026 → 30/11/2026');
   await expect(projectInfo.getByText('Người phụ trách', { exact: true }).locator('..'))
     .toContainText('Người giao việc demo');
+  await expect(projectInfo.getByText('Mục tiêu / kết quả bàn giao', { exact: true }).locator('..'))
+    .toContainText('Bàn giao bản thử trên điện thoại.');
+  await expect(projectInfo.getByText('Giai đoạn hiện tại', { exact: true }).locator('..'))
+    .toContainText('Kiểm thử nội bộ');
+  await expect(projectInfo.getByText('Rủi ro / cần quyết định', { exact: true }).locator('..'))
+    .toContainText('Xác nhận luồng đăng nhập trên thiết bị thật.');
+  await expect(projectInfo.getByText('Mô tả ngắn', { exact: true }).locator('..'))
+    .toContainText('Dữ liệu thử nghiệm.');
   const overview = page.getByRole('region', { name: 'Tổng quan', exact: true });
-  await expect(overview).toContainText('Mục tiêu / kết quả bàn giao: Bàn giao bản thử trên điện thoại.');
-  await expect(overview).toContainText('Giai đoạn hiện tại: Kiểm thử nội bộ');
-  await expect(overview).toContainText('Rủi ro / cần quyết định: Xác nhận luồng đăng nhập trên thiết bị thật.');
-  await expect(overview).toContainText('Mô tả ngắn: Dữ liệu thử nghiệm.');
-  const tabs = profile.getByRole('tablist').getByRole('tab');
+  const tabList = page.getByRole('tablist', { name: 'Mục trong hồ sơ dự án' });
+  await expect(overview.locator(':scope > :first-child')).toHaveAttribute('role', 'tablist');
+  const tabs = tabList.getByRole('tab');
   await expect(tabs).toHaveCount(4);
   const positions = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
   expect(new Set(positions).size).toBe(1);
   await expect(page.getByRole('button', { name: '+ Thêm dự án' })).toHaveCount(0);
 
-  await profile.getByRole('tab', { name: 'Tài chính', exact: true }).click();
+  await tabList.getByRole('tab', { name: 'Tài chính', exact: true }).click();
   const finance = page.getByRole('region', { name: 'Tài chính', exact: true });
   await expect(finance.getByRole('heading', { name: 'Tài chính dự án' })).toBeVisible();
   await expect(finance.getByText(/Trần vốn dự án/)).toBeVisible();
   const work = page.getByRole('region', { name: 'Công việc đính kèm', exact: true });
-  await profile.getByRole('tab', { name: 'Công việc đính kèm' }).click();
+  await tabList.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await expect(work.getByRole('heading', { name: 'Việc trong dự án' })).toBeVisible();
   await expect(work.getByRole('heading', { name: 'Mốc bàn giao' })).toHaveCount(0);
   await expect(work.getByRole('button', { name: 'Mở công việc: Xác nhận phạm vi bản thử' })).toBeVisible();
@@ -797,7 +859,7 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   await expect(page.getByRole('heading', { name: 'CÔNG VIỆC', exact: true })).toBeVisible();
 
   await openProject();
-  await profile.getByRole('tab', { name: 'Công việc đính kèm' }).click();
+  await tabList.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await work.getByRole('button', { name: 'Mở công việc: Kiểm tra giao diện trên điện thoại' }).click();
   await expect(popup.getByRole('heading', { name: 'Kiểm tra giao diện trên điện thoại' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -873,10 +935,14 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toHaveCount(0);
   await openMenu.click();
   const drawerPanel = drawer.getByTestId('workspace-drawer');
+  const brandName = drawer.getByText('MarHub', { exact: true });
+  await expect(brandName).toHaveCSS('color', 'rgb(96, 65, 189)');
   const initialViewport = page.viewportSize()!;
-  for (const [width, drawerWidth] of [[320, 208], [390, 248], [430, 248], [768, 280]]) {
+  for (const [width, drawerWidth] of [[280, 208], [320, 208], [390, 248], [430, 248], [768, 280]]) {
     await page.setViewportSize({ ...initialViewport, width });
     await expect(drawerPanel).toHaveCSS('width', `${drawerWidth}px`);
+    await expect(brandName).toBeInViewport({ ratio: 1 });
+    expect(await brandName.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toBeInViewport({ ratio: 1 });
   }
   await page.setViewportSize(initialViewport);
@@ -1428,11 +1494,12 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const initialGps = (await gpsToggle.getAttribute('aria-checked')) === 'true';
     await expect(officeCoordinates).toHaveCount(initialGps ? 1 : 0);
     await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-    await expect(thumb).toHaveCSS('border-top-width', '1px');
+    await expect(thumb).toHaveCSS('box-shadow', 'rgb(0, 0, 0) 0px 0px 0px 0.5px inset');
     await gpsToggle.click();
     await expect(gpsToggle).toHaveAttribute('aria-checked', String(!initialGps));
     await expect(officeCoordinates).toHaveCount(initialGps ? 0 : 1);
     await expect(thumb).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(thumb).toHaveCSS('box-shadow', 'rgb(0, 0, 0) 0px 0px 0px 0.5px inset');
     await gpsToggle.press('Space');
     await expect(gpsToggle).toHaveAttribute('aria-checked', String(initialGps));
     if (!initialGps) await gpsToggle.click();
@@ -1923,14 +1990,14 @@ test('Gantt dùng màu riêng và chạm để làm nổi bật từng công vi�
   const email = 'nhanvien@example.test';
   const start = `${todayInVietnam().slice(0, 7)}-01`;
   const runId = Date.now();
-  const titles = [`Gantt kiểm thử A ${runId}`, `Gantt kiểm thử B ${runId}`];
+  const titles = [`Gantt kiểm thử A ${runId}`, `Gantt kiểm thử B ${runId}`, `Gantt kiểm thử C ${runId}`];
   const urls = titles.map((_, index) => `${base}/gantt-focus-${runId}-${index}`);
   try {
     for (const [index, url] of urls.entries()) {
       const response = await request.patch(url, { headers, data: { fields: {
         title: { stringValue: titles[index] }, assignedBy: { stringValue: email }, assigneeEmail: { stringValue: email },
         status: { stringValue: 'Chưa làm' }, due: { stringValue: shiftDay(start, 1) },
-        ...(index === 0 ? { startDate: { stringValue: start } } : {}),
+        ...(index !== 1 ? { startDate: { stringValue: index === 0 ? start : shiftDay(start, 1) } } : {}),
       } } });
       expect(response.ok()).toBe(true);
     }
@@ -1938,10 +2005,14 @@ test('Gantt dùng màu riêng và chạm để làm nổi bật từng công vi�
     await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
     await openTasks(page);
     await page.getByRole('button', { name: 'Biểu đồ Gantt', exact: true }).click();
-    const [bar, marker] = titles.map(title => page.getByRole('button', { name: `Làm nổi bật trên biểu đồ: ${title}`, exact: true }));
+    const [bar, marker, oneDayBar] = titles.map(title =>
+      page.getByRole('button', { name: `Làm nổi bật trên biểu đồ: ${title}`, exact: true }));
     const [first, second] = titles.map(title => page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true }));
     await expect(bar).toBeVisible();
     await expect(marker).toBeVisible();
+    await expect(bar.locator(':scope > div')).toHaveCSS('width', '112px');
+    await expect(oneDayBar.locator(':scope > div')).toHaveCSS('width', '56px');
+    await expect(marker.locator(':scope > div')).toHaveCSS('width', '10px');
     const color = (element: Element) => getComputedStyle(element).backgroundColor;
     const barColor = await bar.locator(':scope > div > div').first().evaluate(color);
     const markerColor = await marker.locator(':scope > div').evaluate(color);
@@ -1990,22 +2061,24 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
     const search = page.getByRole('textbox', { name: 'Tìm tên công việc' });
     await expect(search).toBeVisible({ timeout: 15_000 });
     const placeholderStyle = () => search.evaluate(input => {
-      const { color, fontWeight } = getComputedStyle(input, '::placeholder');
-      return { color, fontWeight };
+      const { color, fontSize, fontWeight } = getComputedStyle(input, '::placeholder');
+      return { color, fontSize, fontWeight };
     });
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(118, 118, 118)', fontWeight: '400' });
+    const lightPlaceholder = { color: 'rgb(130, 130, 130)', fontSize: '15px', fontWeight: '400' };
+    await expect.poll(placeholderStyle).toEqual(lightPlaceholder);
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(153, 153, 153)', fontWeight: '400' });
+    await expect.poll(placeholderStyle).toEqual({ ...lightPlaceholder, color: 'rgb(140, 140, 140)' });
     await page.emulateMedia({ colorScheme: 'light' });
     await search.fill('Kiểm tra giao diện Kanban');
     await expect(search).toHaveCSS('font-weight', '500');
+    await expect(search).toHaveCSS('font-size', '16px');
     await page.getByRole('button', { name: 'Xóa từ khóa tìm tên công việc' }).click();
     await expect(search).toHaveValue('');
-    await expect.poll(placeholderStyle).toEqual({ color: 'rgb(118, 118, 118)', fontWeight: '400' });
+    await expect.poll(placeholderStyle).toEqual(lightPlaceholder);
     await search.fill('Kiểm tra giao diện Kanban');
     const card = page.getByRole('button', { name: `Mở công việc: ${title}` });
-    for (const mode of ['Danh sách', 'Bảng Kanban']) {
-      await page.getByRole('button', { name: mode, exact: true }).click();
+    await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
+    {
       await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
       await expect(card.getByText('Người giao việc:', { exact: true })).toHaveCount(0);
       const priorityText = card.getByText('Cao', { exact: true });
@@ -2021,6 +2094,17 @@ test('Kanban rút gọn thẻ và giữ để kéo qua các cột bằng cảm �
       expect(overdue!.y + overdue!.height / 2).toBeCloseTo(due!.y + due!.height / 2);
       expect(priority!.y - due!.y).toBeCloseTo(due!.y - assignee!.y);
     }
+
+    await page.getByRole('button', { name: 'Bảng Kanban', exact: true }).click();
+    await expect(card.getByText(title, { exact: true })).toHaveCSS('-webkit-line-clamp', '2');
+    await expect(card).toHaveText(`${title}25%`);
+    const track = card.getByRole('progressbar', { name: 'Tiến độ công việc' });
+    await expect(track).toHaveAttribute('aria-valuenow', '25');
+    const [trackBox, valueBox] = await Promise.all([
+      track.boundingBox(),
+      card.getByText('25%', { exact: true }).boundingBox(),
+    ]);
+    expect(trackBox!.x + trackBox!.width).toBeLessThan(valueBox!.x);
 
     await card.scrollIntoViewIfNeeded();
     const client = await context.newCDPSession(page);
@@ -2344,8 +2428,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await expect(discussion.getByText('Người giao việc demo', { exact: true })).toBeVisible();
     await expect(discussion.getByText('ND', { exact: true })).toBeVisible();
     await expect(discussion.getByText(assignmentTime, { exact: true })).toBeVisible();
-    await discussion.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Đã nhận công việc.');
-    await discussion.getByRole('button', { name: 'Gửi trao đổi' }).click();
+    await detail.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Đã nhận công việc.');
+    await detail.getByRole('button', { name: 'Gửi trao đổi' }).click();
     await expect(discussion.getByText('Đã nhận công việc.', { exact: true })).toBeVisible();
     await expect(discussion.getByText('Nhân viên demo', { exact: true })).toBeVisible();
     const downloadResponse = receiverPage.waitForResponse(response => response.url().endsWith('/downloadMobileTaskAttachment') &&

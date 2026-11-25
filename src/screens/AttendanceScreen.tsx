@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../components/TextInput';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
@@ -26,7 +26,11 @@ import { formatMonthLabel, formatVietnamDateWithWeekday } from '../utils/dateTim
 
 const isTime = (value: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
-export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { isAdmin: boolean }) {
+export function AttendanceScreen({ email, name, isAdmin, checkInDate, onCheckInHandled }: AttendanceMember & {
+  isAdmin: boolean;
+  checkInDate?: string;
+  onCheckInHandled: () => void;
+}) {
   const ui = useScreenStyles();
   const styles = useStyles();
   const metricStyles = useMetricStyles();
@@ -58,6 +62,39 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   const currentMonth = today.slice(0, 7);
   const selectedMonth = month || currentMonth;
   const records = useMemo(() => new Map(data?.records.map(row => [row.id, row])), [data?.records]);
+  const todayRecord = records.get(attendanceId(email, today));
+  const todayResult = todayRecord && data ? calculateAttendance(todayRecord, data.schedule, today) : null;
+  const completedToday = todayResult && todayResult.entered !== null && todayResult.exited !== null;
+  const currentSchedule = data?.schedule;
+
+  const handlePunch = useCallback(async (direction: 'in' | 'out', date: string) => {
+    if (!currentSchedule || punchLock.current || completedToday) return;
+    const currentTime = new Date();
+    if (dateKey(currentTime) !== date || date !== today) {
+      setNow(currentTime);
+      setPunchError('Ngày đã thay đổi. Hãy kiểm tra ca mới rồi chấm công.');
+      return;
+    }
+    punchLock.current = true;
+    setPunching(true);
+    setPunchError('');
+    try {
+      await punch({ email, name }, date, direction === 'out', currentSchedule, isAdmin);
+      toast(direction === 'out' ? 'Đã ghi nhận giờ ra.' : 'Đã ghi nhận giờ vào.');
+    } catch (error) {
+      setPunchError(error instanceof Error && error.name === 'Error' ? error.message :
+        'Không chấm công được. Kiểm tra kết nối hoặc quyền truy cập rồi thử lại.');
+    } finally {
+      punchLock.current = false;
+      setPunching(false);
+    }
+  }, [currentSchedule, completedToday, today, email, name, isAdmin, toast]);
+
+  useEffect(() => {
+    if (!checkInDate || (!currentSchedule && !loadError)) return;
+    onCheckInHandled();
+    if (!loadError && !todayRecord) void handlePunch('in', checkInDate);
+  }, [checkInDate, currentSchedule, loadError, todayRecord, onCheckInHandled, handlePunch]);
 
   if (loadError || !data) return <>
     <PageHeader title="Chấm công" />
@@ -68,11 +105,8 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
   </>;
 
   const { schedule, people, requests } = data;
-  const todayRecord = records.get(attendanceId(email, today));
-  const todayResult = todayRecord ? calculateAttendance(todayRecord, schedule, today) : null;
   const working = todayResult?.flag === 'Đang làm';
   const todayWorked = (todayResult?.worked ?? 0) + (approvedOvertimeByDay(email, requests).get(today) ?? 0);
-  const completedToday = todayResult && todayResult.entered !== null && todayResult.exited !== null;
   const weight = dayWeight(today, schedule);
   const trackingStart = schedule.attStart || data.records.reduce((first, row) =>
     row.date && row.date < first ? row.date : first, today);
@@ -91,28 +125,6 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
       toast('Không xuất được bảng công. Vui lòng thử lại.', 'error');
     } finally {
       setExporting(false);
-    }
-  }
-
-  async function handlePunch() {
-    if (punchLock.current || completedToday) return;
-    if (dateKey(new Date()) !== today) {
-      setNow(new Date());
-      setPunchError('Ngày đã thay đổi. Hãy kiểm tra ca mới rồi chấm công.');
-      return;
-    }
-    punchLock.current = true;
-    setPunching(true);
-    setPunchError('');
-    try {
-      await punch({ email, name }, today, !!todayRecord, schedule, isAdmin);
-      toast(todayRecord ? 'Đã ghi nhận giờ ra.' : 'Đã ghi nhận giờ vào.');
-    } catch (error) {
-      setPunchError(error instanceof Error && error.name === 'Error' ? error.message :
-        'Không chấm công được. Kiểm tra kết nối hoặc quyền truy cập rồi thử lại.');
-    } finally {
-      punchLock.current = false;
-      setPunching(false);
     }
   }
 
@@ -148,7 +160,7 @@ export function AttendanceScreen({ email, name, isAdmin }: AttendanceMember & { 
         <Text accessibilityLiveRegion="polite" style={styles.completedText}>Đã chấm công cho ngày hôm nay.</Text>
       </View>}
       {punchError !== '' && <Text accessibilityRole="alert" style={ui.error}>{punchError}</Text>}
-      {!completedToday && <Button disabled={punching} onPress={() => void handlePunch()}
+      {!completedToday && <Button disabled={punching} onPress={() => void handlePunch(todayRecord ? 'out' : 'in', today)}
         label={punching ? 'Đang chấm công…' : !todayRecord ? 'Chấm công vào' : 'Chấm công ra'} />}
       {!isAdmin && dailyNotes && <DailyNoteEditor key={attendanceId(email, today)}
         email={email} date={today} savedNote={dailyNotes.get(today) ?? ''} />}

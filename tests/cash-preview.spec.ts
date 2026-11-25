@@ -42,12 +42,11 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await target.getByRole('dialog').getByRole('button', { name: 'Thu chi', exact: true }).click();
     await expect(target.getByRole('heading', { name: 'Thu chi', exact: true })).toBeVisible();
     await expect(target.getByRole('heading', { name: /Sổ thu chi/ })).toBeVisible();
+    await expect(status(target, 'Chỉ quản trị viên có thể xuất Excel.')).toHaveCount(0);
   }
   try {
     await openCash(page, 'Đăng nhập bằng Google');
-    const memberExport = button(page, 'Xuất Excel');
-    await expect(memberExport).toBeVisible();
-    await expect(memberExport).toBeDisabled();
+    await expect(button(page, 'Xuất Excel')).toHaveCount(0);
     async function expectSameRow(left: RegExp, right: RegExp, scope: Page | Locator = page) {
       const first = await scope.getByRole('button', { name: left }).boundingBox();
       const second = await scope.getByRole('button', { name: right }).boundingBox();
@@ -195,6 +194,7 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await expect(button(page, 'Lưu người duyệt')).toHaveCount(0);
 
     await openCash(reviewer, 'Đăng nhập người giao việc (mô phỏng)');
+    await expect(button(reviewer, 'Xuất Excel')).toHaveCount(0);
     await button(reviewer, 'Mở menu').click();
     await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
     await entry(reviewer).click();
@@ -229,6 +229,7 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await admin.getByRole('radio', { name: 'Chờ duyệt', exact: true }).click();
     await expect(entry(admin)).toHaveCount(0);
     const exportButton = button(admin, 'Xuất Excel');
+    await expect(exportButton.getByText('Xuất Excel', { exact: true })).toHaveCSS('color', 'rgb(0, 0, 0)');
     const ledgerTitle = await admin.getByRole('heading', { name: 'Sổ thu chi', exact: true }).boundingBox();
     const exportBounds = await exportButton.boundingBox();
     expect(ledgerTitle && exportBounds && ledgerTitle.x + ledgerTitle.width <= exportBounds.x &&

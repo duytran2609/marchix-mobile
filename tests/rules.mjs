@@ -288,6 +288,11 @@ try {
     trip: { destination: 'Hà Nội', host: 'Đối tác', estimatedCost: 1000000 } };
   await setDoc(tripRef, trip);
   await denied(updateDoc(tripRef, { 'trip.estimatedCost': -1 }));
+  await denied(updateDoc(tripRef, { 'trip.time': { from: '08:15' } }));
+  await denied(updateDoc(tripRef, { 'trip.time': { from: '12:30', to: '08:15' } }));
+  await updateDoc(tripRef, { 'trip.time': leaveTime });
+  assert.deepEqual((await getDocFromServer(tripRef)).get('trip.time'), leaveTime);
+  await denied(updateDoc(tripRef, { type: 'Đề xuất khác' }));
   await deleteDoc(tripRef);
   const overtimeRef = doc(db, 'requests', requestId + '-overtime');
   const overtime = { ...requestData, type: 'Làm thêm giờ', amount: 0, days: 0,

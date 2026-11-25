@@ -17,7 +17,7 @@ export type WorkspaceRoute =
   | { screen: 'cho-duyet'; detail?: { kind: 'cash' | 'request' | 'record'; id: string } }
   | { screen: 'ke-hoach-tuan' }
   | { screen: 'kpi' }
-  | { screen: 'cham-cong' }
+  | { screen: 'cham-cong'; checkInDate?: string }
   | { screen: 'don-tu'; requestId?: string; fromNotification?: true; fromPayrollMonth?: string }
   | { screen: 'thu-chi'; cashId?: string; fromProject?: string; fromNotification?: true; projectExpense?: ProjectExpenseSeed }
   | { screen: 'luong'; month?: string }

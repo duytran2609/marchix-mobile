@@ -70,41 +70,48 @@ const TaskCard = memo(function TaskCard({
 }) {
   const styles = useStyles();
   const ui = useScreenStyles();
-  const selectable = kanban ? false : undefined;
+  const openLabel = `Mở công việc: ${task.title}`;
+  const title = <Text numberOfLines={2} ellipsizeMode="tail" selectable={kanban ? false : undefined}
+    style={styles.cardTitle}>{task.title}</Text>;
+  if (kanban) return (
+    <Pressable accessibilityRole="button" accessibilityLabel={openLabel} onPress={() => onOpen(task)}
+      style={({ pressed }) => [styles.card, styles.kanbanCard, pressed && styles.pressed]}>
+      {title}
+      <TaskProgress task={task} variant="kanban" />
+    </Pressable>
+  );
+
   const overdueDays = daysOverdue(task, today);
   const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
   const due = !task.due ? taskUnsetLabel : task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   const personId = assigneeKey(task);
   const card = (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
+    <Pressable accessibilityRole="button" accessibilityLabel={openLabel}
       accessibilityHint={`Người thực hiện: ${assigneeName}. ${taskStatus(task)}. ${due}.${overdueLabel ? ` ${overdueLabel}.` : ''}`}
       onPress={() => onOpen(task)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={onDelete && styles.headerWithDelete}>
-        <ClickableCardHeader>
-          <Text numberOfLines={2} ellipsizeMode="tail" selectable={selectable}
-            style={styles.cardTitle}>{task.title}</Text>
-        </ClickableCardHeader>
+        <ClickableCardHeader>{title}</ClickableCardHeader>
       </View>
       <View style={styles.metadata}>
         <View style={[styles.metadataRow, styles.personRow]}>
-          <Text selectable={selectable} style={[styles.metadataText, styles.metaLabel]}>Người thực hiện:</Text>
+          <Text style={[styles.metadataText, styles.metaLabel]}>Người thực hiện:</Text>
           {personId ? <PeopleSummary people={[{ id: personId, name: assigneeName, photoURL: assigneePhoto }]}
-            textStyle={styles.metadataText} selectable={selectable} />
-            : <Text selectable={selectable} style={[styles.metadataText, ui.unsetValue]}>{taskUnsetLabel}</Text>}
+            textStyle={styles.metadataText} />
+            : <Text style={[styles.metadataText, ui.unsetValue]}>{taskUnsetLabel}</Text>}
         </View>
         <View style={[styles.metadataRow, styles.dueRow]}>
-          <Text selectable={selectable} style={styles.metadataText}>
+          <Text style={styles.metadataText}>
             <Text style={styles.metaLabel}>Hạn chót: </Text>
             {task.due ? formatTaskDate(task.due) : <Text style={ui.unsetValue}>{taskUnsetLabel}</Text>}
           </Text>
           {overdueLabel ? (
             <View style={styles.overdueTag}>
-              <Text selectable={selectable} style={styles.overdueText}>{overdueLabel}</Text>
+              <Text style={styles.overdueText}>{overdueLabel}</Text>
             </View>
           ) : null}
         </View>
         <View style={styles.metadataRow}>
-          <Text selectable={selectable} style={styles.metadataText}>
+          <Text style={styles.metadataText}>
             <Text style={styles.metaLabel}>Mức độ ưu tiên: </Text>
             <TaskPriority priority={task.priority} colored />
           </Text>
@@ -288,6 +295,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   ganttRange: { width: 116, maxWidth: '54%', marginLeft: 'auto' },
   clearButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   card: { gap: 9, padding: 13, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.paper },
+  kanbanCard: { gap: 8, padding: 10 },
   pressed: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   cardTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   headerWithDelete: { marginRight: 44 },

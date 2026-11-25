@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
-import { addDoc, collection, deleteDoc, deleteField, doc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, deleteField, doc, getDocsFromServer, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../services/firebase/firebase';
 import { attendanceId, dateKey, defaultSchedule } from './attendance';
 import type { Attendance, AttendanceRequest, Schedule } from './attendance';
@@ -25,6 +25,12 @@ export type AttendanceData = {
   requests: AttendanceRequest[];
   people: AttendanceMember[];
 };
+
+export async function hasAttendanceRecord(email: string, date: string) {
+  const records = query(collection(db, 'attendance'),
+    where('email', '==', email), where('date', '==', date));
+  return !(await getDocsFromServer(records)).empty;
+}
 
 export function watchAttendance(email: string, admin: boolean, onData: (data: AttendanceData) => void, onError: () => void) {
   const state: Partial<AttendanceData> = admin ? {} : { people: [] };

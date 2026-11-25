@@ -22,7 +22,7 @@ export const useScreenStyles = createThemedStyles(colors => StyleSheet.create({
   muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   metadataLabel: { color: colors.metadataLabel, fontWeight: '700' },
   metadataValue: metadataValueStyle(colors),
-  unsetValue: { color: colors.inputPlaceholder, fontWeight: '400' },
+  unsetValue: { color: colors.unsetValue, fontWeight: '400' },
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
