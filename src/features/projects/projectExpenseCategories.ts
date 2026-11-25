@@ -1,7 +1,7 @@
 const general = {
-  'Dự án · Chuẩn bị': ['Khảo sát, tư vấn dự án', 'Thiết kế, lập phương án', 'Hồ sơ, giấy phép dự án'],
-  'Dự án · Triển khai': ['Vật tư, hàng hóa dự án', 'Thiết bị dự án', 'Nhà thầu, dịch vụ dự án', 'Nhân sự dự án'],
-  'Dự án · Bàn giao': ['Kiểm thử, nghiệm thu', 'Đào tạo, bàn giao', 'Vận chuyển, công tác dự án', 'Chi khác của dự án'],
+  'Chuẩn bị': ['Khảo sát, tư vấn dự án', 'Thiết kế, lập phương án', 'Hồ sơ, giấy phép dự án'],
+  'Triển khai': ['Vật tư, hàng hóa dự án', 'Thiết bị dự án', 'Nhà thầu, dịch vụ dự án', 'Nhân sự dự án'],
+  'Bàn giao': ['Kiểm thử, nghiệm thu', 'Đào tạo, bàn giao', 'Vận chuyển, công tác dự án', 'Chi khác của dự án'],
 };
 
 const foodAndBeverage = {

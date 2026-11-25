@@ -3,13 +3,13 @@ import { Bytes } from 'firebase/firestore';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../../components/TextInput';
 import { AttachmentLabel } from '../../components/AttachmentLabel';
-import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../../components/PopupBody';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
+import { PopupHeader } from '../../components/PopupHeader';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
@@ -148,7 +148,6 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
   }
 
   const content = <View style={flatForm ? styles.stack : styles.panel}>
-    {existing && <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>}
     {!existing && <>
       <Dropdown required label="Loại văn bản" value={draft.kind} onChange={value => set('kind', value)} disabled={!!busy} highlightSelection={false}
         choices={[{ value: 'letter', label: recordKinds.letter }, { value: 'decision', label: recordKinds.decision }]} />
@@ -248,13 +247,17 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       { placeholder: issuing ? 'Nơi nhận, thời điểm, kênh gửi và tham chiếu' : undefined,
         multiline: true, required: issuing || voiding })}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <View style={[styles.choices, flatForm && popup.rightActions]}>
-      <Button label="Hủy" secondary disabled={!!busy} onPress={onCancel} />
-      <Button label={busy || (existing ? 'Xác nhận' : title)} disabled={!!busy} onPress={() => void submit()} />
-    </View>
-    {existing && preview && <AttachmentPreview downloadable={false} file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
-  if (existing) return content;
+  const footer = <View style={[styles.choices, flatForm && popup.rightActions]}>
+    <PopupAction label={busy || (existing ? 'Xác nhận' : title)} disabled={!!busy} onPress={() => void submit()} />
+  </View>;
+  if (existing) return <>
+    <View style={popup.editHeader}>
+      <PopupHeader title={title} closeLabel="Đóng biểu mẫu Văn thư" onClose={onCancel} disabled={!!busy} inset={false} />
+    </View>
+    <PopupBody contentContainerStyle={popup.editBody} footer={footer}>{content}</PopupBody>
+    {preview && <AttachmentPreview downloadable={false} file={preview} onClose={() => setPreview(undefined)} />}
+  </>;
   const close = () => {
     if (preview) setPreview(undefined);
     else if (!lock.current) onCancel();
@@ -264,13 +267,9 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
       <View role="dialog" accessibilityViewIsModal accessibilityLabel={incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
         style={[popup.card, { backgroundColor: colors.paper }]}>
         {preview ? <AttachmentPreview embedded downloadable={false} file={preview} onClose={() => setPreview(undefined)} /> : <>
-          <View style={popup.header}>
-            <Text accessibilityRole="header" style={[styles.cardTitle, { flex: 1 }]}>
-              {incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
-            </Text>
-            <PopupCloseButton label="Đóng biểu mẫu Văn thư" disabled={!!busy} onPress={close} />
-          </View>
-          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>{content}</KeyboardScrollView>
+          <PopupHeader title={incoming ? 'Vào sổ · Văn bản đến' : 'Lập bản nháp · Văn bản đi'}
+            closeLabel="Đóng biểu mẫu Văn thư" disabled={!!busy} onClose={close} />
+          <PopupBody contentContainerStyle={popup.body} footer={footer}>{content}</PopupBody>
         </>}
       </View>
     </KeyboardSafeAreaView>
@@ -280,8 +279,9 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
 const popup = StyleSheet.create({
   backdrop: { flex: 1, padding: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#17102588' },
   card: { width: '100%', maxWidth: 560, height: '92%', borderRadius: 18, overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, gap: 8 },
   body: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 8 },
+  editBody: { padding: 12 },
+  editHeader: { paddingHorizontal: 12, paddingTop: 8, flexShrink: 0 },
   field: { gap: 6 },
   filePicker: { padding: 16, alignItems: 'center', gap: 6, borderRadius: 9, borderWidth: 1, borderStyle: 'dashed' },
   fileAction: { fontSize: 14, fontWeight: '700' },

@@ -1,8 +1,9 @@
 import { EmptyState } from '../components/EmptyState';
-import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../components/TextInput';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -14,7 +15,7 @@ import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { FilePickerButton } from '../components/FilePickerButton';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
 import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
 import { useToast } from '../components/Toast';
 import { canAct, cashStatus, cashStatuses, cashTotals, categories, changeCash, createCash, displayDate,
@@ -67,11 +68,11 @@ function Field({ label, value, onChange, limit = 250, numeric = false, placehold
   </View>;
 }
 
-function CashForm({ type, row, seed, projects, ledger, approvers, access, operationLock, inPopup, onBack, onSaved }: {
+function CashForm({ type, row, seed, projects, ledger, approvers, access, operationLock, notice, onBack, onSaved }: {
   type: CashType; row?: Cash; projects: Project[]; ledger: Cash[] | null; approvers: Option[]; access: CashAccess;
   seed?: ProjectExpenseSeed;
   operationLock?: { current: boolean };
-  inPopup?: boolean;
+  notice?: ReactNode;
   onBack: () => void; onSaved: (id: string, date: string) => void;
 }) {
   const styles = useScreenStyles();
@@ -86,6 +87,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
   const categoryGroups: Record<string, string[]> = type === 'chi' && (seed || row?.projectLinkLocked)
     ? projectExpenseCategories(expenseProfile, row?.category || seed?.category) : categories[type];
   const refund = seed?.refund || (row?.budgetFlow === 'depositReturn' || row?.budgetFlow === 'expenseRefund' ? row.budgetFlow : undefined);
+  const projectExpenseRequest = type === 'chi' && !!seed;
   const [group, setGroup] = useState(() => Object.entries(categoryGroups).find(([, list]) => list.includes(values.category))?.[0] || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -155,7 +157,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
       <Field required label="Nội dung" value={values.note} onChange={set('note')} limit={1000} />
       <Field required label="Số tiền (VNĐ)" value={formatAmount(values.amount)}
         onChange={value => set('amount')(amountDigits(value))} numeric limit={32} />
-      {type === 'chi' && amount > expenseLimit && <Text style={styles.error}>Khoản chi trên 2.000.000 đ cần duyệt bằng văn bản trước khi chi.</Text>}
+      {type === 'chi' && amount > expenseLimit && <Text style={styles.error}>Khoản chi trên 2.000.000 VNĐ cần duyệt bằng văn bản trước khi chi.</Text>}
       <DateCalendarField required label="Ngày giao dịch" value={validDate(values.date) ? values.date : ''}
         onChange={set('date')} disabled={busy} />
       <View style={local.pair}>
@@ -166,7 +168,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
           placeholder={type === 'thu' ? 'Chọn hạng mục' : undefined} onChange={set('category')} disabled={!!refund || (type === 'chi' && !group)} />
         {type === 'thu' && projectPicker}
       </View>
-      {type === 'chi' && projectPicker}
+      {type === 'chi' && !projectExpenseRequest && projectPicker}
       {seed && <Field label="Mã khoản dự toán" value={values.budgetCode} onChange={set('budgetCode')} limit={80} />}
       {type === 'chi' && access.canReadCash && ledger && cap > 0 && committed + amount > cap &&
         <Text style={styles.error}>Khoản này sẽ vượt trần vốn dự án ({vnd.format(cap)}) nếu được duyệt.</Text>}
@@ -198,28 +200,30 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
           onPress={() => setPicked(current => current.filter((_, i) => i !== index))} />
       </View>)}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <Button label={busy ? 'Đang lưu…' : row ? 'Lưu thay đổi' : 'Gửi khoản ' + type} onPress={() => void save()} disabled={busy || picking} />
-      <Button label={row ? 'Quay lại' : 'Hủy'} secondary onPress={onBack} disabled={busy || picking} />
   </>;
-  if (row) return <View style={[styles.panel, inPopup && local.popupContent]}>
-    <Text accessibilityRole="header" style={styles.heading}>Sửa khoản {type}</Text>
-    {fields}
-  </View>;
+  const saveAction = <PopupAction label={busy ? 'Đang lưu…' : row ? 'Lưu thay đổi' : 'Gửi khoản ' + type}
+    onPress={() => void save()} disabled={busy || picking} />;
+  if (row) return <PopupBody footer={<>
+    {saveAction}
+    {!projectExpenseRequest && <PopupAction label="Quay lại" secondary onPress={onBack} disabled={busy || picking} />}
+  </>}>
+    {notice}
+    <View style={[styles.panel, local.popupContent]}>
+      <Text accessibilityRole="header" style={styles.heading}>Sửa khoản {type}</Text>
+      {fields}
+    </View>
+  </PopupBody>;
 
   const close = () => { if (!lock.current) onBack(); };
   return <Modal transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
     <SafeAreaView style={local.formOverlay}>
       <KeyboardViewport style={local.formKeyboard}>
         <View style={[styles.panel, local.formPanel]}>
-          <View style={local.formHeader}>
-            <Text accessibilityRole="header" style={styles.heading}>{seed
-              ? refund ? 'Đề nghị thu hoàn dự án' : 'Đề nghị chi dự án'
-              : 'Tạo đề nghị ' + type}</Text>
-            <PopupCloseButton label="Đóng đề nghị" onPress={close} disabled={busy || picking} />
-          </View>
-          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={local.formBody}>
+          <PopupHeader title={seed ? refund ? 'Đề nghị thu hoàn dự án' : 'Đề nghị chi dự án' : 'Tạo đề nghị ' + type}
+            closeLabel="Đóng đề nghị" onClose={close} disabled={busy || picking} inset={false} />
+          <PopupBody inset={false} contentContainerStyle={local.formBody} footer={saveAction}>
             {fields}
-          </KeyboardScrollView>
+          </PopupBody>
         </View>
       </KeyboardViewport>
     </SafeAreaView>
@@ -234,9 +238,10 @@ function writeError(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Không lưu được khoản thu chi.';
 }
 
-function CashDetail({ row, access, approvers, project, operationLock, onEdit }: {
+function CashDetail({ row, access, approvers, project, operationLock, notice, onEdit }: {
   row: Cash; access: CashAccess; approvers: Option[]; project: string;
   operationLock: { current: boolean };
+  notice?: ReactNode;
   onEdit: () => void;
 }) {
   const styles = useScreenStyles();
@@ -277,7 +282,22 @@ function CashDetail({ row, access, approvers, project, operationLock, onEdit }: 
     ['Ý kiến xử lý', row.approvalNote], ['Người xác nhận', row.paidBy], ['Ngày xác nhận', formatVietnamDateTime(row.paidAt)],
     ['Hóa đơn / báo giá', row.invoiceRef], ['Mã chứng từ / giao dịch', row.ref], ['Mã hồ sơ', row.id],
   ];
-  return <View style={[styles.panel, local.popupContent]}>
+  return <PopupBody footer={(can('route') || can('approve') || can('requeue') || can('record')) && <>
+    {can('route') && <PopupAction label="Lưu người duyệt" onPress={() => void handle('route', assignee)}
+      disabled={busy || !assignee || assignee === row.approverEmail || !eligibleApprovers.some(option => option.id === assignee)} />}
+    {can('approve') && <View style={styles.choices}>
+      <PopupAction label="Duyệt" onPress={() => void handle('approve', note)} disabled={busy} />
+      <PopupAction label="Từ chối" secondary onPress={() => void handle('reject', note)} disabled={busy} />
+    </View>}
+    {can('requeue') && <PopupAction label="Đưa về chờ duyệt" secondary onPress={() => void handle('requeue')} disabled={busy} />}
+    {can('record') && <>
+      <PopupAction label={confirm ? 'Xác nhận giao dịch đã hoàn tất' : row.type === 'chi' ? 'Xác nhận đã chi' : 'Xác nhận đã thu'}
+        onPress={() => void handle('record', proof)} disabled={busy} />
+      {confirm && <PopupAction label="Hủy xác nhận" secondary onPress={() => setConfirm(false)} disabled={busy} />}
+    </>}
+  </>}>
+  {notice}
+  <View style={[styles.panel, local.popupContent]}>
     <View style={local.detailActions}>
       <Text style={styles.badge}>{cashStatus(row)}</Text>
       {can('edit') && <Button label="Sửa khoản này" secondary onPress={onEdit} disabled={busy} />}
@@ -295,30 +315,17 @@ function CashDetail({ row, access, approvers, project, operationLock, onEdit }: 
       <SearchableChoiceDropdown title="Người duyệt" items={eligibleApprovers} selected={assignee ? [assignee] : []}
         disabled={busy} label="Tìm người duyệt" emptyMessage="Không có người duyệt phù hợp."
         onToggle={id => setAssignee(current => current === id ? '' : id)} />
-      <Button label="Lưu người duyệt" onPress={() => void handle('route', assignee)}
-        disabled={busy || !assignee || assignee === row.approverEmail || !eligibleApprovers.some(option => option.id === assignee)} />
     </View>}
-    {can('approve') && <>
-      <Field label="Ý kiến xử lý" value={note} onChange={setNote} limit={500} requiredFor="khi từ chối" />
-      <View style={styles.choices}>
-        <Button label="Duyệt" onPress={() => void handle('approve', note)} disabled={busy} />
-        <Button label="Từ chối" secondary onPress={() => void handle('reject', note)} disabled={busy} />
-      </View>
-    </>}
-    {can('requeue') && <>
-      <Text style={styles.muted}>Khoản cũ chưa có người duyệt hợp lệ. Đưa về Chờ duyệt trước khi xác nhận giao dịch.</Text>
-      <Button label="Đưa về chờ duyệt" secondary onPress={() => void handle('requeue')} disabled={busy} />
-    </>}
+    {can('approve') && <Field label="Ý kiến xử lý" value={note} onChange={setNote} limit={500} requiredFor="khi từ chối" />}
+    {can('requeue') && <Text style={styles.muted}>Khoản cũ chưa có người duyệt hợp lệ. Đưa về Chờ duyệt trước khi xác nhận giao dịch.</Text>}
     {can('record') && <>
       <Field required label="Mã chứng từ hoặc tham chiếu giao dịch" value={proof}
         onChange={value => { setProof(value); setConfirm(false); }} limit={150} />
       {confirm && <Text style={styles.muted}>Chỉ xác nhận khi giao dịch {vnd.format(row.amount)} đã thực sự hoàn tất.</Text>}
-      <Button label={confirm ? 'Xác nhận giao dịch đã hoàn tất' : row.type === 'chi' ? 'Xác nhận đã chi' : 'Xác nhận đã thu'}
-        onPress={() => void handle('record', proof)} disabled={busy} />
-      {confirm && <Button label="Hủy xác nhận" secondary onPress={() => setConfirm(false)} disabled={busy} />}
     </>}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-  </View>;
+  </View>
+  </PopupBody>;
 }
 
 export function CashScreen({ access, initialCashId, projectExpense, onBackToReview, backLabel = 'Về Phê duyệt' }: {
@@ -376,11 +383,15 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
     finally { setExporting(false); }
   }
   const editRow = editor?.row && selectedRow && canAct('edit', selectedRow, access) ? editor.row : undefined;
+  const detailNotice = onBackToReview && lookupError && <View style={styles.panel}>
+    <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
+    <Button label="Tải lại danh mục" secondary onPress={reload} />
+  </View>;
   function renderForm(kind: CashType, row?: Cash) {
     return <CashForm type={kind} row={row} seed={row ? undefined : editor?.seed} access={access} projects={projects} ledger={rows}
       approvers={approvers.filter(option => option.id !== email)}
       operationLock={row ? detailLock : undefined}
-      inPopup={!!row}
+      notice={row ? detailNotice : undefined}
       onBack={() => {
         if (!row && projectExpense && onBackToReview) return onBackToReview();
         setEditor(undefined);
@@ -396,14 +407,18 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
   const detail = editRow ? renderForm(editRow.type, editRow) : selectedRow ? <CashDetail
       key={selectedRow.id + ':' + (selectedRow.updatedAt || '')} row={selectedRow} access={access}
       approvers={approvers} project={projectName(selectedRow.projectId)}
+      notice={detailNotice}
       operationLock={detailLock}
-      onEdit={() => setEditor({ type: selectedRow.type, row: selectedRow })} /> : <View style={[styles.panel, local.popupContent]}>
+      onEdit={() => setEditor({ type: selectedRow.type, row: selectedRow })} />
+    : <PopupBody footer={error && <PopupAction label="Thử lại" secondary onPress={reload} />}>
+    {detailNotice}
+    <View style={[styles.panel, local.popupContent]}>
       {error ? <>
         <Text accessibilityRole="alert" style={styles.error}>Không tải được khoản thu chi.</Text>
-        <Button label="Thử lại" secondary onPress={reload} />
       </> : !rows || awaiting === selected ? <ActivityIndicator accessibilityLabel="Đang tải giao dịch" color={colors.accent} />
         : <Text style={styles.muted}>Khoản thu chi này không còn trong phạm vi bạn được xem.</Text>}
-    </View>;
+    </View>
+  </PopupBody>;
   if (projectExpense && editor && !editor.row) return renderForm(editor.type);
   return <>
     {!onBackToReview && <View style={styles.stack}>
@@ -498,17 +513,9 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
           <KeyboardViewport style={local.formKeyboard}>
             <View role="dialog" accessibilityViewIsModal accessibilityLabel="Chi tiết khoản thu chi"
               style={[local.formPanel, local.detailPopup]}>
-              <View style={[local.formHeader, local.detailHeader]}>
-                <Text style={styles.cardTitle}>Chi tiết khoản thu chi</Text>
-                <PopupCloseButton label={onBackToReview ? backLabel : "Đóng chi tiết khoản thu chi"} onPress={back} />
-              </View>
-              <KeyboardScrollView key={editRow ? 'edit' : 'detail'} style={local.detailBody} keyboardShouldPersistTaps="handled">
-                {onBackToReview && lookupError && <View style={styles.panel}>
-                  <Text style={styles.muted}>Chưa tải được đầy đủ dự án hoặc danh sách người duyệt.</Text>
-                  <Button label="Tải lại danh mục" secondary onPress={reload} />
-                </View>}
-                {detail}
-              </KeyboardScrollView>
+              <PopupHeader title="Chi tiết khoản thu chi"
+                closeLabel={onBackToReview ? backLabel : 'Đóng chi tiết khoản thu chi'} onClose={back} />
+              {detail}
             </View>
           </KeyboardViewport>
         </SafeAreaView>
@@ -522,11 +529,8 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   formOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   formKeyboard: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   formPanel: { width: '100%', maxWidth: 560, maxHeight: '100%', flexShrink: 1 },
-  formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   formBody: { gap: 12, paddingBottom: 2 },
   detailPopup: { backgroundColor: colors.paper, borderRadius: 16, overflow: 'hidden' },
-  detailHeader: { paddingLeft: 16, paddingRight: 8, paddingTop: 4 },
-  detailBody: { flexGrow: 0 },
   detailActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   popupContent: { borderWidth: 0, borderRadius: 0 },
   entryTag: { alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,

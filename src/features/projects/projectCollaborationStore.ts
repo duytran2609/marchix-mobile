@@ -18,8 +18,7 @@ export type ProjectPost = ProjectComment & {
 };
 export type ProjectLibraryFile = TaskAttachment & { folderPath: string; createdAt?: Timestamp; createdBy: string };
 export type ProjectFolder = { id: string; path: string };
-export type CollaborationMember = { id: string; name: string; role: string; enabled?: boolean };
-export type ProjectUpload = PickedAttachment & { relativeFolder?: string };
+export type CollaborationMember = { id: string; name: string; role: string; enabled?: boolean; photoURL?: string | null };
 
 const projectRef = (projectId: string) => doc(db, 'projects', projectId);
 const projectCollection = (projectId: string, name: string) => collection(projectRef(projectId), name);
@@ -61,12 +60,11 @@ export function watchProjectLike(projectId: string, postId: string, email: strin
   }, () => receive(false));
 }
 
-async function attach(batch: WriteBatch, projectId: string, email: string, folder: string, picked: ProjectUpload[]) {
+async function attach(batch: WriteBatch, projectId: string, email: string, folderPath: string, picked: PickedAttachment[]) {
+  if (folderPath.length > 500) throw Error('Đường dẫn thư mục quá dài.');
   const files = writeScopedFiles(batch, projectRef(projectId), 'projects', await prepareCashFiles(picked),
     email, new Date().toISOString());
-  for (const [index, { id, ...file }] of files.entries()) {
-    const folderPath = [folder, picked[index].relativeFolder].filter(Boolean).join('/');
-    if (folderPath.length > 500) throw Error('Đường dẫn thư mục quá dài.');
+  for (const { id, ...file } of files) {
     batch.set(doc(projectCollection(projectId, 'library'), id), {
       ...file, folderPath, createdBy: email, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
@@ -147,7 +145,7 @@ export async function createProjectFolder(projectId: string, email: string, pare
   return path;
 }
 
-export async function uploadProjectFiles(projectId: string, email: string, folderPath: string, files: ProjectUpload[]) {
+export async function uploadProjectFiles(projectId: string, email: string, folderPath: string, files: PickedAttachment[]) {
   if (!files.length) throw Error('Chọn tệp trước khi tải lên.');
   const batch = writeBatch(db);
   await attach(batch, projectId, email, folderPath || 'Chung', files);
@@ -156,16 +154,6 @@ export async function uploadProjectFiles(projectId: string, email: string, folde
 
 export function moveProjectFile(projectId: string, fileId: string, folderPath: string) {
   return updateDoc(doc(projectCollection(projectId, 'library'), fileId), { folderPath, updatedAt: serverTimestamp() });
-}
-
-export async function saveProjectCollaborators(projectId: string, current: string[], next: string[]) {
-  if (next.length > 50) throw Error('Tối đa 50 thành viên phối hợp.');
-  const ref = projectRef(projectId);
-  await runTransaction(db, async tx => {
-    const saved = (await tx.get(ref)).data()?.collaborators ?? [];
-    if (JSON.stringify(saved) !== JSON.stringify(current)) throw Error('Quyền nhóm vừa thay đổi. Mở lại danh sách thành viên.');
-    tx.update(ref, { collaborators: next });
-  });
 }
 
 export async function readProjectAttachment(projectId: string, file: TaskAttachment): Promise<AttachmentFile> {

@@ -11,6 +11,7 @@ import { PageHeader } from '../components/PageHeader';
 import { OverviewGreeting } from '../components/OverviewGreeting';
 import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
+import { DailyChecklist } from '../features/daily-checklist/DailyChecklist';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
 import type { Project } from '../features/projects/projects';
 import { pendingRequest, watchRequests } from '../features/requests/requests';
@@ -121,10 +122,10 @@ export function OverviewScreen({
 
   useEffect(() => {
     const stopProjects = watchProjects(setProjects, () => setProjects('error'));
-    const stopCash = isAdmin || canReadCash
+    const stopCash = isAdmin || canReadCash || canReviewCash
       ? watchCash({ email, isAdmin, canReadCash, canReviewCash }, setCash, () => setCash('error'))
       : undefined;
-    const stopRequests = isAdmin
+    const stopRequests = isAdmin || canReviewRequests
       ? watchRequests({ email, isAdmin, canReviewRequests }, setRequests, () => setRequests('error'))
       : undefined;
     const stopTasks = useOverviewTasks
@@ -257,6 +258,8 @@ export function OverviewScreen({
   return <>
     <PageHeader title="Tổng quan" />
     <OverviewGreeting name={name} email={email} />
+    <DailyChecklist email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
+      canReviewRequests={canReviewRequests} cash={cash} requests={requests} onNavigate={onNavigate} onRetry={reload} />
     {isAdmin && <View style={screen.choices}>
       <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
         onPress={() => setShowDecisions(value => !value)} />

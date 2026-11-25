@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../components/TextInput';
-import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { KeyboardViewport } from '../components/KeyboardViewport';
 import { PageHeader } from '../components/PageHeader';
 import { Metric, useMetricStyles } from '../components/Metric';
@@ -12,7 +12,7 @@ import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
 import { ToastLayer, useToast } from '../components/Toast';
 import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
@@ -358,13 +358,14 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
       <KeyboardViewport style={styles.editorCenter}
         aria-hidden={confirmDelete} importantForAccessibility={confirmDelete ? 'no-hide-descendants' : 'auto'}>
         <View role="dialog" accessibilityLabel="Sửa công" accessibilityViewIsModal style={[ui.panel, styles.editorPanel]}>
-          <View style={ui.listHeader}>
-            <Text accessibilityRole="header" style={[ui.cardTitle, ui.listHeading]}>Sửa công</Text>
-            {record && <DeleteIconButton label="Xóa bản ghi chấm công" disabled={pending || confirmDelete}
-              onPress={() => { setError(''); setConfirmDelete(true); }} />}
-            <PopupCloseButton label="Đóng sửa công" onPress={onClose} disabled={pending || confirmDelete} />
-          </View>
-          <KeyboardScrollView style={styles.editorScroll} contentContainerStyle={ui.stack} keyboardShouldPersistTaps="handled">
+          <PopupHeader title="Sửa công" closeLabel="Đóng sửa công" onClose={onClose}
+            disabled={pending || confirmDelete} inset={false}
+            actions={record && <DeleteIconButton label="Xóa bản ghi chấm công" disabled={pending || confirmDelete}
+              onPress={() => { setError(''); setConfirmDelete(true); }} />} />
+          <PopupBody inset={false} contentContainerStyle={ui.stack} footer={
+            <PopupAction label={pending && !confirmDelete ? 'Đang lưu…' : 'Lưu điều chỉnh'}
+              disabled={pending || confirmDelete} onPress={() => void submit(false)} />
+          }>
             <View style={styles.scheduleDetails}>
               {details.map(([label, value]) => <Text key={label} style={[styles.scheduleText, ui.metadataValue]}>
                 <Text style={ui.metadataLabel}>{label}: </Text>{value}
@@ -384,9 +385,7 @@ function AdjustmentEditor({ target, email, onClose }: { target: AttendanceEditTa
             <TextInput accessibilityLabel="Lý do điều chỉnh" value={note} onChangeText={setNote} maxLength={1000}
               editable={!pending && !confirmDelete} style={ui.input} />
             {!!error && !confirmDelete && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
-            <Button label={pending && !confirmDelete ? 'Đang lưu…' : 'Lưu điều chỉnh'}
-              disabled={pending || confirmDelete} onPress={() => void submit(false)} />
-          </KeyboardScrollView>
+          </PopupBody>
         </View>
       </KeyboardViewport>
       {confirmDelete && <ConfirmDialog label="Xác nhận xóa bản ghi chấm công" title="Xóa bản ghi chấm công?"
@@ -419,5 +418,4 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   editorOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   editorCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   editorPanel: { width: '100%', maxWidth: 520, flexShrink: 1 },
-  editorScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
 }));

@@ -12,7 +12,8 @@ import { Button } from '../components/Button';
 import { ChoiceButtons } from '../components/ChoiceButtons';
 import { FieldLabel } from '../components/FieldLabel';
 import { PeopleSummary } from '../components/PeopleSummary';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
+import { PopupAction, popupActionText } from '../components/PopupBody';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
@@ -212,14 +213,14 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   }
 
   const editButton = canEditAssignment ? <Button label="Chỉnh sửa" secondary={!inPopup} disabled={!!busy}
-    style={inPopup && [styles.popupAction, styles.popupEditButton]} labelStyle={inPopup && styles.popupEditLabel}
+    style={inPopup && [styles.popupAction, styles.popupEditButton]} labelStyle={inPopup && [styles.popupEditLabel, popupActionText]}
     onPress={() => {
       setSavedAssignment(undefined);
       setAssignmentDraft(liveTask);
     }} /> : null;
   const remindButton = canRemind ? <Button secondary
     label={busy === 'reminder' ? 'Đang tạo thông báo…' : reminderSent ? 'Đã nhắc việc' : 'Nhắc việc'}
-    style={inPopup && styles.popupAction} labelStyle={inPopup && styles.popupActionLabel}
+    style={inPopup && styles.popupAction} labelStyle={inPopup && [styles.popupActionLabel, popupActionText]}
     disabled={!!busy || reminderSent} onPress={() => void sendReminder()} /> : null;
   const header = <>
     {!inPopup && <View style={styles.taskDetailHeader}>
@@ -239,6 +240,12 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
         : <EmptyState icon="note" message={taskUnsetLabel} />}
     </View>
   </View>;
+  const ProgressAction = inPopup ? PopupAction : Button;
+  const saveProgressButton = canEdit && <ProgressAction label={busy === 'progress' ? 'Đang lưu…' : 'Lưu tiến độ'}
+    onPress={save} disabled={!!busy} />;
+  const reportCompletionButton = canReport && <ProgressAction label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
+    disabled={!!busy || !!reportBlockReason}
+    onPress={() => void changeWorkflow('report', () => reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />;
   const general = isGeneral && <>
     <TaskMetadata task={liveTask} email={email} name={name} members={members} project={project} />
     <TaskProgress task={liveTask} previewStatus={previewStatus} previewProgress={previewProgress} variant="detail" />
@@ -257,7 +264,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
               }
             }} />
       </>}
-      <Button label={busy === 'progress' ? 'Đang lưu…' : 'Lưu tiến độ'} onPress={save} disabled={!!busy} />
+      {!inPopup && saveProgressButton}
     </> : null}
   </>;
   const generalActions = isGeneral && <>
@@ -301,10 +308,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
               style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
               value={reportNote} onChangeText={setReportNote} editable={!busy} />
           </>}
-        <Button label={busy === 'report' ? 'Đang lưu…' : 'Báo hoàn thành'}
-          disabled={!!busy || !!reportBlockReason}
-          onPress={() => void changeWorkflow('report', () =>
-            reportTaskCompletion({ taskId: liveTask.id, note: reportNote }))} />
+        {!inPopup && reportCompletionButton}
       </View>
     ) : null}
     {liveTask.rating || liveTask.reviewNote ? (
@@ -334,6 +338,10 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
             {description}
             {discussion}
           </KeyboardScrollView>
+          {isGeneral && (saveProgressButton || reportCompletionButton) && <View style={styles.popupWorkflowActions}>
+            {saveProgressButton}
+            {reportCompletionButton}
+          </View>}
           {editButton && <View style={[styles.popupActions, hasComposer && styles.beforeComposer]}>
             {remindButton}
             {editButton}
@@ -393,15 +401,11 @@ export function TaskDetailPopup({ id, task, email, name, onClose }: {
   id: string; task?: Task; email: string; name: string; onClose: () => void;
 }) {
   const styles = useStyles();
-  const screenStyles = useScreenStyles();
   return <Modal transparent visible onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
     <SafeAreaView style={styles.popupOverlay}>
       <KeyboardViewport style={styles.popupCenter}>
         <View role="dialog" accessibilityLabel="Chi tiết công việc" accessibilityViewIsModal style={styles.popup}>
-          <View style={styles.popupHeader}>
-            <Text style={screenStyles.cardTitle}>Chi tiết công việc</Text>
-            <PopupCloseButton label="Đóng chi tiết công việc" onPress={onClose} />
-          </View>
+          <PopupHeader title="Chi tiết công việc" closeLabel="Đóng chi tiết công việc" onClose={onClose} />
           {task ? <TaskDetailScreen liveTask={task} email={email} name={name} />
             : <LinkedTaskDetail id={id} email={email} name={name} />}
         </View>
@@ -416,13 +420,12 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupOverlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   popupCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   popup: { width: '100%', maxWidth: 560, flexShrink: 1, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.paper },
-  popupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
   popupBody: { flexShrink: 1, minHeight: 0, paddingTop: 16, gap: 14 },
   popupContent: { flexShrink: 1, minHeight: 0, gap: 14 },
   popupTabs: { marginHorizontal: 16, flexShrink: 0 },
   popupActions: { flexDirection: 'row', gap: 8,
     paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
+  popupWorkflowActions: { paddingHorizontal: 16, paddingBottom: 16, gap: 8, flexShrink: 0 },
   popupAction: { flex: 1, minWidth: 0 },
   popupActionLabel: { textAlign: 'center' },
   popupEditButton: { backgroundColor: lightColors.accent },

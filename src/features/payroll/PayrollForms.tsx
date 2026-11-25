@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../../components/TextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../../components/PopupBody';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -10,7 +10,7 @@ import { Dropdown } from '../../components/Dropdown';
 import { FieldLabel } from '../../components/FieldLabel';
 import { NumberStepper } from '../../components/NumberStepper';
 import type { NumberStepBounds } from '../../components/NumberStepper';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
+import { PopupHeader } from '../../components/PopupHeader';
 import { useInformationStyles, useScreenStyles } from '../../theme/screenStyles';
 import { DateCalendarField } from '../tasks/CalendarDialog';
 import { amount, calculatePay, contracts, employeeStatuses, emptyEmployee, locked, money } from './payroll';
@@ -63,13 +63,8 @@ export function PayrollModal({ title, busy, onClose, children }: {
     <SafeAreaView style={popup.overlay}>
       <KeyboardViewport style={popup.center}>
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={[styles.panel, popup.panel]}>
-          <View style={styles.listHeader}>
-            <Text accessibilityRole="header" style={[styles.cardTitle, styles.listHeading]}>{title}</Text>
-            <PopupCloseButton label="Đóng" onPress={onClose} disabled={busy} />
-          </View>
-          <KeyboardScrollView style={popup.scroll} contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-            {children}
-          </KeyboardScrollView>
+          <PopupHeader title={title} closeLabel="Đóng" onClose={onClose} disabled={busy} inset={false} />
+          {children}
         </View>
       </KeyboardViewport>
     </SafeAreaView>
@@ -80,7 +75,6 @@ const popup = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   panel: { width: '100%', maxWidth: 560, flexShrink: 1 },
-  scroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
 });
 
 const employeeTextFields = [
@@ -125,8 +119,8 @@ function TextField({ label, value, onChange, busy, kind = 'text', required, step
   </View>;
 }
 
-export function EmployeeForm({ employee, busy, onSave }: {
-  employee?: Employee; busy: boolean; onSave: (fields: EmployeeFields) => void;
+export function EmployeeForm({ employee, busy, onSave, saveError }: {
+  employee?: Employee; busy: boolean; onSave: (fields: EmployeeFields) => void; saveError?: string;
 }) {
   const styles = useScreenStyles();
   const [fields, setFields] = useState({ ...emptyEmployee, ...employee });
@@ -153,7 +147,9 @@ export function EmployeeForm({ employee, busy, onSave }: {
       contract, status, salary: Number(numbers.salary), insSalary: Number(numbers.insSalary),
       allowTaxable: Number(numbers.allowTaxable), allowFree: Number(numbers.allowFree), dependents: Number(numbers.dependents) });
   }
-  return <>
+  return <PopupBody inset={false} contentContainerStyle={styles.stack}
+    footer={<PopupAction label="Lưu hồ sơ" disabled={busy} onPress={save} />}>
+    {!!saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
     {employeeTextFields.map(([key, label]) => key === 'startDate'
       ? <DateCalendarField key={key} label={label} value={fields[key]} clearLabel="Bỏ ngày"
           disabled={busy} onChange={day => change(key, day)} />
@@ -173,14 +169,15 @@ export function EmployeeForm({ employee, busy, onSave }: {
       kind={kind} stepBounds={key === 'dependents' ? { min: 0 } : undefined}
       onChange={value => setNumbers(current => ({ ...current, [key]: value }))} />)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <Button label="Lưu hồ sơ" disabled={busy} onPress={save} />
-  </>;
+  </PopupBody>;
 }
 
-export function PayEditor({ employee, month, rates, advances, slip, pay, busy, onSave, onReopen, onOpenAdvance }: {
+export function PayEditor({ employee, month, rates, advances, slip, pay, busy, onSave, onReopen, onOpenAdvance, saveError, actions }: {
   employee: Employee; month: string; rates: Rates; advances?: PayrollAdvance[]; slip?: Payslip; pay: PayAmounts;
   busy: boolean; onSave: (input: PayInputs) => void; onReopen: () => void;
   onOpenAdvance: (requestId: string) => void;
+  saveError?: string;
+  actions?: React.ReactNode;
 }) {
   const styles = useScreenStyles();
   const [input, setInput] = useState(() => Object.fromEntries(payFields.map(([key]) => [key, String(amount(pay[key]))])));
@@ -194,7 +191,15 @@ export function PayEditor({ employee, month, rates, advances, slip, pay, busy, o
     && [input.bonus, input.deduction].every(value => /^\d*$/.test(value) && Number.isSafeInteger(Number(value)));
   const isLocked = locked(slip);
   const preview = !isLocked && valid ? calculatePay(employee, values, month, rates, pay.advance) : pay;
-  return <>
+  return <PopupBody inset={false} contentContainerStyle={styles.stack} footer={<>
+    {isLocked ? slip?.status === 'Đã chốt' && <PopupAction label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
+      : <PopupAction label="Lưu dòng lương" disabled={busy} onPress={() => {
+        if (valid) onSave(values);
+        else setError('Nhập số ngày công hợp lệ từ 0 đến 31, công chuẩn lớn hơn 0 và các khoản tiền không âm.');
+      }} />}
+    {actions}
+  </>}>
+    {!!saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
     <Text style={styles.badge}>{slip?.status || 'Nháp'}</Text>
     {!isLocked && payFields.map(([key, label, kind]) => <TextField key={key} label={label} value={input[key]} busy={busy} kind={kind}
       required={key === 'workDays' || key === 'standardDays'}
@@ -202,10 +207,5 @@ export function PayEditor({ employee, month, rates, advances, slip, pay, busy, o
       onChange={value => { setError(''); setInput(current => ({ ...current, [key]: value })); }} />)}
     <PayBreakdown pay={preview} showTaxable advances={advances} onOpenAdvance={onOpenAdvance} />
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {isLocked ? slip?.status === 'Đã chốt' && <Button label="Mở lại dòng lương" secondary disabled={busy} onPress={onReopen} />
-      : <Button label="Lưu dòng lương" disabled={busy} onPress={() => {
-        if (valid) onSave(values);
-        else setError('Nhập số ngày công hợp lệ từ 0 đến 31, công chuẩn lớn hơn 0 và các khoản tiền không âm.');
-      }} />}
-  </>;
+  </PopupBody>;
 }

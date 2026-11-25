@@ -62,9 +62,11 @@ export async function loadNotification(id: string, email: string) {
   return row.exists() && row.get('to') === email ? readNotification(row) : undefined;
 }
 
-export function watchNotifications(email: string, onChange: (notes: WorkspaceNotification[]) => void, onError: () => void) {
+export function watchNotifications(email: string, onChange: (notes: WorkspaceNotification[]) => void, onError: () => void,
+  confirmedOnly = false) {
   const inbox = query(collection(db, 'notifications'), where('to', '==', email));
-  return onSnapshot(inbox, snapshot => {
+  return onSnapshot(inbox, { includeMetadataChanges: confirmedOnly }, snapshot => {
+    if (confirmedOnly && (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) return;
     const notes = snapshot.docs.map(readNotification);
     onChange(notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }, onError);

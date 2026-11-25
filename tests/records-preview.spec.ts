@@ -78,7 +78,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
     await expect(body).toHaveCSS('padding-left', '0px');
     const confirm = dialog.getByRole('button', { name: 'Xác nhận', exact: true });
     await expect(confirm.locator('..')).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-    await expect(confirm.locator('..').getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
     const file = dialog.getByRole('button', { name: 'marchix.pdf', exact: true });
     const remove = file.locator('..').getByRole('button', { name: 'Bỏ tệp marchix.pdf', exact: true });
     await expect(file.locator('..')).toHaveCSS('border-top-width', '1px');
@@ -116,7 +116,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(processingBody).toHaveCSS('border-top-width', '0px');
   await expect(processingBody).toHaveCSS('padding-left', '0px');
   await processing.getByLabel('Ghi chú xử lý').fill('Ghi chú đã hủy');
-  await processing.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await processing.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
   await expect(detail.getByText('Đã giao', { exact: true })).toBeVisible();
   await button('Bắt đầu xử lý').click();
   await expect(processing.getByLabel('Ghi chú xử lý')).toHaveValue('');
@@ -131,7 +131,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(completionBody).toHaveCSS('padding-left', '0px');
   const completionActions = completion.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
   await expect(completionActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-  await completionActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await completion.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
   await expect(detail.getByText('Đang xử lý', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
   await button('Lịch sử').click();
@@ -192,7 +192,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(assignmentBody).toHaveCSS('padding-left', '0px');
   const assignmentActions = assignment.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
   await expect(assignmentActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-  await assignmentActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await assignment.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
   await expect(detail.getByText('Đã vào sổ', { exact: true })).toBeVisible();
   await button('Về sổ văn thư').click();
 
@@ -253,7 +253,7 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await expect(archiveBody).toHaveCSS('padding-left', '0px');
   const archiveActions = archive.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
   await expect(archiveActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-  await archiveActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await archive.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
   await expect(detail.getByText('Đã phát hành', { exact: true })).toBeVisible();
   await button('Về Phê duyệt').click();
   await expect(page.getByRole('heading', { name: 'PHÊ DUYỆT', exact: true })).toBeVisible();
@@ -348,7 +348,7 @@ test('Popup Bổ sung bản đã ký và Hủy số dùng bố cục gọn với
     await expect(body).toHaveCSS('padding-left', '0px');
     const actions = form.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
     await expect(actions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-    await expect(actions.getByRole('button', { name: 'Hủy', exact: true })).toBeVisible();
+    await expect(form.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
 
     const picker = page.waitForEvent('filechooser');
     await form.getByRole('button', { name: 'Chọn PDF', exact: true }).click();
@@ -363,16 +363,18 @@ test('Popup Bổ sung bản đã ký và Hủy số dùng bố cục gọn với
     await remove.click();
     await expect(file).toHaveCount(0);
     await expect(form.getByRole('button', { name: 'Chọn PDF', exact: true })).toBeVisible();
-    await actions.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await body.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
 
     await page.getByRole('button', { name: 'Hủy số', exact: true }).click();
     const voidForm = page.getByRole('dialog', { name: 'Hủy số', exact: true });
     const voidBody = voidForm.getByRole('heading', { name: 'Hủy số', exact: true }).locator('..');
     await expect(voidBody).toHaveCSS('border-top-width', '0px');
+    await expect(voidBody).toHaveCSS('border-bottom-width', '0px');
     await expect(voidBody).toHaveCSS('padding-left', '0px');
     const voidActions = voidForm.getByRole('button', { name: 'Xác nhận', exact: true }).locator('..');
     await expect(voidActions).toHaveCSS('justify-content', /^(flex|flow)-end$/);
-    await voidActions.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await expect(voidForm.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
+    await voidBody.getByRole('button', { name: 'Đóng biểu mẫu Văn thư' }).click();
     await expect(page.getByRole('dialog', { name: 'Chi tiết công văn' }).getByText('Đã cấp số', { exact: true })).toBeVisible();
   } finally {
     await request.delete(`${records}/${id}`, { headers });

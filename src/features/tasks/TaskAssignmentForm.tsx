@@ -26,7 +26,8 @@ import { ChoiceButtons as Choices } from '../../components/ChoiceButtons';
 import { Dropdown } from '../../components/Dropdown';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { FilePickerButton } from '../../components/FilePickerButton';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
+import { PopupHeader } from '../../components/PopupHeader';
+import { popupActionText } from '../../components/PopupBody';
 import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachment, readTaskAttachments } from './taskAttachments';
 import type { PickedAttachment } from './taskAttachments';
 import {
@@ -298,10 +299,8 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
       <SafeAreaView style={styles.overlay}>
         <KeyboardViewport style={styles.keyboard}>
           <View style={styles.panel}>
-            <View style={styles.modalHeader}>
-              <Text accessibilityRole="header" style={styles.heading}>{task ? 'Chỉnh sửa công việc' : 'Giao việc mới'}</Text>
-              <PopupCloseButton label={task ? 'Đóng chỉnh sửa' : 'Đóng giao việc'} onPress={onClose} disabled={saving} />
-            </View>
+            <PopupHeader title={task ? 'Chỉnh sửa công việc' : 'Giao việc mới'}
+              closeLabel={task ? 'Đóng chỉnh sửa' : 'Đóng giao việc'} onClose={onClose} disabled={saving} />
             <View style={styles.formTabs}>
               <SegmentedButtons label="Thông tin công việc" value={tab} onChange={setTab}
                 choices={[{ value: 'main', label: 'Thông tin chính' }, { value: 'options', label: 'Tùy chọn' }]} />
@@ -498,7 +497,7 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
             <View style={styles.footer}>
               <Pressable accessibilityRole="button" disabled={saving || picking}
                 style={[styles.submit, (saving || picking) && styles.saving]} onPress={() => void submit()}>
-                <Text style={styles.submitText}>{task ? (saving ? 'Đang lưu…' : 'Lưu thay đổi')
+                <Text style={[styles.submitText, popupActionText]}>{task ? (saving ? 'Đang lưu…' : 'Lưu thay đổi')
                   : (saving ? 'Đang tạo…' : 'Tạo công việc')}</Text>
               </Pressable>
             </View>
@@ -515,13 +514,10 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   keyboard: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   panel: { width: '100%', maxWidth: 560, flexShrink: 1, borderRadius: 16, backgroundColor: colors.paper, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-    padding: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-  heading: { fontSize: 23, fontWeight: '800', color: colors.ink, flexShrink: 1 },
   formTabs: { paddingHorizontal: 16, paddingTop: 12 },
   formBody: { flexShrink: 1, minHeight: 0 },
   body: { gap: 16, padding: 16 },
-  footer: { padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: colors.line },
+  footer: { padding: 12, flexShrink: 0 },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   progressLabel: { marginTop: 4 },
   progressHint: { color: colors.muted, fontSize: 15, lineHeight: 21 },
@@ -553,7 +549,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   actionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },
   submit: { backgroundColor: colors.accent, minHeight: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   saving: { opacity: 0.65 },
-  submitText: { color: colors.onAccent, fontSize: 15, fontWeight: '800' },
+  submitText: { color: colors.onAccent, fontSize: 15 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   multiline: { paddingVertical: 10, minHeight: 76, textAlignVertical: 'top' },
 }));

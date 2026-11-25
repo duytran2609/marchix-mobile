@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../components/Button';
+import { PopupAction } from '../../components/PopupBody';
 import { Dropdown } from '../../components/Dropdown';
 import { inputTextStyle, useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
@@ -58,7 +59,16 @@ export function WorkdayOverrideSettings({ overrides, weekly, disabled, onChange 
 
   return <>
     <Button label={title} secondary disabled={disabled} onPress={() => select(todayInVietnam())} />
-    {selection && <CalendarDialog title={title} onClose={close}>
+    {selection && <CalendarDialog title={title} onClose={close} footer={<>
+      <PopupAction label={multipleDays ? 'Áp dụng cho các ngày đã chọn' : 'Áp dụng cho ngày này'}
+        disabled={disabled || waitingForEnd} onPress={apply} />
+      {!multipleDays && !waitingForEnd && overrides[start] !== undefined &&
+        <PopupAction label="Dùng lại lịch cố định" secondary disabled={disabled}
+          onPress={() => {
+            onChange([start], undefined);
+            setSelection({ day: start, weight: regularWeight(start) });
+          }} />}
+    </>}>
       <Text style={ui.muted} accessibilityLiveRegion="polite">
         {waitingForEnd ? `Đã chọn ngày đầu ${displayDay(start)}. Chọn ngày cuối.`
           : multipleDays ? `Từ ${displayDay(start)} đến ${displayDay(end)}`
@@ -80,14 +90,6 @@ export function WorkdayOverrideSettings({ overrides, weekly, disabled, onChange 
       <Dropdown label={multipleDays ? 'Lịch làm việc cho khoảng ngày' : 'Lịch làm việc trong ngày'}
         value={selection.weight} valueTextStyle={inputTextStyle} choices={workdayChoices} highlightSelection={false}
         disabled={disabled || waitingForEnd} onChange={weight => setSelection({ ...selection, weight })} />
-      <Button label={multipleDays ? 'Áp dụng cho các ngày đã chọn' : 'Áp dụng cho ngày này'}
-        disabled={disabled || waitingForEnd} onPress={apply} />
-      {!multipleDays && !waitingForEnd && overrides[start] !== undefined &&
-        <Button label="Dùng lại lịch cố định" secondary disabled={disabled}
-        onPress={() => {
-          onChange([start], undefined);
-          setSelection({ day: start, weight: regularWeight(start) });
-        }} />}
     </CalendarDialog>}
   </>;
 }

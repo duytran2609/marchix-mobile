@@ -4,7 +4,6 @@ import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
-import { Metric, useMetricStyles } from '../components/Metric';
 import { ProjectEditor } from '../features/projects/ProjectEditor';
 import type { ProjectExpenseSeed } from '../features/projects/financeStore';
 import { ProjectFinance } from '../features/projects/ProjectFinance';
@@ -12,6 +11,7 @@ import { ProjectCollaboration } from '../features/projects/ProjectCollaboration'
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
 import type { Project } from '../features/projects/projects';
 import { initialTaskBoardOptions, TaskBoard } from '../features/tasks/TaskBoard';
+import { StatusProgress } from '../features/tasks/TaskProgress';
 import { formatTaskDate } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
 import type { ProjectRoute } from '../navigation/workspaceRoutes';
@@ -20,7 +20,7 @@ import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
 const sections = [
-  ['overview', 'Tổng quan'], ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'], ['library', 'Trao đổi & tài liệu'],
+  ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'], ['library', 'Trao đổi & tài liệu'],
 ] as const;
 
 export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, onProjectExpense, onProjectCash, email, name, isAdmin, canManageProjects, canReadCash,
@@ -32,7 +32,6 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
 }) {
   const styles = useScreenStyles();
   const information = useInformationStyles();
-  const metricStyles = useMetricStyles();
   const { colors } = useTheme();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectError, setProjectError] = useState(false);
@@ -51,7 +50,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
   }, [email, isAdmin, pilotRetry]);
 
   const project = route.projectId ? projects?.find(item => item.id === route.projectId) : projects?.[0];
-  const section = route.section ?? 'overview';
+  const section = route.section ?? 'work';
   const visibleTasks = pilotMode ? pilotTasks : tasks;
   const taskError = pilotMode ? pilotError : tasksError;
   const projectTasks = project && visibleTasks?.filter(task => task.projectId === project.id);
@@ -91,7 +90,8 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
           {canManageProjects && <Button label="Chỉnh sửa" secondary style={local.editButton}
             onPress={() => setEditor(project)} />}
         </View>
-        <Text style={styles.badge}>{project.status || 'Chưa cập nhật trạng thái'}</Text>
+        <StatusProgress status={project.status || 'Chưa cập nhật trạng thái'} progress={metrics.progress} variant="list"
+          label={pilotMode && isAdmin ? 'Tiến độ dự án' : 'Tiến độ dự án theo công việc được phép xem'} />
         <View style={information.panel}>
           {[
             ['Mã dự án', 'DA-' + project.id],
@@ -112,7 +112,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
         <View accessibilityRole="tablist" accessibilityLabel="Mục trong hồ sơ dự án"
           style={[local.tabs, { backgroundColor: colors.surfaceMuted }]}>
           {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
-            accessibilityState={{ selected: section === id }}
+            aria-selected={section === id}
             onPress={() => navigate({ projectId: project.id, section: id })}
             style={[local.tab, (id === 'work' || id === 'library') && local.detailTab, section === id && { backgroundColor: colors.paper }]}>
             <Text style={[local.tabLabel, { color: colors.muted }, section === id && { color: colors.accent, fontWeight: '800' }]}>
@@ -132,14 +132,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
               else onRetryTasks();
             }} />
           </View> : !projectTasks ? <ActivityIndicator accessibilityLabel="Đang tải công việc dự án" color={colors.accent} />
-            : section === 'overview' ? <View style={metricStyles.grid}>
-              <Metric label={pilotMode && isAdmin ? 'Tiến độ thực hiện' : 'Tiến độ việc tôi được xem'}
-                value={metrics.progress === null ? '–' : `${metrics.progress}%`} />
-              <Metric label="Việc đã duyệt / tổng việc" value={`${metrics.done}/${projectTasks.length}`} />
-              <Metric label="Việc chờ duyệt" value={metrics.review} />
-              <Metric label="Việc quá hạn" value={metrics.overdue} />
-              <Metric label="Việc đang vướng" value={metrics.blocked} />
-            </View> : <View style={styles.stack}>
+            : <View style={styles.stack}>
               <Text accessibilityRole="header" style={styles.cardTitle}>Việc trong dự án</Text>
               {projectTasks.length === 0 ? <EmptyState icon="tasks" message="Chưa có việc trong phạm vi truy cập." />
                 : <TaskBoard tasks={projectTasks} member={{ email, name }}
@@ -154,10 +147,10 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
         </>}
       </View>
     </>}
-    {canManageProjects && editor && <ProjectEditor project={editor === 'new' ? undefined : editor} canChangeOwner={isAdmin || editor === 'new'}
+    {canManageProjects && editor && <ProjectEditor project={editor === 'new' ? undefined : editor} canChangeOwner={isAdmin}
       onCancel={() => setEditor(null)} onSaved={projectId => {
         setEditor(null);
-        if (editor === 'new') navigate({ projectId, section: 'overview' });
+        if (editor === 'new') navigate({ projectId });
       }} />}
   </>;
 }

@@ -1,29 +1,26 @@
 import type { ReactNode } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { PopupBody } from '../../components/PopupBody';
 import { KeyboardViewport } from '../../components/KeyboardViewport';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
-import { useScreenStyles } from '../../theme/screenStyles';
+import { PopupHeader } from '../../components/PopupHeader';
 import { createThemedStyles } from '../../theme/theme';
 
-export function ProjectFormPopup({ title, children, onClose, busy }: {
+export function ProjectFormPopup({ title, children, onClose, busy, tabs, contentKey, footer }: {
   title: string; children: ReactNode; onClose: () => void; busy: boolean;
+  tabs?: ReactNode; contentKey?: string; footer?: ReactNode;
 }) {
   const styles = useStyles();
-  const screen = useScreenStyles();
   const close = () => { if (!busy) onClose(); };
   return <Modal visible transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
     <SafeAreaView style={styles.overlay}>
       <KeyboardViewport style={styles.center}>
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={[screen.cardTitle, styles.title]}>{title}</Text>
-            <PopupCloseButton label="Đóng biểu mẫu" disabled={busy} onPress={close} />
-          </View>
-          <KeyboardScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <PopupHeader title={title} closeLabel="Đóng biểu mẫu" disabled={busy} onClose={close} />
+          {tabs && <View style={styles.tabs}>{tabs}</View>}
+          <PopupBody key={contentKey} contentContainerStyle={styles.content} footer={footer}>
             {children}
-          </KeyboardScrollView>
+          </PopupBody>
         </View>
       </KeyboardViewport>
     </SafeAreaView>
@@ -35,9 +32,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 12 },
   panel: { width: '100%', maxWidth: 560, maxHeight: '95%', flexShrink: 1,
     borderRadius: 16, overflow: 'hidden', backgroundColor: colors.paper },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16,
-    paddingRight: 8, borderBottomWidth: 1, borderBottomColor: colors.line },
-  title: { flexShrink: 1 },
-  scroll: { flexShrink: 1, minHeight: 0 },
+  tabs: { paddingHorizontal: 16, paddingTop: 12 },
   content: { padding: 16, gap: 12 },
 }));

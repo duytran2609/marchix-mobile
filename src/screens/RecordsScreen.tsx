@@ -1,5 +1,5 @@
 import { EmptyState } from '../components/EmptyState';
-import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
@@ -7,7 +7,7 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'rea
 import { ClickableCardHeader } from '../components/CardChevron';
 import { Button } from '../components/Button';
 import { Dropdown } from '../components/Dropdown';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
 import { PageHeader } from '../components/PageHeader';
 import { SearchInput } from '../components/SearchInput';
 import { SegmentedButtons } from '../components/SegmentedButtons';
@@ -108,6 +108,7 @@ export function RecordsScreen({ email, canManageRecords, recordId: routeRecordId
         toast(result + warning, warning ? 'error' : 'success');
       }} />;
   const editing = !!(form?.existing && editor);
+  const detailActions = selected ? actions(selected) : [];
   const popupTitle = activePreview ? 'Xem trước tệp' : editing ? form?.action?.label : 'Chi tiết công văn';
   const closeLabel = onBackToReview ? 'Về Phê duyệt' : 'Về sổ văn thư';
 
@@ -133,7 +134,7 @@ export function RecordsScreen({ email, canManageRecords, recordId: routeRecordId
             <View style={styles.panel}>
               <Text accessibilityRole="header" style={styles.cardTitle}>{recordBooks[book]} · {filtered.length} hồ sơ</Text>
               <SearchInput accessibilityLabel="Tìm văn bản" placeholder="Số, mã hồ sơ, trích yếu, đơn vị"
-                value={term} onChangeText={setTerm} style={styles.input} />
+                value={term} onChangeText={setTerm} />
               <View style={local.row}>
                 <Dropdown label="Loại văn bản" value={kind} choices={kindChoices} onChange={setKind} style={local.flex} />
                 <Dropdown label="Trạng thái" value={status} onChange={setStatus} style={local.flex}
@@ -182,13 +183,15 @@ export function RecordsScreen({ email, canManageRecords, recordId: routeRecordId
             {activePreview && <AttachmentPreview embedded file={activePreview.file}
               downloadable={activePreview.downloadable} onClose={() => setPreview(undefined)} />}
             <View style={activePreview ? local.hidden : editing ? local.formContainer : local.flex}>
-              {!editing && <View style={local.header}>
-                <Text accessibilityRole="header" style={[styles.cardTitle, local.flex]}>Chi tiết công văn</Text>
-                <PopupCloseButton label={closeLabel} onPress={closeRecord} />
-              </View>}
-              <KeyboardScrollView style={editing ? local.formScroll : local.flex} keyboardShouldPersistTaps="handled"
-                contentContainerStyle={local.body}>
-                {editing ? editor : selected ? <View style={styles.stack}>
+              {editing ? editor : <>
+              <PopupHeader title="Chi tiết công văn" closeLabel={closeLabel} onClose={closeRecord} />
+              <PopupBody style={local.detailScroll} contentContainerStyle={local.body}
+                footer={selected && detailActions.length > 0 && detailActions.map(action => (
+                  <PopupAction key={action.status} label={action.label}
+                    secondary={action.status === 'void' || action.status === 'draft'}
+                    onPress={() => setForm({ direction: selected.direction, existing: selected, action })} />
+                ))}>
+                {selected ? <View style={styles.stack}>
                   <View style={[local.detailInset, local.detailHeading]}>
                     <Text style={styles.badge}>{recordStates[selected.status]}</Text>
                     <Text accessibilityRole="header" style={styles.heading}>{selected.subject || 'Hồ sơ văn thư'}</Text>
@@ -218,14 +221,12 @@ export function RecordsScreen({ email, canManageRecords, recordId: routeRecordId
                     {selected.fileId ? <RecordAttachmentButton key={selected.fileId} recordId={selected.id} fileId={selected.fileId}
                       fileName={selected.fileName} onPreview={file => openPreview?.(file, true)} /> : <EmptyState icon="document" message="Chưa lưu tệp" />}
                   </View>
-                  {actions(selected).map(action => <Button key={action.status} label={action.label}
-                    secondary={action.status === 'void' || action.status === 'draft'}
-                    onPress={() => setForm({ direction: selected.direction, existing: selected, action })} />)}
                 </View>
                 : rows ? <Text accessibilityRole="alert" style={styles.muted}>Hồ sơ không có trong phạm vi truy cập của bạn.</Text>
                   : error ? <Text accessibilityRole="alert" style={styles.error}>Không tải được hồ sơ.</Text>
                     : <ActivityIndicator accessibilityLabel="Đang tải hồ sơ" color={colors.accent} />}
-              </KeyboardScrollView>
+              </PopupBody>
+              </>}
             </View>
           </View>
         </KeyboardSafeAreaView>
@@ -310,12 +311,11 @@ const local = StyleSheet.create({
   backdrop: { flex: 1, padding: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#17102588' },
   dialog: { width: '100%', maxWidth: 560, maxHeight: '92%', borderRadius: 18, overflow: 'hidden' },
   tallDialog: { height: '92%' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   body: { padding: 12 },
+  detailScroll: { flexGrow: 1, flexBasis: 0 },
   detailInset: { marginStart: 8 },
   detailHeading: { gap: 14 },
   formContainer: { flexShrink: 1 },
-  formScroll: { flexGrow: 0 },
   hidden: { display: 'none' },
   row: { flexDirection: 'row', gap: 8 },
   flex: { flex: 1, minWidth: 0 },

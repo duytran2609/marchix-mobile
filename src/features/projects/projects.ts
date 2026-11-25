@@ -4,7 +4,7 @@ import type { Task } from '../tasks/tasks';
 
 export const projectStatuses = ['Đang chạy', 'Tạm dừng', 'Xong'] as const;
 export const projectTextFields = {
-  name: 'Tên dự án', owner: 'Phụ trách', ownerEmail: 'Email người phụ trách',
+  name: 'Tên dự án', owner: 'Người phụ trách', ownerEmail: 'Email người phụ trách',
   startDate: 'Ngày bắt đầu', deadline: 'Ngày kết thúc',
   goal: 'Mục tiêu / kết quả bàn giao', phase: 'Giai đoạn hiện tại',
   risks: 'Rủi ro / cần quyết định', note: 'Mô tả ngắn',

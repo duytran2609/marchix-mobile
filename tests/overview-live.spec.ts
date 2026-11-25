@@ -91,7 +91,8 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await button(source, /^Chọn dự án:/).click();
     await source.getByRole('radiogroup', { name: 'Chọn dự án' })
       .getByRole('radio', { name: project, exact: true }).click();
-    await expect(source.getByText('Tiến độ việc tôi được xem', { exact: true }).locator('..')).toContainText('65%');
+    await expect(source.getByRole('region', { name: 'Thông tin dự án' })
+      .getByRole('progressbar', { name: /^Tiến độ dự án/ })).toHaveAttribute('aria-valuenow', '65');
     const renamedProject = `Dự án đã cập nhật ${id}`;
     const projectEdit = await request.patch(`${base}/projects/${id}?updateMask.fieldPaths=name`, {
       headers, data: { fields: { name: { stringValue: renamedProject } } },

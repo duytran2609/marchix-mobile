@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { TextInput } from '../components/TextInput';
@@ -130,6 +130,11 @@ export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop
   const adminTab = isAdmin ? adminTabs.find(tab => tab.id === selectedTab) : undefined;
   const activeTab = adminTab ?? generalTab;
 
+  function openManagementWeb() {
+    void Linking.openURL('https://quanly.marchix.vn/').catch(() =>
+      showToast('Không mở được trang quản lý Marchix. Vui lòng thử lại.', 'error'));
+  }
+
   return (
     <View style={styles.stack}>
       <PageHeader title="Cài đặt" />
@@ -182,6 +187,9 @@ export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop
                   showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
             </View>
             {reminders.enabled && <ReminderTimingOptions reminders={reminders} />}
+          </View>
+          <View style={styles.panel}>
+            <Button label="Web Quản lý Marchix ↗" secondary onPress={openManagementWeb} />
           </View>
           <View style={styles.panel}>
             <Text accessibilityRole="header" style={styles.cardTitle}>Phiên bản ứng dụng</Text>

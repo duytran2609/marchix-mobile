@@ -3,11 +3,13 @@ import { ToastLayer, useToast } from '../components/Toast';
 import type { ComponentRef } from 'react';
 import { Animated, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../components/Button';
+import { KeyboardViewport } from '../components/KeyboardViewport';
 import { avatarBorderStyle } from '../components/MemberAvatar';
 import { PopupCloseButton } from '../components/PopupCloseButton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { SearchInput } from '../components/SearchInput';
 import { createThemedStyles } from '../theme/theme';
+import { searchByName } from '../utils/search';
 
 import { workspaceTabLabel, workspaceTabs } from './workspaceRoutes';
 import type { WorkspaceTab } from './workspaceRoutes';
@@ -15,7 +17,7 @@ import type { PinnableTab } from './usePinnedTabs';
 import { workspaceTabIcons } from './workspaceTabIcons';
 
 export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins, onTogglePin,
-  onClose, onSelect, onOpenWeb, onLogout }: {
+  onClose, onSelect, onLogout }: {
   open: boolean;
   activeTab: WorkspaceTab | 'ca-nhan';
   isAdmin: boolean;
@@ -25,7 +27,6 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
   onTogglePin?: (tab: PinnableTab) => void;
   onClose: () => void;
   onSelect: (tab: WorkspaceTab | 'ca-nhan') => void;
-  onOpenWeb: () => void;
   onLogout: () => Promise<void>;
 }) {
   const styles = useStyles();
@@ -34,6 +35,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
   const progress = useRef(new Animated.Value(0)).current;
   const logoutTrigger = useRef<ComponentRef<typeof Pressable>>(null);
   const [visible, setVisible] = useState(false);
+  const [search, setSearch] = useState('');
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const [logout, setLogout] = useState<'closed' | 'confirm' | 'pending'>('closed');
   const showToast = useToast();
@@ -41,6 +43,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
   const pending = logout === 'pending';
   const profileActive = activeTab === 'ca-nhan';
   const initials = name.trim().split(/\s+/).slice(-2).map(part => Array.from(part)[0]).join('').toLocaleUpperCase('vi');
+  const matchingTabs = searchByName([...workspaceTabs], search, item => workspaceTabLabel(item, isAdmin));
 
   useEffect(() => {
     if (open) setVisible(true);
@@ -50,7 +53,10 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
       useNativeDriver: true,
     });
     animation.start(({ finished }) => {
-      if (finished && !open) setVisible(false);
+      if (finished && !open) {
+        setVisible(false);
+        setSearch('');
+      }
     });
     return () => animation.stop();
   }, [open, progress]);
@@ -80,7 +86,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
 
   return (
     <Modal transparent visible={open || visible} onRequestClose={dismiss} statusBarTranslucent navigationBarTranslucent>
-      <View style={styles.overlay}>
+      <KeyboardViewport style={styles.overlay}>
         <Animated.View testID="workspace-drawer" aria-hidden={confirming}
           importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
           style={[styles.drawer, { width: drawerWidth, transform: [{
@@ -94,11 +100,17 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
                 <Text numberOfLines={1} adjustsFontSizeToFit style={styles.brandName}>MarHub</Text>
                 <PopupCloseButton label="Đóng menu" onPress={onClose} disabled={confirming} tone="accent" />
               </View>
-              <Button label="Web Quản lý Marchix ↗" secondary disabled={confirming} onPress={onOpenWeb} />
+              <SearchInput accessibilityLabel="Tìm mục menu" placeholder="Tìm mục menu"
+                value={search} onChangeText={setSearch} editable={!confirming} />
             </View>
-            <ScrollView contentContainerStyle={styles.list}>
-              {onTogglePin && <Text style={styles.pinHint}>Nhấn giữ một mục để ghim hoặc bỏ ghim khỏi thanh dưới.</Text>}
-              {workspaceTabs.map(item => {
+            <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+              {onTogglePin && !search.trim() && (
+                <Text style={styles.pinHint}>Nhấn giữ một mục để ghim hoặc bỏ ghim khỏi thanh dưới.</Text>
+              )}
+              {matchingTabs.length === 0 && (
+                <Text accessibilityLiveRegion="polite" style={styles.listHint}>Không tìm thấy mục phù hợp.</Text>
+              )}
+              {matchingTabs.map(item => {
                 const selected = item.id === activeTab;
                 const label = workspaceTabLabel(item, isAdmin);
                 const id = item.id;
@@ -163,7 +175,7 @@ export function WorkspaceDrawer({ open, activeTab, isAdmin, name, photoURL, pins
         {confirming && <ConfirmDialog label="Xác nhận đăng xuất" title="Đăng xuất?"
           message="Bạn có muốn đăng xuất khỏi Marchix không?" action="Đăng xuất" pendingAction="Đang đăng xuất…"
           pending={pending} onCancel={dismiss} onConfirm={() => void confirmLogout()} />}
-      </View>
+      </KeyboardViewport>
       {open || visible ? <ToastLayer /> : null}
     </Modal>
   );
@@ -174,15 +186,15 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   fill: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(33, 25, 53, 0.54)' },
   drawer: { zIndex: 1, backgroundColor: colors.paper, elevation: 12, boxShadow: '8px 0 24px rgba(33, 25, 53, 0.15)' },
-  header: { gap: 8, paddingHorizontal: 20, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: colors.line },
-  brandRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -8 },
+  header: { gap: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  brandRow: { flexDirection: 'row', alignItems: 'center' },
   logo: { width: 44, height: 44, borderRadius: 11, marginRight: 8, flexShrink: 0 },
   brandName: { flex: 1, minWidth: 0, color: colors.accent, fontSize: 20, fontWeight: '800' },
   logoutButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background },
   list: { padding: 12, gap: 4 },
   pinHint: { color: colors.muted, fontSize: 12, lineHeight: 17, paddingHorizontal: 10, paddingBottom: 4 },
+  listHint: { color: colors.muted, fontSize: 14, paddingHorizontal: 10 },
   item: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10,
     paddingVertical: 6, borderRadius: 10 },
   selected: { backgroundColor: colors.accentSoft },

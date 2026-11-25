@@ -6,9 +6,10 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 import { attachmentMimeType, hasPdfHeader, saveAttachment } from '../utils/attachmentFile';
 import type { AttachmentFile } from '../utils/attachmentFile';
-import { AttachmentLabel } from './AttachmentLabel';
-import { Button } from './Button';
+import { FileTypeIcon } from './AttachmentLabel';
+import { PopupAction } from './PopupBody';
 import { PdfPreview } from './PdfPreview';
+import { PopupHeader } from './PopupHeader';
 
 const imageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const textLimit = 64 * 1024;
@@ -50,9 +51,8 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
   const close = () => { if (!saveLock.current) onClose(); };
   const content = (
     <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
-      <AttachmentLabel file={file}>
-        <Text accessibilityRole="header" style={styles.cardTitle} numberOfLines={2}>{file.name}</Text>
-      </AttachmentLabel>
+      <PopupHeader title={file.name} closeLabel={pdf ? 'Đóng PDF' : 'Đóng xem trước'} onClose={close}
+        disabled={saving} inset={false} titleLines={2} leading={<FileTypeIcon name={file.name} type={file.type} />} />
       {failed || (type === 'application/pdf' && !pdf)
         ? <Text accessibilityRole="alert" style={styles.error}>Không hiển thị được nội dung tệp.</Text>
         : pdf ? <PdfPreview bytes={file.bytes} name={file.name} onError={fail} />
@@ -67,11 +67,9 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
       {downloadable && Platform.OS === 'ios' && <Text style={styles.muted}>Chọn “Lưu vào Tệp” để lưu trên iPhone.</Text>}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!!saved && <Text accessibilityLiveRegion="polite" role="status" style={styles.body}>{saved}</Text>}
-      <View style={styles.choices}>
-        <Button label={pdf ? 'Đóng PDF' : 'Đóng xem trước'} secondary onPress={close} disabled={saving} />
-        {downloadable && <Button label={saving ? 'Đang tải xuống…' : 'Tải xuống'} disabled={saving}
-          onPress={() => void download()} />}
-      </View>
+      {downloadable && <View style={styles.choices}>
+        <PopupAction label={saving ? 'Đang tải xuống…' : 'Tải xuống'} disabled={saving} onPress={() => void download()} />
+      </View>}
     </SafeAreaView>
   );
   return embedded ? content : <Modal visible animationType="slide" onRequestClose={close}>{content}</Modal>;

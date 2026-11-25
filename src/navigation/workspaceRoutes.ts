@@ -7,7 +7,7 @@ type TaskSelection = NotificationTaskTarget | { id: string; direct: true };
 export type ProjectRoute = {
   screen: 'du-an';
   projectId?: string;
-  section?: 'overview' | 'work' | 'finance' | 'library';
+  section?: 'work' | 'finance' | 'library';
   kanban?: boolean;
 };
 

@@ -117,7 +117,8 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await payment.click();
     await button(page, 'Bỏ ngày').click();
     await expect(payment).toHaveAccessibleName('Hạn thanh toán, Chọn ngày');
-    await button(page, 'Hủy').click();
+    await expect(proposal.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
+    await proposal.getByRole('button', { name: 'Đóng đề nghị' }).click();
     await expect(proposal).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Tổng quan' })).toBeVisible();
     await button(page, '+ Tạo đề nghị chi').click();

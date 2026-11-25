@@ -1,42 +1,139 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { createThemedStyles } from '../theme/theme';
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../theme/theme';
 
-function greetingName(name: unknown, email: string) {
-  const displayName = typeof name === 'string' ? name.trim() : '';
-  // The session uses the email as its fallback; greet neutrally in that case.
-  return displayName && displayName !== email ? displayName : '';
+const vietnamHour = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', hourCycle: 'h23',
+});
+const labels = { morning: 'Chào buổi sáng', afternoon: 'Chào buổi chiều', evening: 'Chào buổi tối' };
+type Period = keyof typeof labels;
+
+export function overviewGreetingTime(now: Date): { period: Period; delay: number } {
+  const hour = Number(vietnamHour.format(now));
+  const period = hour < 5 || hour >= 18 ? 'evening' : hour < 12 ? 'morning' : 'afternoon';
+  const nextHour = period === 'morning' ? 12 : period === 'afternoon' ? 18 : hour >= 18 ? 24 + 5 : 5;
+  const elapsedInHour = now.getUTCMinutes() * 60_000 + now.getUTCSeconds() * 1_000 + now.getUTCMilliseconds();
+  return { period, delay: (nextHour - hour) * 3_600_000 - elapsedInHour };
 }
 
-export function overviewGreeting(name: unknown, email: string) {
-  const displayName = greetingName(name, email);
-  return displayName ? `Xin chào, ${displayName}!` : 'Xin chào!';
-}
+const lightScenes = {
+  morning: { sky: '#FFF1E5', border: '#F1D5BD', ink: '#452619', name: '#873F26', muted: '#674839',
+    light: '#F9B76A', glow: '#FBD8A9', cloud: '#FFFBF3', hill: '#F4C5A1', foreground: '#EEA883' },
+  afternoon: { sky: '#E9F6F5', border: '#CCE8E4', ink: '#173938', name: '#1B5C56', muted: '#375C59',
+    light: '#F5CD74', glow: '#F7E7B5', cloud: '#FCFFFF', hill: '#A9D8D2', foreground: '#82BEB6' },
+};
+const darkScenes = {
+  morning: { sky: '#39251F', border: '#654236', ink: '#FFF1E6', name: '#FFD0A8', muted: '#F1CAAF',
+    light: '#F3A869', glow: '#80503C', cloud: '#735147', hill: '#774435', foreground: '#9D5941' },
+  afternoon: { sky: '#173333', border: '#2F5654', ink: '#E8FCF9', name: '#A9E7DD', muted: '#C2E2DE',
+    light: '#F6CD78', glow: '#6C6444', cloud: '#446B68', hill: '#2D6560', foreground: '#3B8178' },
+};
+const eveningScene = { sky: '#222341', border: '#434468', ink: '#F7F2FF', name: '#DCD0FF', muted: '#D2CCE8',
+  light: '#F4DBAA', glow: '#3C3A61', cloud: '#514E77', hill: '#3A4168', foreground: '#505781' };
+type Scene = typeof eveningScene;
 
-export function OverviewGreeting({ name, email }: { name: string; email: string }) {
-  const styles = useStyles();
-  const displayName = greetingName(name, email);
-  return <View style={styles.banner}>
-    <View aria-hidden accessible={false} importantForAccessibility="no-hide-descendants"
-      pointerEvents="none" style={styles.decoration}>
-      <View style={styles.innerRing} />
-      <View style={styles.dot} />
-    </View>
-    <Text accessibilityRole="header" style={styles.greeting}>
-      {displayName ? <>Xin chào, <Text style={styles.name}>{displayName}</Text>!</> : 'Xin chào!'}
-    </Text>
-    <Text style={styles.suggestion}>Chọn một việc quan trọng hôm nay và bắt đầu từ bước nhỏ nhất.</Text>
+function GreetingArtwork({ period, scene }: { period: Period; scene: Scene }) {
+  const [progress] = useState(() => new Animated.Value(1));
+  const high = period !== 'morning';
+  useEffect(() => {
+    let active = true;
+    let animation: Animated.CompositeAnimation | undefined;
+    function updateMotion(reduced: boolean) {
+      animation?.stop();
+      progress.setValue(reduced ? 1 : 0);
+      if (!reduced) {
+        animation = Animated.timing(progress, {
+          toValue: 1, duration: 760, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web',
+        });
+        animation.start();
+      }
+    }
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', updateMotion);
+    void AccessibilityInfo.isReduceMotionEnabled().then(reduced => {
+      if (active) updateMotion(reduced);
+    }).catch(() => {});
+    return () => {
+      active = false;
+      subscription?.remove();
+      animation?.stop();
+    };
+  }, [progress]);
+
+  return <View aria-hidden accessible={false} importantForAccessibility="no-hide-descendants"
+    pointerEvents="none" style={styles.artwork}>
+    <Animated.View style={[StyleSheet.absoluteFill, {
+      opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+      transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+    }]}>
+      <View style={[styles.glow, high && styles.highGlow, { backgroundColor: scene.glow }]} />
+      <View style={[styles.orb, high && styles.highOrb, { backgroundColor: scene.light }]} />
+      {period === 'evening' ? <>
+        <View style={[styles.moonCutout, { backgroundColor: scene.glow }]} />
+        <Text style={[styles.star, styles.leftStar, { color: scene.light }]}>✦</Text>
+        <Text style={[styles.star, styles.rightStar, { color: scene.light }]}>✦</Text>
+        <View style={[styles.smallStar, { backgroundColor: scene.light }]} />
+      </> : <>
+        <View style={[styles.cloud, styles.leftCloud, { backgroundColor: scene.cloud }]} />
+        <View style={[styles.cloud, styles.rightCloud, { backgroundColor: scene.cloud }]} />
+      </>}
+    </Animated.View>
+    <View style={[styles.hill, { backgroundColor: scene.hill }]} />
+    <View style={[styles.foreground, { backgroundColor: scene.foreground }]} />
   </View>;
 }
 
-const useStyles = createThemedStyles(colors => StyleSheet.create({
-  banner: { paddingHorizontal: 20, paddingVertical: 22, borderRadius: 18, borderWidth: 1,
-    borderColor: colors.line, backgroundColor: colors.accentSoft, overflow: 'hidden' },
-  decoration: { position: 'absolute', right: -30, top: -54, width: 176, height: 176, borderRadius: 88,
-    borderWidth: 1, borderColor: colors.accent, opacity: 0.16, justifyContent: 'center', alignItems: 'center' },
-  innerRing: { width: 132, height: 132, borderRadius: 66, borderWidth: 1, borderColor: colors.accent },
-  dot: { position: 'absolute', left: 16, bottom: 26, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.accent },
-  greeting: { color: colors.ink, fontSize: 28, lineHeight: 36, fontWeight: '400',
-    width: '100%', flexShrink: 1 },
-  name: { color: colors.accent, fontWeight: '800' },
-  suggestion: { marginTop: 8, color: colors.muted, fontSize: 15, lineHeight: 22 },
-}));
+export function OverviewGreeting({ name, email }: { name: string; email: string }) {
+  const { dark } = useTheme();
+  const [period, setPeriod] = useState(() => overviewGreetingTime(new Date()).period);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    function refresh() {
+      clearTimeout(timer);
+      const { period, delay } = overviewGreetingTime(new Date());
+      setPeriod(period);
+      timer = setTimeout(refresh, delay);
+    }
+    refresh();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => { clearTimeout(timer); subscription.remove(); };
+  }, []);
+
+  const displayName = typeof name === 'string' ? name.trim() : '';
+  const hasName = displayName && displayName !== email;
+  const label = labels[period];
+  const scene = period === 'evening' ? eveningScene : (dark ? darkScenes : lightScenes)[period];
+  return <View style={[styles.banner, { backgroundColor: scene.sky, borderColor: scene.border }]}>
+    <GreetingArtwork key={period} period={period} scene={scene} />
+    <Text accessibilityRole="header" style={[styles.greeting, { color: scene.ink }]}>
+      {hasName ? <>{label}{', '}<Text style={[styles.name, { color: scene.name }]}>{displayName}</Text>!</> : `${label}!`}
+    </Text>
+    <Text style={[styles.suggestion, { color: scene.muted }]}>Chọn một việc quan trọng hôm nay và bắt đầu từ bước nhỏ nhất.</Text>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  banner: { minHeight: 134, justifyContent: 'center', paddingLeft: 20, paddingRight: 90, paddingVertical: 22,
+    borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  artwork: { position: 'absolute', right: -12, bottom: 0, width: 160, height: 134 },
+  glow: { position: 'absolute', right: 18, bottom: 11, width: 86, height: 86, borderRadius: 43 },
+  highGlow: { bottom: 39 },
+  orb: { position: 'absolute', right: 35, bottom: 28, width: 52, height: 52, borderRadius: 26 },
+  highOrb: { bottom: 56 },
+  moonCutout: { position: 'absolute', right: 27, bottom: 68, width: 48, height: 48, borderRadius: 24 },
+  star: { position: 'absolute', fontSize: 15, lineHeight: 18 },
+  leftStar: { right: 97, bottom: 91 },
+  rightStar: { right: 26, bottom: 46, fontSize: 12 },
+  smallStar: { position: 'absolute', right: 32, bottom: 107, width: 4, height: 4, borderRadius: 2 },
+  cloud: { position: 'absolute', height: 11, borderRadius: 8 },
+  leftCloud: { right: 84, bottom: 53, width: 46, transform: [{ rotate: '-7deg' }] },
+  rightCloud: { right: 14, bottom: 46, width: 38, transform: [{ rotate: '-7deg' }] },
+  hill: { position: 'absolute', right: -30, bottom: -45, width: 174, height: 82, borderRadius: 90,
+    transform: [{ rotate: '-13deg' }] },
+  foreground: { position: 'absolute', right: -15, bottom: -60, width: 177, height: 83, borderRadius: 89,
+    transform: [{ rotate: '10deg' }] },
+  greeting: { fontSize: 28, lineHeight: 36, fontWeight: '400', width: '100%', flexShrink: 1 },
+  name: { fontWeight: '800' },
+  suggestion: { marginTop: 8, fontSize: 15, lineHeight: 22 },
+});

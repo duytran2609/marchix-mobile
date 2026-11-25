@@ -15,7 +15,7 @@ Bản Expo + React Native + TypeScript dùng các collection `members` và `task
 | `src/services/firebase/` | Khởi tạo Firebase và thiết lập lưu phiên đăng nhập theo nền tảng. |
 | `functions/`, `scripts/`, `tests/` | Backend, dữ liệu mẫu và kiểm thử. |
 
-Khi thêm màn hình workspace, đặt component trong `src/screens/` và nối màn hình trong `WorkspaceNavigator.tsx`. Nếu màn hình có mục trên menu, khai báo mục đó trong `workspaceRoutes.ts`. Để mở Quản lý Marchix bản web, dùng nút cạnh chuông thông báo.
+Khi thêm màn hình workspace, đặt component trong `src/screens/` và nối màn hình trong `WorkspaceNavigator.tsx`. Nếu màn hình có mục trên menu, khai báo mục đó trong `workspaceRoutes.ts`. Để mở Quản lý Marchix bản web, vào **Cài đặt → Chung** và chọn **Web Quản lý Marchix**.
 
 ## Chạy trên Windows
 
@@ -44,7 +44,7 @@ npm.cmd run web -- --localhost --port 8081
 5. Đăng xuất, chọn **Đăng nhập người giao việc (mô phỏng)** và mở **Phê duyệt** trong sidebar. Chọn đánh giá rồi bấm **Duyệt** để chuyển việc sang **Xong**, hoặc nhập lý do và bấm **Trả lại** để chuyển về **Đang làm**. Đăng nhập lại bằng tài khoản nhân viên để xem nhận xét.
 6. Chọn **+ Giao việc**, nhập tên, chọn một hoặc nhiều thành viên, rồi chọn ngày bắt đầu và hạn chót trên lịch. Chạm lại tên để bỏ chọn. Dùng **+ Chọn tệp** để gửi tối đa 5 tệp, 5 MB mỗi tệp và 8 MB tính theo số bản gửi. Mỗi người nhận một việc riêng và tải được tệp trong **Trao đổi**. Mở **Tùy chọn thêm** để đặt dự án, checklist, lịch lặp, người theo dõi và lời nhắn.
 7. Bấm chuông **Thông báo** để xem thông báo của tài khoản và xóa số đang hiện trên chuông. Bấm một thông báo công việc để đánh dấu đã đọc và mở chi tiết công việc, hoặc chọn **Đánh dấu tất cả đã đọc** ngay trong popup.
-8. Mở **Dự án** từ menu, chọn **Marchix Mobile · Demo** rồi xem Tổng quan, Công việc đính kèm và Tài chính. Chọn một việc trong dự án để chuyển sang **Công việc** và mở popup chi tiết.
+8. Mở **Dự án** từ menu và chọn **Marchix Mobile · Demo**. Tiến độ nằm dưới tên dự án. Các tab gồm **Công việc đính kèm**, **Tài chính** và **Trao đổi & tài liệu**. Chọn một việc trong dự án để chuyển sang **Công việc** và mở popup chi tiết.
 9. Mở **Chấm công** từ menu để ghi giờ vào, giờ ra và xem bảng công theo tháng. Với tài khoản quản trị, chọn nhân viên và ngày cần điều chỉnh. Khi `settings/work.gpsOn` bật, thiết bị cần cấp quyền vị trí khi dùng ứng dụng. Hãy build lại development client hoặc APK để nhận module định vị.
 
 Firebase Auth Emulator cấp phiên từ ID token Google mô phỏng. Functions Emulator kiểm tra quyền, tính tiến độ theo tỷ lệ việc con đã xong và ghi trạng thái Chờ duyệt vào Firestore Emulator. Việc có checklist cần hoàn tất mọi mục trước khi gửi. Nếu `settings/work.requireReportNote` bật, nhân viên cần nhập kết quả thực hiện.

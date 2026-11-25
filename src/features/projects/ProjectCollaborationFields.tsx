@@ -24,11 +24,10 @@ export function CollaborationInput({ label, value, onChange, limit, multiline, d
   </View>;
 }
 
-export function CollaborationFilePicker({ label, files, onChange, disabled, onPicking }: {
-  label: string; files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void;
-  disabled: boolean; onPicking: (picking: boolean) => void;
+export function useCollaborationFilePicker({ files, onChange, disabled, onPicking }: {
+  files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void;
+  disabled: boolean; onPicking?: (picking: boolean) => void;
 }) {
-  const styles = useScreenStyles();
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState('');
   const lock = useRef(false);
@@ -36,7 +35,7 @@ export function CollaborationFilePicker({ label, files, onChange, disabled, onPi
     if (lock.current || disabled) return;
     lock.current = true;
     setPicking(true);
-    onPicking(true);
+    onPicking?.(true);
     setError('');
     try {
       const next = [...files, ...await pickTaskAttachments()];
@@ -48,15 +47,34 @@ export function CollaborationFilePicker({ label, files, onChange, disabled, onPi
     } finally {
       lock.current = false;
       setPicking(false);
-      onPicking(false);
+      onPicking?.(false);
     }
   }
+  return { picking, error, pick };
+}
+
+export function CollaborationFilePicker({ label, files, onChange, disabled, onPicking }: {
+  label: string; files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void;
+  disabled: boolean; onPicking: (picking: boolean) => void;
+}) {
+  const styles = useScreenStyles();
+  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange, disabled, onPicking });
   return <View style={styles.stack}>
     <FilePickerButton label={label} accessibilityLabel={label} picking={picking} disabled={disabled}
       onPress={() => void pick()} hint="Tối đa 5 tệp, tổng 8 MB, mỗi tệp tối đa 5 MB." />
+    <PickedCollaborationFiles files={files} onChange={onChange} disabled={disabled || picking} error={error} />
+  </View>;
+}
+
+export function PickedCollaborationFiles({ files, onChange, disabled, error }: {
+  files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void; disabled: boolean; error: string;
+}) {
+  const styles = useScreenStyles();
+  if (!files.length && !error) return null;
+  return <View style={styles.stack}>
     {files.map((file, index) => <View key={index} style={styles.detailRow}>
       <AttachmentLabel file={file}><Text style={[styles.muted, styles.metadataValue]}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
-      <Button label={'Bỏ ' + file.name} secondary disabled={disabled || picking}
+      <Button label={'Bỏ ' + file.name} secondary disabled={disabled}
         onPress={() => onChange(files.filter((_, position) => position !== index))} />
     </View>)}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}

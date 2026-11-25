@@ -1,7 +1,7 @@
 import { signOut } from 'firebase/auth';
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
 import { useToast } from '../components/Toast';
 import { watchMemberAvatar } from '../features/auth/memberAvatar';
@@ -51,11 +51,6 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [scrollRoute]);
-
-  function openWeb() {
-    void Linking.openURL('https://quanly.marchix.vn/').catch(() =>
-      showToast('Không mở được trang quản lý Marchix. Vui lòng thử lại.', 'error'));
-  }
 
   function selectTab(tab: WorkspaceTab | 'ca-nhan') {
     setMenuOpen(false);
@@ -145,7 +140,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       <WorkspaceDrawer open={menuOpen} activeTab={activeTab}
         isAdmin={isAdmin} name={name} photoURL={avatar}
         pins={pinnedTabs.value} onTogglePin={pinningEnabled && pinnedTabs.ready ? togglePin : undefined}
-        onClose={() => setMenuOpen(false)} onSelect={selectTab} onOpenWeb={openWeb} onLogout={logout} />
+        onClose={() => setMenuOpen(false)} onSelect={selectTab} onLogout={logout} />
       {showLoginReminder && <StartupReminder key={JSON.stringify([isAdmin, canReadCash, canReviewCash, canReviewRequests])}
         email={email} name={name} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
         canReviewRequests={canReviewRequests} onClose={onDismissLoginReminder} onCheckIn={checkInFromReminder} />}

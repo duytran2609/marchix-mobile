@@ -6,7 +6,8 @@ import { searchByName } from '../utils/search';
 import { MemberAvatar } from './MemberAvatar';
 import { PeopleSummary } from './PeopleSummary';
 import { SearchInput } from './SearchInput';
-import { Button } from './Button';
+import { PopupHeader } from './PopupHeader';
+import { PopupAction } from './PopupBody';
 import { EmptyState } from './EmptyState';
 import type { EmptyStateIcon } from './EmptyState';
 import { KeyboardSafeAreaView } from './KeyboardViewport';
@@ -42,12 +43,12 @@ export function SearchableChoiceDropdown(props: ChoiceListProps & {
       <KeyboardSafeAreaView style={styles.overlay}>
         <Pressable accessible={false} aria-hidden tabIndex={-1} style={StyleSheet.absoluteFill} onPress={close} />
         <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
-          <Text accessibilityRole="header" style={styles.panelTitle}>{title}</Text>
+          <PopupHeader title={title} closeLabel={`Đóng ${title.toLowerCase()}`} onClose={close} inset={false} />
           <SearchableChoiceList {...props} scrollable onToggle={id => {
             props.onToggle(id);
             if (!multiple) close();
           }} />
-          <Button label="Xong" onPress={close} />
+          <PopupAction label="Xong" onPress={close} />
         </View>
         <ToastLayer safeAreaApplied />
       </KeyboardSafeAreaView>
@@ -84,8 +85,8 @@ export function SearchableChoiceList({ items, selected, disabled, label, emptyMe
     </View>}
   </>;
   return <View style={[styles.list, scrollable && styles.shrink]}>
-    <SearchInput accessibilityLabel={label} style={styles.input} value={search} onChangeText={setSearch}
-      editable={!disabled} placeholder="Tìm theo tên" autoCapitalize="none" />
+    <SearchInput accessibilityLabel={label} placeholder="Tìm theo tên" value={search} onChangeText={setSearch}
+      editable={!disabled} />
     {scrollable ? <ScrollView style={styles.results} contentContainerStyle={styles.list}
       keyboardShouldPersistTaps="handled">{rows}</ScrollView> : rows}
   </View>;
@@ -98,11 +99,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: 'rgba(33, 25, 53, 0.4)' },
   panel: { width: '100%', maxWidth: 420, maxHeight: '100%', flexShrink: 1, padding: 14, gap: 10,
     borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
-  panelTitle: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   trigger: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12,
     borderRadius: 9, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
-  input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderRadius: 9,
-    borderColor: colors.line, fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,
     backgroundColor: colors.surfaceMuted, borderRadius: 9, minHeight: 48, borderWidth: 1, borderColor: colors.line },
   label: { ...metadataValueStyle(colors), flex: 1, fontSize: 14 },

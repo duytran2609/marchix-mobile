@@ -16,6 +16,8 @@ export type AttendanceRequest = {
   to?: string;
   status: string;
   type: string;
+  leaveTime?: { from: string; to: string };
+  trip?: { time?: { from: string; to: string } };
   overtime?: { hours?: number };
 };
 

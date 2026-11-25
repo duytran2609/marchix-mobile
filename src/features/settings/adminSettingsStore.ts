@@ -46,7 +46,8 @@ export async function saveSettings(tab: DocumentTab, values: FieldValues, email:
 
 export const protectedOwner = 'dungnlt.ops@gmail.com';
 
-export async function saveMember(values: FieldValues, currentEmail: string, id?: string) {
+export async function saveMember(values: FieldValues, currentEmail: string,
+  projectAccess: ReadonlyMap<string, boolean>, id?: string) {
   const email = id ?? String(values.email).toLowerCase();
   if (!id && !/^[^\s/@]+@[^\s/@]+\.[^\s/@]+$/.test(email)) throw new Error('Email không hợp lệ.');
   const ref = doc(db, 'members', email);
@@ -60,6 +61,19 @@ export async function saveMember(values: FieldValues, currentEmail: string, id?:
       role: protectedAccount ? 'admin' : values.role, enabled: protectedAccount || values.enabled,
       grants: Object.keys(grants).filter(key => values[key]),
     };
+    const projectChanges = access.role === 'admin' ? [] : [...projectAccess];
+    const projects = await Promise.all(projectChanges.map(async ([projectId, checked]) => {
+      const project = await transaction.get(doc(db, 'projects', projectId));
+      if (!project.exists()) throw new Error('Danh sách dự án đã thay đổi. Hãy mở lại tài khoản để cập nhật.');
+      return { project, checked };
+    }));
+    for (const { project, checked } of projects) {
+      const collaborators: string[] = project.get('collaborators') ?? [];
+      if (project.get('ownerEmail') === email || collaborators.includes(email) === checked) continue;
+      const next = checked ? [...collaborators, email] : collaborators.filter(member => member !== email);
+      if (next.length > 50) throw new Error(`Dự án “${project.get('name') || project.id}” đã có tối đa 50 thành viên phối hợp.`);
+      transaction.update(project.ref, { collaborators: next });
+    }
     if (id) transaction.update(ref, access);
     else transaction.set(ref, { name: values.name, email, ...access });
   });

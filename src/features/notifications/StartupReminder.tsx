@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../components/Button';
+import { PopupHeader } from '../../components/PopupHeader';
+import { PopupAction, popupActionText } from '../../components/PopupBody';
 import { createThemedStyles } from '../../theme/theme';
 import { dateKey } from '../attendance/attendance';
 import { hasAttendanceRecord } from '../attendance/attendanceStore';
@@ -96,7 +97,7 @@ export function StartupReminder({
   return <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
     <SafeAreaView style={styles.overlay}>
       <View role="dialog" accessibilityLabel={title} accessibilityViewIsModal style={styles.panel}>
-        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+        <PopupHeader title={title} closeLabel="Đóng nhắc nhở" onClose={onClose} inset={false} />
         <ScrollView style={styles.scroll} contentContainerStyle={styles.messages}>
           {rows.map(row => <View key={row.id} style={[styles.row, row.overdue && styles.overdue]}>
             <Text aria-hidden style={row.overdue ? styles.dangerIcon : styles.warningIcon}>
@@ -108,9 +109,9 @@ export function StartupReminder({
         <View style={styles.actions}>
           <Pressable accessibilityRole="button" onPress={onClose}
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-            <Text style={styles.buttonLabel}>Đã xem</Text>
+            <Text style={[styles.buttonLabel, popupActionText]}>Đã xem</Text>
           </Pressable>
-          {checkInDate && <Button label="Chấm công" onPress={() => onCheckIn(checkInDate)} />}
+          {checkInDate && <PopupAction label="Chấm công" onPress={() => onCheckIn(checkInDate)} />}
         </View>
       </View>
     </SafeAreaView>
@@ -122,7 +123,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   panel: { width: '100%', maxWidth: 448, maxHeight: '95%', flexShrink: 1, padding: 15, gap: 12,
     borderRadius: 12, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
-  title: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   scroll: { flexShrink: 1, minHeight: 0 },
   messages: { gap: 4 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 8,
@@ -131,9 +131,9 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   warningIcon: { color: colors.warning, fontSize: 13, lineHeight: 18 },
   dangerIcon: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   message: { flex: 1, color: colors.ink, fontSize: 13, lineHeight: 18 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, flexShrink: 0 },
   button: { justifyContent: 'center', paddingHorizontal: 12, minHeight: 44,
     borderWidth: 1, borderColor: colors.line, borderRadius: 8 },
-  buttonLabel: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  buttonLabel: { color: colors.ink, fontSize: 13 },
   pressed: { backgroundColor: colors.surfaceMuted },
 }));

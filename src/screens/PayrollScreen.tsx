@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { Dropdown } from '../components/Dropdown';
 import { SegmentedButtons } from '../components/SegmentedButtons';
 import { useToast } from '../components/Toast';
@@ -93,9 +94,12 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
   }
 
   const confirmationDialog = confirmation && <PayrollModal title={confirmation.title} busy={busy} onClose={() => setConfirmation(undefined)}>
-    <Text style={styles.body}>{confirmation.message}</Text>
-    {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <Button label={busy ? 'Đang xử lý…' : confirmation.confirmLabel ?? 'Xác nhận'} disabled={busy} onPress={confirmation.submit} />
+    <PopupBody inset={false} contentContainerStyle={styles.stack}
+      footer={<PopupAction label={busy ? 'Đang xử lý…' : confirmation.confirmLabel ?? 'Xác nhận'}
+        disabled={busy} onPress={confirmation.submit} />}>
+      <Text style={styles.body}>{confirmation.message}</Text>
+      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    </PopupBody>
   </PayrollModal>;
 
   if (loadError || !data) return <View style={styles.stack}>
@@ -238,10 +242,10 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
     {!!error && !editor && !confirmation && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {editor && (editor.kind === 'employee' || selected) && <PayrollModal busy={busy} onClose={() => setEditor(undefined)}
       title={editor.kind === 'employee' ? (editor.id ? 'Sửa hồ sơ nhân sự' : 'Thêm nhân sự') : 'Lương tháng ' + label + ': ' + selected?.name}>
-      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      {editor.kind === 'employee' ? <EmployeeForm employee={employee} busy={busy} onSave={fields =>
+      {editor.kind === 'employee' ? <EmployeeForm employee={employee} busy={busy} saveError={error} onSave={fields =>
         void run(async () => { await saveEmployee(email, fields, editor.id); return 'Đã lưu hồ sơ nhân sự.'; }, true)} />
-      : selected && <><PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advances={selected.advances}
+      : selected && <PayEditor employee={selected.employee} pay={selected.pay} rates={rates} month={month} advances={selected.advances}
+        saveError={error}
         onOpenAdvance={id => onOpenAdvance(id, month)}
         slip={selected.slip} busy={busy} onSave={input => void run(async () => {
           await writePayroll(email, month, [selected.employee], data, 'save', new Map([[selected.employee.id, input]]));
@@ -249,12 +253,12 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
         }, true)} onReopen={() => void run(async () => {
           await writePayroll(email, month, [selected.employee], data, 'reopen');
           return 'Đã mở lại dòng lương.';
-        }, true)} />
-        {locked(selected.slip) && <Button label="Xuất phiếu lương" secondary disabled={busy}
+        }, true)} actions={<>
+        {locked(selected.slip) && <PopupAction label="Xuất phiếu lương" secondary disabled={busy}
           onPress={() => downloadSlip(month, selected)} />}
         {selected.slip?.status === 'Đã chốt' && selected.slip.email === email && !selected.slip.employeeConfirmedAt &&
-          <Button label="Xác nhận phiếu lương" disabled={busy} onPress={() => reviewSlip(selected.slip!)} />}
-      </>}
+          <PopupAction label="Xác nhận phiếu lương" disabled={busy} onPress={() => reviewSlip(selected.slip!)} />}
+        </>} />}
     </PayrollModal>}
     {confirmationDialog}
   </View>;

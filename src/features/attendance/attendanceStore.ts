@@ -32,7 +32,8 @@ export async function hasAttendanceRecord(email: string, date: string) {
   return !(await getDocsFromServer(records)).empty;
 }
 
-export function watchAttendance(email: string, admin: boolean, onData: (data: AttendanceData) => void, onError: () => void) {
+export function watchAttendance(email: string, admin: boolean, onData: (data: AttendanceData) => void, onError: () => void,
+  day?: string) {
   const state: Partial<AttendanceData> = admin ? {} : { people: [] };
   function publish<K extends keyof AttendanceData>(key: K, value: AttendanceData[K]) {
     state[key] = value;
@@ -42,15 +43,24 @@ export function watchAttendance(email: string, admin: boolean, onData: (data: At
 
   const attendance = collection(db, 'attendance');
   const requests = collection(db, 'requests');
+  const personalRecords = day
+    ? query(attendance, where('email', '==', email), where('date', '==', day))
+    : query(attendance, where('email', '==', email));
+  const options = { includeMetadataChanges: Boolean(day) };
+  const confirmed = (metadata: { fromCache: boolean; hasPendingWrites: boolean }) =>
+    !day || (!metadata.fromCache && !metadata.hasPendingWrites);
   const unsubscribe = [
-    onSnapshot(doc(db, 'settings', 'work'), snapshot => {
+    onSnapshot(doc(db, 'settings', 'work'), options, snapshot => {
+      if (!confirmed(snapshot.metadata)) return;
       const settings = snapshot.data() as Partial<Schedule> | undefined;
       publish('schedule', { ...defaultSchedule, ...settings, days: { ...defaultSchedule.days, ...settings?.days } });
     }, onError),
-    onSnapshot(admin ? attendance : query(attendance, where('email', '==', email)), snapshot => {
+    onSnapshot(admin ? attendance : personalRecords, options, snapshot => {
+      if (!confirmed(snapshot.metadata)) return;
       publish('records', snapshot.docs.map(row => ({ ...row.data({ serverTimestamps: 'estimate' }), id: row.id } as Attendance)));
     }, onError),
-    onSnapshot(admin ? requests : query(requests, where('createdBy', '==', email)), snapshot => {
+    onSnapshot(admin ? requests : query(requests, where('createdBy', '==', email)), options, snapshot => {
+      if (!confirmed(snapshot.metadata)) return;
       publish('requests', snapshot.docs.map(row => row.data() as AttendanceRequest));
     }, onError),
   ];

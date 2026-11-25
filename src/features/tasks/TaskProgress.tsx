@@ -9,6 +9,8 @@ export { taskStatus } from './taskStatuses';
 const statusTones = (colors: Palette) => ({
   'Chưa làm': { text: colors.muted, background: colors.surfaceMuted },
   'Đang làm': { text: '#155083', background: '#E4F0FD' },
+  'Đang chạy': { text: '#155083', background: '#E4F0FD' },
+  'Tạm dừng': { text: '#80510C', background: '#FDF1D7' },
   'Vướng': { text: colors.danger, background: colors.dangerSoft },
   'Chờ duyệt': { text: '#80510C', background: '#FDF1D7' },
   'Xong': { text: colors.success, background: colors.successSoft },
@@ -28,16 +30,24 @@ export function statusTone(status: string, colors: Palette) {
 export function TaskProgress({ task, previewStatus, previewProgress, variant }: {
   task: Task; previewStatus?: EditableStatus; previewProgress?: number; variant?: 'list' | 'detail' | 'kanban';
 }) {
+  const status = previewStatus ?? taskStatus(task);
+  return <StatusProgress status={status} progress={taskProgressValue(task, status, previewProgress)}
+    label="Tiến độ công việc" variant={variant} />;
+}
+
+export function StatusProgress({ status, progress, label, variant }: {
+  status: string; progress: number | null; label: string; variant?: 'list' | 'detail' | 'kanban';
+}) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const status = previewStatus ?? taskStatus(task);
-  const progress = taskProgressValue(task, status, previewProgress);
-  const value = <Text style={styles.progressValue}>{progress}%</Text>;
-  const track = <View accessibilityRole="progressbar" accessibilityLabel="Tiến độ công việc"
-    aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}
+  const percent = progress !== null && Number.isFinite(progress) ? Math.min(100, Math.max(0, progress)) : undefined;
+  const value = <Text style={styles.progressValue}>{percent === undefined ? '–' : `${percent}%`}</Text>;
+  const track = <View accessibilityRole="progressbar" accessibilityLabel={label}
+    aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+    aria-valuetext={percent === undefined ? 'Chưa có dữ liệu tiến độ' : undefined}
     style={[styles.track, variant && styles.fullHeightTrack, variant === 'list' && styles.listTrack,
       variant === 'kanban' && styles.kanbanTrack]}>
-    <View style={[styles.progressFill, { width: `${progress}%` }]} />
+    <View style={[styles.progressFill, { width: `${percent ?? 0}%` }]} />
   </View>;
 
   if (variant === 'kanban') return <View style={styles.progressHeader}>{track}{value}</View>;

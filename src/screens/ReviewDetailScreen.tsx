@@ -3,11 +3,10 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../components/TextInput';
 import { EmptyState } from '../components/EmptyState';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { KeyboardViewport } from '../components/KeyboardViewport';
-import { Button } from '../components/Button';
 import { FieldLabel } from '../components/FieldLabel';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
 import { ToastLayer, useToast } from '../components/Toast';
 import { formatTaskDate } from '../features/tasks/taskDates';
 import { taskUnsetLabel } from '../features/tasks/taskLabels';
@@ -60,12 +59,16 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
     <SafeAreaView style={styles.overlay}>
       <KeyboardViewport style={styles.center}>
         <View role="dialog" accessibilityLabel="Chi tiết phê duyệt công việc" accessibilityViewIsModal style={styles.popup}>
-          <View style={styles.header}>
-            <Text style={screenStyles.cardTitle}>Chi tiết phê duyệt công việc</Text>
-            <PopupCloseButton label="Đóng chi tiết phê duyệt" onPress={onBack} disabled={!!busy} />
-          </View>
-          <KeyboardScrollView style={styles.scroll} contentContainerStyle={[styles.content, screenStyles.stack]}
-            keyboardShouldPersistTaps="handled">
+          <PopupHeader title="Chi tiết phê duyệt công việc" closeLabel="Đóng chi tiết phê duyệt"
+            onClose={onBack} disabled={!!busy} />
+          <PopupBody contentContainerStyle={[styles.content, screenStyles.stack]}
+            footer={active && taskAssignmentEnabled && (needsReviewer ? onAssignReviewer &&
+              <PopupAction label="Chỉ định người duyệt" onPress={onAssignReviewer} /> : <>
+              <PopupAction label={busy === 'approve' ? 'Đang duyệt…' : 'Duyệt'} disabled={!!busy || !rating}
+                onPress={() => void decide('approve')} />
+              <PopupAction label={busy === 'rework' ? 'Đang trả lại…' : 'Trả lại'} secondary
+                disabled={!!busy || !note.trim()} onPress={() => void decide('rework')} />
+            </>)}>
             <View style={screenStyles.panel}>
               <Text accessibilityRole="header" style={screenStyles.heading}>{task.title}</Text>
               {metadata.map(([label, value]) => <Text key={label} style={[screenStyles.muted, screenStyles.metadataValue]}>
@@ -90,7 +93,6 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
             {!active ? <Text style={screenStyles.muted}>Lượt gửi duyệt này đã thay đổi. Quay về danh sách để kiểm tra lại.</Text>
               : needsReviewer ? <>
                 <Text style={screenStyles.muted}>Cần chỉ định người có quyền duyệt công việc này.</Text>
-                {taskAssignmentEnabled && onAssignReviewer && <Button label="Chỉ định người duyệt" onPress={onAssignReviewer} />}
               </>
               : !taskAssignmentEnabled ? <Text style={screenStyles.muted}>Bản này chỉ cho xem kết quả gửi duyệt.</Text> : (
               <View style={screenStyles.panel}>
@@ -109,13 +111,9 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
                 <TextInput accessibilityLabel="Nhận xét" placeholder="Nhập nhận xét hoặc lý do trả lại"
                   style={[screenStyles.input, screenStyles.messageInput]} value={note} onChangeText={setNote}
                   multiline maxLength={commentMaxLength} editable={!busy} />
-                <Button label={busy === 'approve' ? 'Đang duyệt…' : 'Duyệt'} disabled={!!busy || !rating}
-                  onPress={() => void decide('approve')} />
-                <Button label={busy === 'rework' ? 'Đang trả lại…' : 'Trả lại'} secondary
-                  disabled={!!busy || !note.trim()} onPress={() => void decide('rework')} />
               </View>
             )}
-          </KeyboardScrollView>
+          </PopupBody>
         </View>
       </KeyboardViewport>
       <ToastLayer safeAreaApplied />
@@ -127,8 +125,5 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(33, 25, 53, 0.45)' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   popup: { width: '100%', maxWidth: 560, flexShrink: 1, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.paper },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.line },
-  scroll: { flexShrink: 1, minHeight: 0 },
   content: { padding: 16 },
 }));

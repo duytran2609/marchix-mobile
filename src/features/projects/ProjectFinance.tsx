@@ -3,6 +3,8 @@ import { PaginatedList } from '../../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/Button';
+import { PopupAction } from '../../components/PopupBody';
+import { DisclosureButton } from '../../components/DisclosureButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { cashStatus, displayDate, vnd } from '../cash/cash';
 import type { Cash } from '../cash/cash';
@@ -85,7 +87,7 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
     setNotice('');
     setEditor(next);
   }
-  const inPopup = editor?.type === 'line' || editor?.type === 'rent';
+  const approvalError = !editor || editor.type === 'approve';
   function closePopup() {
     if (lock.current) return;
     setEditor(undefined);
@@ -163,7 +165,8 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
         setFailed([]); setDraft(undefined); setVersions(undefined); setLedger(undefined); setRetry(value => value + 1);
       }} />
     </>}
-    {!inPopup && !!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    {editor?.type === 'template' && !!error &&
+      <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={styles.body}>{notice}</Text>}
     {(isAdmin || canReadCash) && <Button label="+ Đề nghị chi" onPress={() => onExpense(expenseSeed)} disabled={!!editor} />}
 
@@ -171,8 +174,6 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
       <Text accessibilityRole="header" style={styles.cardTitle}>Dự toán</Text>
       {!editor && <View style={styles.choices}>
         <Button label="+ Khoản dự toán" onPress={() => open({ type: 'line', plan, revision })} />
-        <Button label={latest ? 'Chốt điều chỉnh' : 'Chốt dự toán'} secondary
-          disabled={!draft || latest?.revision === revision} onPress={beginApproval} />
         <Button label="+ Thuê / trả trước / cọc" secondary onPress={() => open({ type: 'rent', plan, revision })} />
         {project.expenseProfile === 'fnb' && !latest && !plan.lines.length && <Button label="Điền khung F&B" secondary
           onPress={() => open({ type: 'template', plan, revision })} />}
@@ -183,8 +184,7 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
           () => saveFinanceDraft(project.id, email, editor.revision, { ...editor.plan, lines: fnbBudgetTemplate() }), 'Đã ghi khung F&B.')} />
         <Button label="Hủy" secondary disabled={busy} onPress={() => setEditor(undefined)} />
       </>}
-      {editor?.type === 'rent' && <ProjectFormPopup title="Thuê / trả trước / cọc" busy={busy} onClose={closePopup}>
-        <RentEditor busy={busy} error={error} onCancel={closePopup}
+      {editor?.type === 'rent' && <RentEditor busy={busy} error={error} onClose={closePopup}
           onSave={build => void write(async () => {
             const codes = new Set([...editor.plan.lines, ...(versions ?? []).flatMap(version => version.lines)]
               .map(line => line.code?.trim().toUpperCase()));
@@ -194,32 +194,19 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
             await saveFinanceDraft(project.id, email, editor.revision, {
               ...editor.plan, lines: [...editor.plan.lines, ...added],
             });
-          }, 'Đã ghi khoản thuê và cọc vào dự toán.')} />
-      </ProjectFormPopup>}
-      {editor?.type === 'line' && <ProjectFormPopup
-        title={editor.remove ? 'Bỏ khoản khỏi bản nháp' : editor.line ? 'Sửa khoản dự toán' : 'Lập khoản dự toán'}
-        busy={busy} onClose={closePopup}>
-        {!editor.remove ? <BudgetLineEditor line={editor.line} busy={busy} error={error}
+          }, 'Đã ghi khoản thuê và cọc vào dự toán.')} />}
+      {editor?.type === 'line' && (!editor.remove
+        ? <BudgetLineEditor line={editor.line} busy={busy} error={error}
           categories={Object.values(projectExpenseCategories(project.expenseProfile, editor.line?.category)).flat()}
-          onSave={line => saveLine(editor, line)} onCancel={closePopup}
-          onRemove={editor.line ? () => open({ ...editor, remove: true }) : undefined} /> : <>
+          onSave={line => saveLine(editor, line)} onClose={closePopup}
+          onRemove={editor.line ? () => open({ ...editor, remove: true }) : undefined} />
+        : <ProjectFormPopup title="Bỏ khoản khỏi bản nháp" busy={busy} onClose={() => open({ ...editor, remove: false })}
+          footer={<PopupAction label="Xác nhận bỏ khoản" disabled={busy} onPress={() => void write(() => saveFinanceDraft(
+            project.id, email, editor.revision, { ...editor.plan, lines: editor.plan.lines.filter(line => line !== editor.line) }),
+            'Đã bỏ khoản khỏi bản nháp.')} />}>
           <Text style={styles.body}>Bỏ {editor.line?.name} khỏi bản nháp?</Text>
           {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-          <Button label="Xác nhận bỏ khoản" disabled={busy} onPress={() => void write(() => saveFinanceDraft(
-            project.id, email, editor.revision, { ...editor.plan, lines: editor.plan.lines.filter(line => line !== editor.line) }),
-            'Đã bỏ khoản khỏi bản nháp.')} />
-          <Button label="Hủy" secondary disabled={busy} onPress={() => open({ ...editor, remove: false })} />
-        </>}
-      </ProjectFormPopup>}
-      {editor?.type === 'approve' && <View style={styles.detailRow}>
-        <Text style={styles.body}>Chốt v{editor.draft.revision} với tổng {money(budgetTotal(editor.draft.lines))}.</Text>
-        {cap > 0 && (budgetTotal(editor.draft.lines) ?? 0) > cap &&
-          <Text style={styles.error}>Dự toán vượt trần vốn {money(cap)}.</Text>}
-        {editor.adjustment && <FinanceInput label="Lý do điều chỉnh" value={reason} onChange={setReason} maxLength={1000} />}
-        <Button label={busy ? 'Đang chốt…' : 'Xác nhận chốt dự toán'} disabled={busy} onPress={() => void write(
-          () => closeFinanceBudget(project.id, email, editor.draft, reason, editor.adjustment), 'Đã chốt dự toán.')} />
-        <Button label="Hủy" secondary disabled={busy} onPress={() => { setEditor(undefined); setError(''); }} />
-      </View>}
+        </ProjectFormPopup>)}
       {!control.rows.length && !plan.lines.length && <EmptyState icon="chart" message="Chưa có khoản dự toán." />}
       <PaginatedList items={control.rows}>
         {pageItems => pageItems.map(row => {
@@ -268,7 +255,19 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
         <FinanceField label="Đang lập" value={money(lineTotal(line))} />
         {!editor && <Button label="Bổ sung mã khoản" secondary onPress={() => open({ type: 'line', line, plan, revision })} />}
       </View>)}
-      <Button label={details ? 'Ẩn phân tích dự toán' : 'Thuế, báo giá, cọc & phân tích'} secondary onPress={() => setDetails(value => !value)} />
+      {!editor && <Button label={latest ? 'Chốt điều chỉnh' : 'Chốt dự toán'} secondary
+        disabled={!draft || latest?.revision === revision} onPress={beginApproval} />}
+      {approvalError && !!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {editor?.type === 'approve' && <View style={styles.detailRow}>
+        <Text style={styles.body}>Chốt v{editor.draft.revision} với tổng {money(budgetTotal(editor.draft.lines))}.</Text>
+        {cap > 0 && (budgetTotal(editor.draft.lines) ?? 0) > cap &&
+          <Text style={styles.error}>Dự toán vượt trần vốn {money(cap)}.</Text>}
+        {editor.adjustment && <FinanceInput label="Lý do điều chỉnh" value={reason} onChange={setReason} maxLength={1000} />}
+        <Button label={busy ? 'Đang chốt…' : 'Xác nhận chốt dự toán'} disabled={busy} onPress={() => void write(
+          () => closeFinanceBudget(project.id, email, editor.draft, reason, editor.adjustment), 'Đã chốt dự toán.')} />
+        <Button label="Hủy" secondary disabled={busy} onPress={() => { setEditor(undefined); setError(''); }} />
+      </View>}
+      <DisclosureButton label="Thuế, báo giá, cọc & phân tích" expanded={details} onPress={() => setDetails(value => !value)} />
       {details && cashReady && <>
         <FinanceField label="Đã chi / Đã thu hoàn" value={money(control.paid) + ' / ' + money(control.returned)} />
         <FinanceField label="Dự báo chi thuần cuối dự án" value={money(control.forecastTotal)} />
@@ -284,7 +283,7 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
           {version.lines.map((line, index) => <FinanceField key={index} label={[line.code, line.name].filter(Boolean).join(' · ')} value={money(lineTotal(line))} />)}
         </>}
       </View>)}
-      <Button label={weekly ? 'Ẩn dòng tiền 13 tuần' : 'Dòng tiền 13 tuần & hòa vốn'} secondary onPress={() => setWeekly(value => !value)} />
+      <DisclosureButton label="Dòng tiền 13 tuần & hòa vốn" expanded={weekly} onPress={() => setWeekly(value => !value)} />
       {weekly && <ForecastSummary plan={plan} onEdit={editor ? undefined : () => open({ type: 'forecast', plan, revision })} />}
       {weekly && cashReady && latest && <>
         <Text accessibilityRole="header" style={styles.cardTitle}>Đối chiếu Thu chi theo hạng mục</Text>
@@ -295,9 +294,9 @@ export function ProjectFinance({ project, canReadCash, isAdmin, email, onExpense
           <FinanceField label="Còn lại" value={money(row.remaining)} />
         </View>)}
       </>}
-      {editor?.type === 'forecast' && <CashForecastEditor plan={editor.plan} busy={busy}
+      {editor?.type === 'forecast' && <CashForecastEditor plan={editor.plan} busy={busy} error={error}
         onSave={next => void write(() => saveFinanceDraft(project.id, email, editor.revision, next), 'Đã ghi dự báo dòng tiền.')}
-        onCancel={() => { setEditor(undefined); setError(''); }} />}
+        onClose={closePopup} />}
     </>}
 
     {cashReady && <>

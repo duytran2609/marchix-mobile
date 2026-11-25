@@ -1,5 +1,5 @@
 import { EmptyState } from '../components/EmptyState';
-import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../components/PopupBody';
 import { KeyboardSafeAreaView } from '../components/KeyboardViewport';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
@@ -19,7 +19,7 @@ import { TimeFields } from '../components/TimeFields';
 import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
-import { PopupCloseButton } from '../components/PopupCloseButton';
+import { PopupHeader } from '../components/PopupHeader';
 import { useToast } from '../components/Toast';
 import { watchMemberDirectory } from '../features/auth/memberDirectory';
 import type { DirectoryMember as Member } from '../features/auth/memberDirectory';
@@ -164,15 +164,13 @@ export function RequestsScreen({ name, tasks, tasksError, onRetryTasks, initialR
     {onBackToReview && !selected && <Modal visible transparent animationType="fade" onRequestClose={onBackToReview}>
       <SafeAreaView style={styles.modal}>
         <View role="dialog" accessibilityLabel="Chi tiết đơn" accessibilityViewIsModal style={[styles.popup, styles.popupContent]}>
-          <View style={shared.listHeader}>
-            <Text style={shared.cardTitle}>Chi tiết đơn</Text>
-            <PopupCloseButton label="Đóng đơn" onPress={onBackToReview} />
-          </View>
-          {error ? <>
-            <Text accessibilityRole="alert" style={shared.error}>Không tải được đơn.</Text>
-            <Button label="Tải lại" secondary onPress={() => { setError(false); setRetry(value => value + 1); }} />
-          </> : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn" color={colors.accent} />
-            : <EmptyState icon="approval" message="Không tìm thấy đơn hoặc bạn không còn quyền xem." />}
+          <PopupHeader title="Chi tiết đơn" closeLabel="Đóng đơn" onClose={onBackToReview} inset={false} />
+          <PopupBody inset={false} footer={error && <PopupAction label="Tải lại" secondary
+            onPress={() => { setError(false); setRetry(value => value + 1); }} />}>
+            {error ? <Text accessibilityRole="alert" style={shared.error}>Không tải được đơn.</Text>
+              : rows === null ? <ActivityIndicator accessibilityLabel="Đang tải đơn" color={colors.accent} />
+                : <EmptyState icon="approval" message="Không tìm thấy đơn hoặc bạn không còn quyền xem." />}
+          </PopupBody>
         </View>
       </SafeAreaView>
     </Modal>}
@@ -355,12 +353,17 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     <KeyboardSafeAreaView style={styles.modal}>
       <View role="dialog" accessibilityLabel={row ? 'Chi tiết đơn' : 'Tạo đơn'} accessibilityViewIsModal
         style={[styles.popup, { width: Math.min(560, width - insets.left - insets.right - 32) }]}>
-        <KeyboardScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <PopupHeader title={row ? 'Chi tiết đơn' : 'Tạo đơn'} closeLabel="Đóng đơn" onClose={onClose} disabled={busy} />
+        <PopupBody showsVerticalScrollIndicator={false} footer={(canRoute || canDecide || editable) && <>
+          {canRoute && <PopupAction label="Lưu người duyệt" secondary disabled={busy || !approver || approver === row?.approverEmail}
+            onPress={() => void submit('route')} />}
+          {canDecide && <View style={[shared.choices, styles.decisionActions]}>
+            <PopupAction label="Duyệt" disabled={busy} onPress={() => void submit('approve')} />
+            <PopupAction label="Từ chối" secondary disabled={busy} onPress={() => void submit('reject')} />
+          </View>}
+          {editable && <PopupAction label={row ? 'Lưu đơn' : 'Gửi đơn'} disabled={busy} onPress={() => void submit('edit')} />}
+        </>}>
           <View style={styles.popupContent}>
-            <View style={shared.listHeader}>
-              <Text accessibilityRole="header" style={[shared.heading, shared.listHeading]}>{row ? 'Chi tiết đơn' : 'Tạo đơn'}</Text>
-              <PopupCloseButton label="Đóng đơn" onPress={onClose} disabled={busy} />
-            </View>
             {row && <>
               <RequestStatus status={row.status} />
               {!!row.decidedBy && detail('Người xử lý', [memberName(row.decidedBy), formatVietnamDateTime(row.decidedAt)].filter(Boolean).join(' · '))}
@@ -459,23 +462,14 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                   items={approvers.map(member => ({ id: member.email, name: member.name }))}
                   selected={approver ? [approver] : []} onToggle={id => setApprover(id === approver ? '' : id)}
                   disabled={busy} emptyMessage="Không có người duyệt phù hợp." />}
-                {canRoute && <Button label="Lưu người duyệt" secondary disabled={busy || !approver || approver === row?.approverEmail}
-                  onPress={() => void submit('route')} />}
               </> : detail('Người duyệt', getMemberName(approver, members))}
             </View>
             {row?.reply ? detail('Ý kiến người duyệt', row.reply) : null}
             {error && <Text accessibilityRole="alert" style={shared.error}>{error}</Text>}
-            {canDecide && <>
-              {input('Ý kiến xử lý', reply, setReply, { maxLength: 500, multiline: true, requiredFor: 'khi từ chối' })}
-              <View style={[shared.choices, styles.decisionActions]}>
-                <Button label="Duyệt" disabled={busy} onPress={() => void submit('approve')} />
-                <Button label="Từ chối" secondary disabled={busy} onPress={() => void submit('reject')} />
-              </View>
-            </>}
-            {editable && <Button label={row ? 'Lưu đơn' : 'Gửi đơn'} disabled={busy} onPress={() => void submit('edit')} />}
+            {canDecide && input('Ý kiến xử lý', reply, setReply, { maxLength: 500, multiline: true, requiredFor: 'khi từ chối' })}
             {busy && <ActivityIndicator accessibilityLabel="Đang lưu đơn" color={colors.accent} />}
           </View>
-        </KeyboardScrollView>
+        </PopupBody>
       </View>
       {monthPickerYear !== null && <CalendarDialog title="Trừ vào lương tháng" onClose={() => setMonthPickerYear(null)}>
         <View style={shared.listHeader}>

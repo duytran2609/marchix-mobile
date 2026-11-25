@@ -239,8 +239,7 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
             fallbackLabel={project || 'Tất cả'}
             onChange={value => onOptionsChange({ ...options, project: value === 0 ? null : value })} />}
         </View>
-        <SearchInput accessibilityLabel="Tìm tên công việc" placeholder="Tìm tên công việc"
-          style={styles.search} value={search} returnKeyType="search"
+        <SearchInput accessibilityLabel="Tìm tên công việc" placeholder="Tìm tên công việc" value={search}
           onChangeText={value => onOptionsChange({ ...options, search: value })} />
         <SegmentedButtons label="Kiểu xem công việc" value={view}
           choices={[{ value: 'list', label: 'Danh sách' }, { value: 'kanban', label: 'Bảng Kanban' },
@@ -285,8 +284,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   statLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
   controls: { padding: 12, gap: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.paper },
   activeLabel: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  search: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 9,
-    fontSize: 16 },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterField: { flexBasis: 0, flexGrow: 1, minWidth: 0 },
   halfFilterField: { flexBasis: '45%' },

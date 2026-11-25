@@ -71,6 +71,9 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
     await page.getByRole('button', { name: 'Danh sách', exact: true }).click();
     await card.click();
     const dialog = page.getByRole('dialog', { name: 'Chi tiết công việc', exact: true });
+    const header = dialog.getByRole('heading', { name: 'Chi tiết công việc', exact: true }).locator('..');
+    await expect(header).toHaveCSS('border-bottom-width', '0px');
+    await expect(header.getByRole('button', { name: 'Đóng chi tiết công việc' })).toHaveText('×');
     const content = dialog.getByTestId('task-detail-scroll');
     const tab = (name: string) => dialog.getByRole('button', { name, exact: true });
     const height = () => dialog.evaluate(element => element.getBoundingClientRect().height);
@@ -173,6 +176,16 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
     await compose.fill(original);
     await send.click();
     const originalText = sender.getByText(original, { exact: true });
+    const senderHistory = sender.getByTestId('task-detail-scroll');
+    const search = senderHistory.getByRole('textbox', { name: 'Tìm trong trao đổi', exact: true });
+    await expect(search).toBeVisible();
+    const heading = senderHistory.getByRole('heading', { name: 'Trao đổi', exact: true });
+    const titleBounds = (await heading.boundingBox())!;
+    expect((await search.boundingBox())!.y).toBeGreaterThanOrEqual(titleBounds.y + titleBounds.height);
+    await search.fill('không có nội dung này');
+    await expect(senderHistory.getByText('Không tìm thấy trao đổi phù hợp.')).toBeVisible();
+    await expect(originalText).toHaveCount(0);
+    await search.fill(original.toLocaleUpperCase('vi'));
     const respond = originalText.locator('..')
       .getByRole('button', { name: 'Trả lời trao đổi của Nhân viên demo' });
     await expect(respond).toBeVisible();
@@ -190,6 +203,9 @@ test('Người giao trả lời trao đổi và người thực hiện thấy tr
     await expect(page.getByText(reply, { exact: true })).toBeVisible();
     await expect(page.getByText('Trả lời Nhân viên demo', { exact: true })).toBeVisible();
     await expect(page.getByText(original, { exact: true })).toHaveCount(2);
+    await expect(senderHistory.getByText(reply, { exact: true })).toHaveCount(0);
+    await senderHistory.getByRole('button', { name: 'Xóa từ khóa tìm trong trao đổi', exact: true }).click();
+    await expect(senderHistory.getByText(reply, { exact: true })).toBeVisible();
   } finally {
     await sender.close();
   }
@@ -829,11 +845,15 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
     .toContainText('Xác nhận luồng đăng nhập trên thiết bị thật.');
   await expect(projectInfo.getByText('Mô tả ngắn', { exact: true }).locator('..'))
     .toContainText('Dữ liệu thử nghiệm.');
-  const overview = page.getByRole('region', { name: 'Tổng quan', exact: true });
+  await expect(profile.getByText('Đang chạy', { exact: true })).toBeVisible();
+  await expect(profile.getByRole('progressbar', { name: /^Tiến độ dự án/ })).toHaveAttribute('aria-valuenow', '55');
+  await expect(profile.getByText('55%', { exact: true })).toBeVisible();
+  const work = page.getByRole('region', { name: 'Công việc đính kèm', exact: true });
   const tabList = page.getByRole('tablist', { name: 'Mục trong hồ sơ dự án' });
-  await expect(overview.locator(':scope > :first-child')).toHaveAttribute('role', 'tablist');
+  await expect(work.locator(':scope > :first-child')).toHaveAttribute('role', 'tablist');
+  await expect(tabList.getByRole('tab', { name: 'Công việc đính kèm' })).toHaveAttribute('aria-selected', 'true');
   const tabs = tabList.getByRole('tab');
-  await expect(tabs).toHaveCount(4);
+  await expect(tabs).toHaveCount(3);
   const positions = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
   expect(new Set(positions).size).toBe(1);
   await expect(page.getByRole('button', { name: '+ Thêm dự án' })).toHaveCount(0);
@@ -842,7 +862,6 @@ test('Dự án lọc công việc theo dự án và mở popup trên trang Công
   const finance = page.getByRole('region', { name: 'Tài chính', exact: true });
   await expect(finance.getByRole('heading', { name: 'Tài chính dự án' })).toBeVisible();
   await expect(finance.getByText(/Trần vốn dự án/)).toBeVisible();
-  const work = page.getByRole('region', { name: 'Công việc đính kèm', exact: true });
   await tabList.getByRole('tab', { name: 'Công việc đính kèm' }).click();
   await expect(work.getByRole('heading', { name: 'Việc trong dự án' })).toBeVisible();
   await expect(work.getByRole('heading', { name: 'Mốc bàn giao' })).toHaveCount(0);
@@ -936,23 +955,39 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
   await openMenu.click();
   const drawerPanel = drawer.getByTestId('workspace-drawer');
   const brandName = drawer.getByText('MarHub', { exact: true });
+  const menuSearch = drawer.getByRole('textbox', { name: 'Tìm mục menu' });
+  const searchIcon = menuSearch.locator('..').locator('[aria-hidden="true"] img');
   await expect(brandName).toHaveCSS('color', 'rgb(96, 65, 189)');
   const initialViewport = page.viewportSize()!;
   for (const [width, drawerWidth] of [[280, 208], [320, 208], [390, 248], [430, 248], [768, 280]]) {
     await page.setViewportSize({ ...initialViewport, width });
     await expect(drawerPanel).toHaveCSS('width', `${drawerWidth}px`);
     await expect(brandName).toBeInViewport({ ratio: 1 });
+    await expect(searchIcon).toBeVisible();
+    const [logoBox, searchBox] = await Promise.all([
+      drawer.getByLabel('Logo MarHub').boundingBox(), menuSearch.boundingBox(),
+    ]);
+    expect(searchBox!.x).toBeCloseTo(logoBox!.x);
+    expect(searchBox!.y - (logoBox!.y + logoBox!.height)).toBeCloseTo(12);
     expect(await brandName.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toBeInViewport({ ratio: 1 });
   }
   await page.setViewportSize(initialViewport);
   const items = drawer.getByRole('button');
   const labels = [
-    'Đóng menu', 'Web Quản lý Marchix ↗', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
+    'Đóng menu', 'Tổng quan', 'Công việc', 'Kế hoạch tuần', 'Phê duyệt', 'KPI',
     'Chấm công', 'Thu chi', 'Đơn từ', 'Phiếu lương', 'Dự án', 'Văn thư', 'Cài đặt', 'Thông tin cá nhân', 'Đăng xuất',
   ];
   await expect(items).toHaveCount(labels.length);
   for (const [index, label] of labels.entries()) await expect(items.nth(index)).toHaveAccessibleName(label);
+  await menuSearch.fill('luong');
+  await expect(drawer.getByRole('button', { name: 'Phiếu lương' })).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Tổng quan' })).toHaveCount(0);
+  await menuSearch.fill('không có trong menu');
+  await expect(drawer.getByText('Không tìm thấy mục phù hợp.')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Xóa từ khóa tìm mục menu' }).click();
+  await expect(menuSearch).toHaveValue('');
+  await expect(drawer.getByRole('button', { name: 'Tổng quan' })).toBeVisible();
 
   await drawer.getByRole('button', { name: 'Thông tin cá nhân' }).click();
   await expect(drawer).toBeHidden();
@@ -984,11 +1019,23 @@ test('menu bên trái mở đúng mục và giữ điều hướng theo vai trò
 
   await openMenu.click();
   await expect(drawer.getByRole('button', { name: 'Thông tin cá nhân' })).toHaveAttribute('aria-current', 'page');
+  await menuSearch.fill('CAI DAT');
   await drawer.getByRole('button', { name: 'Cài đặt' }).click();
   await expect(drawer).toBeHidden();
   await expect(page.getByRole('tablist', { name: 'Nhóm cài đặt' }).getByRole('tab')).toHaveCount(1);
   await expect(page.getByRole('tab', { name: 'Chung' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('heading', { name: 'Cài đặt' })).toBeVisible();
+  const managementUrl = 'https://quanly.marchix.vn/';
+  await page.context().route(managementUrl, route => route.fulfill({ body: 'Quản lý Marchix' }));
+  const managementPopup = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Web Quản lý Marchix ↗' }).click();
+  const managementPage = await managementPopup;
+  await expect(managementPage).toHaveURL(managementUrl);
+  await managementPage.close();
+  await openMenu.click();
+  await expect(menuSearch).toHaveValue('');
+  await drawer.getByRole('button', { name: 'Đóng menu' }).click();
+  await expect(drawer).toBeHidden();
   const versionPanel = page.getByRole('heading', { name: 'Phiên bản ứng dụng' }).locator('..');
   await expect(versionPanel.getByText('0.4.0', { exact: true })).toBeVisible();
   const appearance = page.getByRole('radiogroup', { name: 'Chế độ hiển thị' });
@@ -1410,6 +1457,13 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const accountPopup = page.getByRole('dialog', { name: 'Thêm tài khoản', exact: true });
     await accountPopup.getByRole('textbox', { name: 'Tên hiển thị' }).fill('Nhân viên kiểm thử');
     await accountPopup.getByRole('textbox', { name: 'Email', exact: true }).fill(memberEmail);
+    const projectSwitch = { name: 'Xem trao đổi và tệp dự án', exact: true };
+    const addProjectAccess = accountPopup.getByRole('switch', projectSwitch);
+    await expect(addProjectAccess).toBeEnabled();
+    await expect(accountPopup.getByRole('switch', { name: 'Marchix Mobile · Demo', exact: true })).toHaveCount(0);
+    await expect(addProjectAccess).toHaveAttribute('aria-checked', 'false');
+    await addProjectAccess.click();
+    await expect(addProjectAccess).toHaveAttribute('aria-checked', 'true');
     await accountPopup.getByRole('button', { name: 'Lưu cài đặt' }).click();
     await expect(accountPopup).toBeHidden();
     await expect.poll(async () => (await read(`members/${memberEmail}`))?.role?.stringValue).toBe('staff');
@@ -1421,7 +1475,12 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await expect(editAccountPopup).toBeVisible();
     await expect(editAccountPopup.getByRole('textbox', { name: 'Tên hiển thị' })).toHaveCount(0);
     await expect(editAccountPopup.getByRole('textbox', { name: 'Email', exact: true })).toHaveCount(0);
-    await editAccountPopup.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await expect(editAccountPopup.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
+    const editProjectAccess = editAccountPopup.getByRole('switch', projectSwitch);
+    await expect(editProjectAccess).toHaveAttribute('aria-checked', 'true');
+    await editProjectAccess.click();
+    await editAccountPopup.getByRole('button', { name: 'Lưu cài đặt' }).click();
+    await expect(editAccountPopup).toBeHidden();
 
     await openTab(labels[2]);
     const expenseTable = page.getByRole('table', { name: 'Bảng chi phí cố định' });
@@ -1447,7 +1506,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await expenseRow.getByRole('button', { name: `Sửa khoản chi ${expenseName}` }).click();
     const editExpense = page.getByRole('dialog', { name: 'Chỉnh sửa khoản chi cố định' });
     await expect(editExpense.getByRole('textbox', { name: 'Tên khoản chi' })).toHaveValue(expenseName);
-    await editExpense.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await editExpense.getByRole('button', { name: 'Đóng chỉnh sửa khoản chi cố định' }).click();
     const total = expenseTable.getByRole('row').filter({ hasText: 'Tổng chi phí cố định / tháng' });
     await expect(total).toContainText(/85[.]000\s*₫/);
     await deleteExpense.click();
@@ -1709,6 +1768,15 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     await Promise.all(documents.map((path, index) => fetch(`${base}/${path}`, originals[index]
       ? { method: 'PATCH', headers, body: JSON.stringify({ fields: originals[index] }) }
       : { method: 'DELETE', headers })));
+    const projectPath = 'projects/marchix-mobile-demo';
+    const collaborators: { stringValue: string }[] = (await read(projectPath))?.collaborators?.arrayValue?.values ?? [];
+    if (collaborators.some(member => member.stringValue === memberEmail)) {
+      await fetch(`${base}/${projectPath}?updateMask.fieldPaths=collaborators`, {
+        method: 'PATCH', headers, body: JSON.stringify({
+          fields: { collaborators: { arrayValue: { values: collaborators.filter(member => member.stringValue !== memberEmail) } } },
+        }),
+      });
+    }
     await fetch(`${base}/members/${memberEmail}`, { method: 'DELETE', headers });
     if (recurringId) await fetch(`${base}/recurring/${recurringId}`, { method: 'DELETE', headers });
   }
@@ -1819,6 +1887,9 @@ test('Popup giao và sửa việc hiển thị mức ưu tiên và các trạng 
   }
 
   await page.getByRole('button', { name: '+ Giao việc', exact: true }).click();
+  const createTask = page.getByRole('button', { name: 'Tạo công việc', exact: true });
+  await expect(createTask.locator('..')).toHaveCSS('border-top-width', '0px');
+  await expect(createTask.getByText('Tạo công việc')).toHaveCSS('font-weight', '500');
   const emptyAssignee = page.getByRole('button', { name: 'Người thực hiện: Chưa thiết lập', exact: true });
   await expect(emptyAssignee).toBeVisible({ timeout: 15_000 });
   await expect(emptyAssignee.getByText('Chưa thiết lập', { exact: true })).toHaveCSS('color', 'rgb(118, 118, 118)');
@@ -2210,7 +2281,8 @@ test('chọn nhiều người, đặt lịch và giao tệp riêng cho từng c�
     await staff.click();
     await expect(staff).not.toBeChecked();
     await staff.click();
-    await search.clear();
+    await assigneePicker.getByRole('button', { name: 'Xóa từ khóa tìm thành viên' }).click();
+    await expect(search).toHaveValue('');
     const own = assigneePicker.getByRole('checkbox', { name: 'Người giao việc demo', exact: true });
     await own.click();
     await expect(own).toBeChecked();

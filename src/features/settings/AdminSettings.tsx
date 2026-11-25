@@ -1,4 +1,4 @@
-import { KeyboardScrollView } from '../../components/KeyboardScrollView';
+import { PopupAction, PopupBody } from '../../components/PopupBody';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { PaginatedList } from '../../components/PaginatedList';
 import { EmptyState } from '../../components/EmptyState';
@@ -13,7 +13,7 @@ import { FieldLabel } from '../../components/FieldLabel';
 import { NumberStepper } from '../../components/NumberStepper';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
+import { PopupHeader } from '../../components/PopupHeader';
 import { ToastLayer, useToast } from '../../components/Toast';
 import { inputTextStyle, useScreenStyles } from '../../theme/screenStyles';
 import { useTheme } from '../../theme/theme';
@@ -24,6 +24,7 @@ import { attendanceReminderFields, budgetFields, grants, lunchFields, memberFiel
 import type { AdminSettingsTab, Field, FieldValue, FieldValues } from './adminSettingsFields';
 import { loadProjectChoices, loadSettings, protectedOwner, removeRecurring, saveMember, saveRecurring, saveSettings } from './adminSettingsStore';
 import type { SettingsRow } from './adminSettingsStore';
+import { ProjectAccessSettings } from './ProjectAccessSettings';
 import { RecurringExpenseTable } from './RecurringExpenseTable';
 import { SettingsSwitch } from './SettingsSwitch';
 import { WorkdayOverrideSettings } from './WorkdayOverrideSettings';
@@ -128,7 +129,8 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
 
 function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }: {
   tab: AdminSettingsTab; fields: Field[]; row: SettingsRow; email: string;
-  onSave: (values: FieldValues, overrides: Record<string, WorkdayWeight | null>) => Promise<void>; onCancel?: () => void;
+  onSave: (values: FieldValues, overrides: Record<string, WorkdayWeight | null>,
+    projectAccess: ReadonlyMap<string, boolean>) => Promise<void>; onCancel?: () => void;
   popupTitle?: string;
 }) {
   const ui = useScreenStyles();
@@ -149,6 +151,7 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
     tab === 'work' && Boolean(row.data.remindIn || row.data.remindOut));
   const [savedOverrides] = useState(() => readWorkdayOverrides(row.data.dayOverrides));
   const [overrides, setOverrides] = useState(savedOverrides);
+  const [projectAccess, setProjectAccess] = useState(() => new Map<string, boolean>());
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const protectedAccount = tab === 'members' && [protectedOwner, email].some(account =>
@@ -180,7 +183,7 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
   }
 
   const permissionFields = tab === 'members' ? fields.filter(field => Object.keys(grants).includes(field.key)) : [];
-  const inheritsPermissions = draft.role === 'admin';
+  const inheritsPermissions = protectedAccount || draft.role === 'admin';
   const workdayFields = tab === 'work' ? fields.filter(field => /^day[0-6]$/.test(field.key)) : [];
   function changeField(key: string, value: FieldValue) {
     setDraft(current => ({ ...current, [key]: value }));
@@ -204,7 +207,7 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
     for (const day of dates) {
       if (overrides[day] !== savedOverrides[day]) changes[day] = overrides[day] ?? null;
     }
-    await onSave(values, changes);
+    await onSave(values, changes, projectAccess);
   }
 
   function renderField(field: Field, inherited = false) {
@@ -220,6 +223,9 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
     </View>;
   }
 
+  const SaveButton = popupTitle ? PopupAction : Button;
+  const saveButton = <SaveButton label={tab === 'budget' ? 'Lưu ngân sách' : 'Lưu cài đặt'} disabled={busy}
+    onPress={() => void run(save, 'Không lưu được cài đặt. Kiểm tra kết nối hoặc quyền truy cập.')} />;
   const content = (
     <View style={ui.stack}>
       {fields.filter(field => !permissionFields.includes(field)).map(field => {
@@ -228,6 +234,16 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
           {permissionFields.map(permission => renderField(permission, inheritsPermissions))}
           {inheritsPermissions && permissionFields.length > 0 &&
             <Text style={ui.muted}>Vai trò Quản trị tự động có các quyền này.</Text>}
+          <ProjectAccessSettings accountEmail={row.id || String(draft.email).trim().toLowerCase()}
+            inheritsPermissions={inheritsPermissions} disabled={busy} changes={projectAccess}
+            onChange={(projects, checked) => setProjectAccess(current => {
+              const next = new Map(current);
+              for (const { id, persisted } of projects) {
+                if (checked === persisted) next.delete(id);
+                else next.set(id, checked);
+              }
+              return next;
+            })} />
         </View>;
         if (field === shiftFields[0]) return <View key={field.key} style={ui.stack}>
           <Text accessibilityRole="header" style={ui.label}>Giờ vào/ra ca</Text>
@@ -281,9 +297,7 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
         return workdayFields.includes(field) || field === shiftFields[1] || field === lunchFields[1] || field === attendanceReminderFields[1]
           ? null : renderField(field);
       })}
-      <Button label={tab === 'budget' ? 'Lưu ngân sách' : 'Lưu cài đặt'} disabled={busy}
-        onPress={() => void run(save, 'Không lưu được cài đặt. Kiểm tra kết nối hoặc quyền truy cập.')} />
-      {onCancel && <Button label="Hủy" secondary disabled={busy} onPress={close} />}
+      {!popupTitle && saveButton}
     </View>
   );
   if (!popupTitle) return content;
@@ -293,13 +307,10 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
       <KeyboardSafeAreaView style={popup.backdrop}>
         <View role="dialog" accessibilityLabel={popupTitle} accessibilityViewIsModal
           style={[popup.card, { backgroundColor: colors.paper }]}>
-          <View style={popup.header}>
-            <Text accessibilityRole="header" style={[ui.cardTitle, popup.title]}>{popupTitle}</Text>
-            <PopupCloseButton label={`Đóng ${popupTitle.toLowerCase()}`} disabled={busy} onPress={close} />
-          </View>
-          <KeyboardScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={popup.body}>
+          <PopupHeader title={popupTitle} closeLabel={`Đóng ${popupTitle.toLowerCase()}`} disabled={busy} onClose={close} />
+          <PopupBody contentContainerStyle={popup.body} footer={saveButton}>
             {content}
-          </KeyboardScrollView>
+          </PopupBody>
         </View>
         <ToastLayer safeAreaApplied />
       </KeyboardSafeAreaView>
@@ -362,8 +373,8 @@ export function AdminSettings({ tab, email, onScrollTop }: {
       field.key === 'projectId' ? { ...field, choices: projects } : field);
     editor = <SettingsForm key={edit.id} tab={tab} fields={fields} row={edit} email={email}
       popupTitle={edit.id ? (tab === 'members' ? 'Chỉnh sửa tài khoản' : 'Chỉnh sửa khoản chi cố định') : addTitle}
-      onSave={async values => {
-        if (tab === 'members') await saveMember(values, email, edit.id || undefined);
+      onSave={async (values, _, projectAccess) => {
+        if (tab === 'members') await saveMember(values, email, projectAccess, edit.id || undefined);
         else await saveRecurring(values, edit.id || undefined);
         saved();
       }} onCancel={() => setEdit(undefined)} />;
@@ -455,7 +466,5 @@ const fieldStyles = StyleSheet.create({
 const popup = StyleSheet.create({
   backdrop: { flex: 1, padding: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#17102588' },
   card: { width: '100%', maxWidth: 560, maxHeight: '92%', borderRadius: 18, overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, gap: 8 },
-  title: { flex: 1 },
   body: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20 },
 });

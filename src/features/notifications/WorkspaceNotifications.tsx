@@ -9,7 +9,8 @@ import { markNotificationsRead, watchNotifications } from './notifications';
 import type { WorkspaceNotification } from './notifications';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { EmptyState } from '../../components/EmptyState';
-import { PopupCloseButton } from '../../components/PopupCloseButton';
+import { PopupHeader } from '../../components/PopupHeader';
+import { popupActionText } from '../../components/PopupBody';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
 
@@ -112,10 +113,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
             width: Math.min(320, width - insets.left - insets.right - edge * 2),
             maxHeight: Math.max(0, Math.min(480, height - top - insets.bottom - 10)),
           }]}>
-            <View style={styles.header}>
-              <Text accessibilityRole="header" style={styles.title}>Thông báo</Text>
-              <PopupCloseButton label="Đóng thông báo" onPress={close} />
-            </View>
+            <PopupHeader title="Thông báo" closeLabel="Đóng thông báo" onClose={close} inset={false} />
             <View accessibilityRole="tablist" accessibilityLabel="Lọc thông báo" style={styles.tabs}>
               {inboxTabs.map(item => {
                 const showCount = item.id === 'unread' && notes !== null && !loadFailed;
@@ -134,7 +132,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
               <View style={styles.feedback}>
                 <Text accessibilityRole="alert" style={styles.error}>Không tải được thông báo.</Text>
                 <Pressable accessibilityRole="button" onPress={reload} style={styles.action}>
-                  <Text style={styles.actionText}>Thử lại</Text>
+                  <Text style={[styles.actionText, popupActionText]}>Thử lại</Text>
                 </Pressable>
               </View>
             ) : notes === null ? (
@@ -146,7 +144,7 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
                 {unread.length > 0 ? (
                   <Pressable accessibilityRole="button" disabled={saving} onPress={() => void markRead(notes)}
                     style={styles.action}>
-                    <Text style={styles.actionText}>Đánh dấu tất cả đã đọc</Text>
+                    <Text style={[styles.actionText, popupActionText]}>Đánh dấu tất cả đã đọc</Text>
                   </Pressable>
                 ) : null}
                 <ScrollView key={tab} style={styles.list} contentContainerStyle={styles.listContent}>
@@ -187,8 +185,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     textAlign: 'center', fontSize: 10, lineHeight: 17, fontWeight: '800' },
   popup: { position: 'absolute', padding: 14, gap: 8, borderRadius: 14, borderWidth: 1,
     borderColor: colors.line, backgroundColor: colors.paper, elevation: 8, boxShadow: '0 8px 24px rgba(33, 25, 53, 0.16)' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  title: { color: colors.ink, fontSize: 17, fontWeight: '800' },
   tabs: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10, backgroundColor: colors.surfaceMuted },
   tab: { flex: 1, flexDirection: 'row', gap: 6, minHeight: 44, paddingHorizontal: 6, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center' },
@@ -201,7 +197,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   error: { color: colors.danger, fontSize: 13 },
   action: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  actionText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  actionText: { color: colors.accent, fontSize: 13 },
   list: { flexGrow: 0, flexShrink: 1 },
   listContent: { gap: 6 },
   note: { padding: 10, gap: 4, borderRadius: 8, backgroundColor: colors.background },
