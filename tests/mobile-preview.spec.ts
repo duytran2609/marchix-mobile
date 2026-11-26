@@ -10,8 +10,16 @@ const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
 async function openTasks(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'Mở menu' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Công việc', exact: true }).click();
+  await openSection(page, 'Công việc');
+}
+
+async function openSection(target: import('@playwright/test').Page, name: string) {
+  const option = target.getByTestId('workspace-drawer').getByRole('button', { name, exact: true });
+  // The startup reminder can interrupt the first menu click while the drawer is opening.
+  await expect(async () => {
+    if (!await option.isVisible()) await target.getByRole('button', { name: 'Mở menu' }).click({ timeout: 2000 });
+    await option.click({ timeout: 2000 });
+  }).toPass({ timeout: 15000 });
 }
 
 // Personal attendance defaults to five days per page. These workflows assert
@@ -435,15 +443,6 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     } } });
     expect(records.ok()).toBeTruthy();
     return (await records.json())[0].document;
-  }
-
-  async function openSection(target: typeof page, name: string) {
-    const option = target.getByTestId('workspace-drawer').getByRole('button', { name, exact: true });
-    // The startup reminder can interrupt the first menu click while the drawer is opening.
-    await expect(async () => {
-      if (!await option.isVisible()) await target.getByRole('button', { name: 'Mở menu' }).click({ timeout: 2000 });
-      await option.click({ timeout: 2000 });
-    }).toPass({ timeout: 15000 });
   }
 
   async function openRequests(target: typeof page, login: string) {
@@ -1795,8 +1794,8 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     expect(radiusBox.y).toBeGreaterThan(latitudeBox.y);
     expect(radiusLabelBox.x + radiusLabelBox.width).toBeLessThan(radiusBox.x);
     expect(radiusBox.y + radiusBox.height / 2).toBeCloseTo(radiusLabelBox.y + radiusLabelBox.height / 2 + 3, 0);
-    await expect(latitude.locator('..').getByText('°', { exact: true })).toBeVisible();
-    await expect(longitude.locator('..').getByText('°', { exact: true })).toBeVisible();
+    await expect(latitude.locator('../../..').getByText('°', { exact: true })).toBeVisible();
+    await expect(longitude.locator('../../..').getByText('°', { exact: true })).toBeVisible();
     const shiftHour = page.getByRole('button', { name: /^Giờ vào ca – Giờ:/ });
     const shiftOutHour = page.getByRole('button', { name: /^Giờ ra ca – Giờ:/ });
     await expect(page.getByRole('heading', { name: 'Giờ vào/ra ca' })).toBeVisible();

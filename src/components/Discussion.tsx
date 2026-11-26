@@ -103,7 +103,8 @@ export function DiscussionComposer({ inputRef, message, onChange, placeholder, m
   const styles = useStyles();
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
-  const expanded = focused || message.length > 0;
+  // Keep the reply actions in place when pressing them blurs the input.
+  const expanded = focused || Boolean(quote) || message.length > 0;
   const busy = disabled || sending || attachmentBusy;
   return <View style={ui.stack}>
     {quote && <View style={styles.replyPreview}>
