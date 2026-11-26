@@ -410,11 +410,19 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     return (await records.json())[0].document;
   }
 
+  async function openSection(target: typeof page, name: string) {
+    const option = target.getByTestId('workspace-drawer').getByRole('button', { name, exact: true });
+    // The startup reminder can interrupt the first menu click while the drawer is opening.
+    await expect(async () => {
+      if (!await option.isVisible()) await target.getByRole('button', { name: 'Mở menu' }).click({ timeout: 2000 });
+      await option.click({ timeout: 2000 });
+    }).toPass({ timeout: 15000 });
+  }
+
   async function openRequests(target: typeof page, login: string) {
     await target.goto(previewUrl);
     await target.getByRole('button', { name: login }).click();
-    await target.getByRole('button', { name: 'Mở menu' }).click();
-    await target.getByRole('dialog').getByRole('button', { name: 'Đơn từ', exact: true }).click();
+    await openSection(target, 'Đơn từ');
     await expect(target.getByRole('heading', { name: 'Đơn từ', exact: true })).toBeVisible();
   }
 
@@ -576,8 +584,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await expect(admin.getByRole('heading', { name: 'Chi tiết đơn' })).toHaveCount(0);
 
     await openRequests(reviewer, 'Đăng nhập người giao việc (mô phỏng)');
-    await reviewer.getByRole('button', { name: 'Mở menu' }).click();
-    await reviewer.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
+    await openSection(reviewer, 'Phê duyệt');
     const queuedRequest = reviewer.getByRole('button', { name: 'Mở hồ sơ: Tạm ứng lương: ' + reason, exact: true });
     await queuedRequest.click();
     await expect(reviewer.getByRole('dialog', { name: 'Chi tiết đơn' })).toBeVisible();
@@ -596,8 +603,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await expect(reviewer.getByText('PHÊ DUYỆT', { exact: true })).toBeAttached();
     await taskReview.getByRole('button', { name: 'Đóng chi tiết phê duyệt' }).click();
     await expect(taskReview).toHaveCount(0);
-    await reviewer.getByRole('button', { name: 'Mở menu' }).click();
-    await reviewer.getByRole('dialog').getByRole('button', { name: 'Đơn từ', exact: true }).click();
+    await openSection(reviewer, 'Đơn từ');
     await expect(requestCard(page)).toContainText('Đã duyệt');
     const expense = await request.get(documents + '/cash/tu_' + id, { headers });
     expect(expense.ok()).toBeTruthy();
@@ -611,8 +617,7 @@ test('Đơn từ trong app chuyển tạm ứng đã duyệt sang Thu chi', asyn
     await admin.getByRole('dialog', { name: 'Người duyệt', exact: true })
       .getByRole('checkbox', { name: 'Người giao việc demo', exact: true }).click();
     await admin.getByRole('button', { name: 'Lưu người duyệt' }).click();
-    await page.getByRole('button', { name: 'Mở menu' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Chấm công', exact: true }).click();
+    await openSection(page, 'Chấm công');
     await showFullPersonalAttendanceMonth(page, today);
     const attendanceRow = page.getByRole('table').getByRole('row')
       .filter({ hasText: ' · ' + today.slice(8) + '/' + today.slice(5, 7) });
