@@ -8,7 +8,7 @@ type TaskSelection = Exclude<NotificationTaskTarget, { id: string }>
 export type ProjectRoute = {
   screen: 'du-an';
   projectId?: string;
-  section?: 'work' | 'finance' | 'library';
+  section?: 'work' | 'finance' | 'discussion' | 'library';
   kanban?: boolean;
 };
 

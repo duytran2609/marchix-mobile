@@ -1,6 +1,7 @@
+import { DeferredContent } from '../components/DeferredContent';
 import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../components/TextInput';
 import { ClickableCardHeader } from '../components/CardChevron';
@@ -18,7 +19,8 @@ import type { WeekPlans } from '../features/weekly-plan/weeklyPlanStore';
 import type { usePlanningDrafts } from '../features/weekly-plan/usePlanningDrafts';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
-import { TaskDetailPopup } from './TaskDetailScreen';
+
+const TaskDetailPopup = lazy(() => import('./TaskDetailScreen').then(module => ({ default: module.TaskDetailPopup })));
 
 type WeeklyPlanProps = {
   email: string;
@@ -71,7 +73,9 @@ export function WeeklyPlanScreen({ name, selectedWeek, onSelectWeek, draftStorag
     </View>
     <WeekContent key={week} {...props} week={week} saving={saving} onSavingChange={setSaving}
       draftStorage={draftStorage} onOpenTask={setTaskId} />
-    {taskId && <TaskDetailPopup id={taskId} email={props.email} name={name} onClose={closeTask} />}
+    {taskId && <DeferredContent>
+      <TaskDetailPopup id={taskId} email={props.email} name={name} onClose={closeTask} />
+    </DeferredContent>}
     {calendarOpen && <CalendarDialog title="Chọn tuần" onClose={() => setCalendarOpen(false)}>
       <Text style={ui.muted}>Chọn một ngày để xem cả tuần.</Text>
       <AssignmentCalendar initialDay={week} value={week} rangeEnd={sunday} disabled={saving} onSelect={day => {

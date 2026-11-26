@@ -1,4 +1,4 @@
-import type { ComponentRef, ReactNode, Ref } from 'react';
+import { useState, type ComponentRef, type ReactNode, type Ref } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from './Button';
 import { AttachmentLabel } from './AttachmentLabel';
@@ -32,25 +32,29 @@ export function DiscussionHistory({ children }: { children: ReactNode }) {
   return <View style={[ui.panel, styles.history]}>{children}</View>;
 }
 
-export function DiscussionMessage({ author, photoURL, time, first, indented, children, onReply, replyDisabled }: {
+export function DiscussionMessage({ author, photoURL, time, first, indented, children, onReply, replyDisabled, actions, footerActions }: {
   author: string; photoURL?: string | null; time: string; first?: boolean; children: ReactNode;
-  indented?: boolean; onReply?: () => void; replyDisabled?: boolean;
+  indented?: boolean; onReply?: () => void; replyDisabled?: boolean; actions?: ReactNode; footerActions?: ReactNode;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   return <View style={[ui.detailRow, styles.row, first && styles.firstRow, indented && styles.indentedRow]}>
     <MemberAvatar name={author} photoURL={photoURL} />
     <View style={styles.content}>
-      <View style={styles.messageHeader}>
+      <View style={[styles.messageHeader, !!actions && styles.messageHeaderWithActions]}>
         <Text style={[ui.label, styles.author]}>{author}</Text>
         {!!time && <Text style={styles.time}>{time}</Text>}
       </View>
       {children}
-      {onReply && <Pressable accessibilityRole="button" accessibilityLabel={`Trả lời trao đổi của ${author}`}
-        disabled={replyDisabled} style={[styles.replyButton, styles.messageReply]} onPress={onReply}>
-        <Text style={styles.replyAction}>Trả lời</Text>
-      </Pressable>}
+      {(onReply || footerActions) && <View style={styles.messageFooter}>
+        {onReply && <Pressable accessibilityRole="button" accessibilityLabel={`Trả lời trao đổi của ${author}`}
+          disabled={replyDisabled} style={[styles.replyButton, styles.messageReply]} onPress={onReply}>
+          <Text style={styles.replyAction}>Trả lời</Text>
+        </Pressable>}
+        {footerActions}
+      </View>}
     </View>
+    {actions}
   </View>;
 }
 
@@ -98,6 +102,8 @@ export function DiscussionComposer({ inputRef, message, onChange, placeholder, m
   const ui = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
+  const [focused, setFocused] = useState(false);
+  const expanded = focused || message.length > 0;
   const busy = disabled || sending || attachmentBusy;
   return <View style={ui.stack}>
     {quote && <View style={styles.replyPreview}>
@@ -107,22 +113,24 @@ export function DiscussionComposer({ inputRef, message, onChange, placeholder, m
       </Pressable>
     </View>}
     <View style={attachments ? [ui.secondary, styles.attachmentFrame] : undefined}>
-      <View>
-        <TextInput ref={inputRef} accessibilityLabel="Nội dung trao đổi" placeholder={placeholder}
-          style={[ui.input, ui.messageInput, onAttach && styles.inputWithAttachment, !!attachments && styles.borderlessInput]}
-          value={message} onChangeText={onChange} multiline maxLength={maxLength} editable={!sending && !disabled} />
-        {onAttach && <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm tệp"
+      <TextInput ref={inputRef} accessibilityLabel="Nội dung trao đổi" placeholder={placeholder}
+        style={[ui.input, expanded ? ui.messageInput : styles.compactInput,
+          onAttach && (expanded ? styles.inputWithAttachment : styles.compactInputWithAttachment),
+          !!attachments && styles.borderlessInput]}
+        value={message} onChangeText={onChange} multiline maxLength={maxLength} editable={!sending && !disabled}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        accessory={onAttach && <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm tệp"
           accessibilityHint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng."
           accessibilityState={{ busy: attachmentBusy }} disabled={busy} onPress={onAttach}
-          style={({ pressed }) => [styles.attachButton, (pressed || busy) && ui.dimmed]}>
+          style={({ pressed }) => [styles.attachButton, !expanded && styles.compactAttachButton,
+            (pressed || busy) && ui.dimmed]}>
           {attachmentBusy ? <ActivityIndicator color={colors.accent} /> :
             <View aria-hidden pointerEvents="none" style={styles.paperclip}>
               <View style={[styles.paperclipStroke, styles.paperclipOuter]} />
               <View style={[styles.paperclipStroke, styles.paperclipTop]} />
               <View style={[styles.paperclipStroke, styles.paperclipInner]} />
             </View>}
-        </Pressable>}
-      </View>
+        </Pressable>} />
       {attachments}
     </View>
     {extras}
@@ -143,6 +151,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   indentedRow: { marginStart: 20 },
   content: { flex: 1, minWidth: 0, gap: 3 },
   messageHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  messageHeaderWithActions: { marginEnd: -54 },
+  messageFooter: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 },
   author: { flex: 1, minWidth: 0, fontWeight: '800' },
   time: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   quote: { flexShrink: 1, borderLeftWidth: 3, borderLeftColor: colors.accent, backgroundColor: colors.surfaceMuted,
@@ -154,9 +164,12 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   replyAction: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   attachmentFrame: { borderRadius: 9, overflow: 'hidden' },
   borderlessInput: { borderWidth: 0 },
+  compactInput: { height: 44, paddingVertical: 10, textAlignVertical: 'center' },
+  compactInputWithAttachment: { paddingRight: 48 },
   inputWithAttachment: { minHeight: 110, paddingBottom: 48 },
   attachButton: { position: 'absolute', right: 4, bottom: 4, width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center' },
+  compactAttachButton: { bottom: 0 },
   paperclip: { width: 20, height: 24, transform: [{ scale: 0.75 }] },
   paperclipStroke: { position: 'absolute', borderWidth: 2, borderColor: colors.accent },
   paperclipOuter: { left: 2, top: 5, width: 16, height: 19, borderTopWidth: 0,

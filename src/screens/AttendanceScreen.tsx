@@ -17,7 +17,6 @@ import { ToastLayer, useToast } from '../components/Toast';
 import { approvedOvertimeByDay, attendanceId, attendanceMonth, calculateAttendance, clock, dateKey, dayWeight, machineTime, offsetMonth } from '../features/attendance/attendance';
 import { CompanyAttendanceTable, PersonalAttendanceTable } from '../features/attendance/AttendanceTable';
 import type { AttendanceEditTarget } from '../features/attendance/attendanceTableData';
-import { exportAttendance } from '../features/attendance/exportAttendance';
 import { punch, removeAttendance, saveAdjustment, saveAttendanceNote, watchAttendance, watchAttendanceNotes } from '../features/attendance/attendanceStore';
 import type { AttendanceData, AttendanceMember } from '../features/attendance/attendanceStore';
 import { useScreenStyles } from '../theme/screenStyles';
@@ -120,6 +119,7 @@ export function AttendanceScreen({ email, name, isAdmin, checkInDate, onCheckInH
   async function downloadAttendance() {
     setExporting(true);
     try {
+      const { exportAttendance } = await import('../features/attendance/exportAttendance');
       await exportAttendance(selectedMonth, isAdmin ? { company: companyRows } : { personal: personalDays, name, dailyNotes });
     } catch {
       toast('Không xuất được bảng công. Vui lòng thử lại.', 'error');

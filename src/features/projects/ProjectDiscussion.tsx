@@ -5,24 +5,19 @@ import { EmptyState } from '../../components/EmptyState';
 import { Button } from '../../components/Button';
 import { PopupAction } from '../../components/PopupBody';
 import { Dropdown } from '../../components/Dropdown';
-import { DiscussionAttachment, DiscussionComposer, DiscussionHeader, DiscussionHistory,
+import { DiscussionComposer, DiscussionHeader, DiscussionHistory,
   DiscussionMessage, DiscussionQuote } from '../../components/Discussion';
 import type { DiscussionSort } from '../../components/Discussion';
 import { SearchInput } from '../../components/SearchInput';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { TextInput } from '../../components/TextInput';
 import { useScreenStyles } from '../../theme/screenStyles';
-import type { AttachmentFile } from '../../utils/attachmentFile';
 import { formatVietnamDateTime } from '../../utils/dateTime';
 import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
-import { cashFileList } from '../cash/cashAttachments';
 import { TaskAssignmentForm } from '../tasks/TaskAssignmentForm';
 import { ProjectFormPopup } from './ProjectFormPopup';
-import { formatFileSize } from '../tasks/taskAttachments';
-import type { PickedAttachment } from '../tasks/taskAttachments';
-import type { Task, TaskAttachment } from '../tasks/tasks';
-import { choice, CollaborationFeedback, CollaborationFilePicker, CollaborationInput,
-  PickedCollaborationFiles, toggleChoice, useCollaborationAction, useCollaborationFilePicker } from './ProjectCollaborationFields';
+import type { Task } from '../tasks/tasks';
+import { choice, CollaborationFeedback, CollaborationInput, toggleChoice, useCollaborationAction } from './ProjectCollaborationFields';
 import { pinProjectPost, postKinds, publishProjectComment, publishProjectPost, resolveProjectPost, toggleProjectLike,
   watchProjectComments, watchProjectLike, watchProjectPosts } from './projectCollaborationStore';
 import type { CollaborationMember, PostKind, ProjectComment, ProjectPost } from './projectCollaborationStore';
@@ -33,7 +28,7 @@ const titleFromMessage = (body: string) => body.trim().split('\n')[0].trim().sli
 type DiscussionProps = {
   project: Project; email: string; isAdmin: boolean; team: CollaborationMember[]; tasks: Task[];
   memberName: (id: string) => string; memberPhoto: (id: string) => string | null | undefined;
-  openFile: (file: TaskAttachment) => void; onOpenTask: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
 };
 
 export function ProjectDiscussion(props: DiscussionProps) {
@@ -94,26 +89,18 @@ export function ProjectDiscussion(props: DiscussionProps) {
 
 function ProjectMessageComposer({ placeholder, maxLength, disabled, quote, onCancelReply, onPublish, inputRef, sendLabel }: {
   placeholder: string; maxLength: number; disabled: boolean; quote?: { author: string; text: string };
-  onCancelReply?: () => void; onPublish: (body: string, files: PickedAttachment[]) => Promise<string>;
+  onCancelReply?: () => void; onPublish: (body: string) => Promise<string>;
   inputRef?: Ref<ComponentRef<typeof TextInput>>; sendLabel?: string;
 }) {
   const [body, setBody] = useState('');
-  const [files, setFiles] = useState<PickedAttachment[]>([]);
-  const [opening, setOpening] = useState(false);
   const action = useCollaborationAction();
-  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange: setFiles,
-    disabled: disabled || action.busy || opening });
-  const message = body.trim() || files.map(file => file.name).join(', ').slice(0, maxLength);
   return <>
     <DiscussionComposer inputRef={inputRef} message={body} onChange={setBody} placeholder={placeholder} maxLength={maxLength}
-      sending={action.busy} disabled={disabled || opening} attachmentBusy={picking} onAttach={pick}
-      quote={quote && <DiscussionQuote {...quote} />} onCancelReply={onCancelReply} sendLabel={sendLabel} canSend={!!message}
-      extras={<PickedCollaborationFiles files={files} onChange={setFiles} disabled={disabled || picking || action.busy}
-        error={error} onOpening={setOpening} />}
+      sending={action.busy} disabled={disabled}
+      quote={quote && <DiscussionQuote {...quote} />} onCancelReply={onCancelReply} sendLabel={sendLabel}
       onSend={() => void action.run(async () => {
-        const notice = await onPublish(message, files);
+        const notice = await onPublish(body.trim());
         setBody('');
-        setFiles([]);
         return notice;
       })} />
     <CollaborationFeedback {...action} />
@@ -130,20 +117,17 @@ function ProjectPostComposer({ projectId, email, tasks, team, visible, onClose, 
   const [kind, setKind] = useState<PostKind>('Cập nhật');
   const [taskId, setTaskId] = useState('');
   const [mentions, setMentions] = useState<string[]>([]);
-  const [files, setFiles] = useState<PickedAttachment[]>([]);
-  const [picking, setPicking] = useState(false);
-  const [preview, setPreview] = useState<AttachmentFile>();
   const action = useCollaborationAction();
-  const disabled = action.busy || picking;
+  const disabled = action.busy;
   const recipients = team.filter(member => member.id !== email).map(member => ({ id: member.id, name: member.name || member.id }));
   if (!visible) return null;
   return <ProjectFormPopup title="Đăng trao đổi" busy={disabled} onClose={onClose}
-    preview={preview && { file: preview, onClose: () => setPreview(undefined) }} footer={
+    footer={
     <PopupAction label={action.busy ? 'Đang đăng…' : 'Đăng trao đổi'} disabled={disabled || !title.trim() || !body.trim()}
       onPress={() => void action.run(async () => {
-        const failed = await publishProjectPost(projectId, email, { title, body, kind, taskId, picked: files,
+        const failed = await publishProjectPost(projectId, email, { title, body, kind, taskId,
           mentions: mentions.filter(id => recipients.some(member => member.id === id)) });
-        setTitle(''); setBody(''); setFiles([]); setMentions([]);
+        setTitle(''); setBody(''); setMentions([]);
         onPosted(failed ? 'Đã đăng trao đổi. Có ' + failed + ' thông báo nhắc chưa gửi được.' : 'Đã đăng trao đổi.');
       })} />
   }>
@@ -152,8 +136,6 @@ function ProjectPostComposer({ projectId, email, tasks, team, visible, onClose, 
       choices={[choice('', 'Trao đổi chung trong dự án'), ...tasks.map(task => choice(task.id, task.title))]} />
     <CollaborationInput label="Tiêu đề trao đổi" value={title} onChange={setTitle} limit={200} disabled={disabled} />
     <CollaborationInput label="Nội dung trao đổi" value={body} onChange={setBody} limit={10000} multiline disabled={disabled} />
-    <CollaborationFilePicker label="Đính kèm ảnh / tài liệu vào bài" files={files} onChange={setFiles}
-      onPicking={setPicking} disabled={action.busy} onPreview={setPreview} />
     {!!recipients.length && <>
       <Text style={styles.label}>Nhắc người cần phản hồi</Text>
       <SearchableChoiceDropdown title="Nhắc người cần phản hồi" items={recipients} selected={mentions}
@@ -164,7 +146,7 @@ function ProjectPostComposer({ projectId, email, tasks, team, visible, onClose, 
   </ProjectFormPopup>;
 }
 
-function ProjectPostCard({ project, post, email, isAdmin, tasks, memberName, memberPhoto, openFile, onOpenTask, onCreateTask, first }: DiscussionProps & {
+function ProjectPostCard({ project, post, email, isAdmin, tasks, memberName, memberPhoto, onOpenTask, onCreateTask, first }: DiscussionProps & {
   post: ProjectPost; onCreateTask: () => void; first: boolean;
 }) {
   const styles = useScreenStyles();
@@ -192,8 +174,6 @@ function ProjectPostCard({ project, post, email, isAdmin, tasks, memberName, mem
       <Text accessibilityRole="header" style={styles.cardTitle}>{post.title}</Text>}
     <Text selectable style={styles.body}>{post.body}</Text>
     {task && <Button label="Mở công việc liên quan" secondary onPress={() => onOpenTask(task)} />}
-    {cashFileList(post.files).map(file => <DiscussionAttachment key={file.id} file={file}
-      detail={formatFileSize(file.size)} onOpen={() => openFile(file)} />)}
     {!!post.mentions?.length && <Text style={[styles.muted, styles.metadataValue]}>
       <Text style={styles.metadataLabel}>Cần phản hồi · </Text>{post.mentions.map(memberName).join(', ')}
     </Text>}
@@ -226,14 +206,14 @@ function ProjectPostCard({ project, post, email, isAdmin, tasks, memberName, mem
     <CollaborationFeedback {...action} />
     {commentsOpened && <View style={comments ? styles.stack : { display: 'none' }}>
       <ProjectComments projectId={project.id} post={post} email={email} memberName={memberName} memberPhoto={memberPhoto}
-        openFile={openFile} replyRequest={replyRequest} />
+        replyRequest={replyRequest} />
     </View>}
   </DiscussionMessage>;
 }
 
-function ProjectComments({ projectId, post, email, memberName, memberPhoto, openFile, replyRequest }: {
+function ProjectComments({ projectId, post, email, memberName, memberPhoto, replyRequest }: {
   projectId: string; post: ProjectPost; email: string; replyRequest: number;
-  memberName: DiscussionProps['memberName']; memberPhoto: DiscussionProps['memberPhoto']; openFile: DiscussionProps['openFile'];
+  memberName: DiscussionProps['memberName']; memberPhoto: DiscussionProps['memberPhoto'];
 }) {
   const styles = useScreenStyles();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
@@ -266,14 +246,12 @@ function ProjectComments({ projectId, post, email, memberName, memberPhoto, open
         {original ? <DiscussionQuote {...quote(original)} /> : comment.replyTo &&
           <Text style={styles.muted}>Bình luận gốc không còn hiển thị.</Text>}
         <Text selectable style={styles.body}>{comment.body}</Text>
-        {cashFileList(comment.files).map(file => <DiscussionAttachment key={file.id} file={file}
-          detail={formatFileSize(file.size)} onOpen={() => openFile(file)} />)}
       </DiscussionMessage>;
     })}
     <ProjectMessageComposer inputRef={input} placeholder="Nhập bình luận" maxLength={5000} disabled={loadError}
       quote={target && quote(target)} onCancelReply={() => setReply({ request: replyRequest })}
-      sendLabel={target ? 'Gửi trả lời' : 'Gửi bình luận'} onPublish={async (body, files) => {
-        await publishProjectComment(projectId, post.id, email, body, target && target.id !== post.id ? target.id : '', files);
+      sendLabel={target ? 'Gửi trả lời' : 'Gửi bình luận'} onPublish={async (body) => {
+        await publishProjectComment(projectId, post.id, email, body, target && target.id !== post.id ? target.id : '');
         setReply(current => current === reply ? { request: replyRequest } : current);
         return 'Đã gửi bình luận.';
       }} />

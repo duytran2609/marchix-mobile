@@ -12,37 +12,25 @@ import { daysOverdue, formatDue, formatTaskDate, isOpenTask } from './taskDates'
 import { overdueTaskLabel, taskUnsetLabel } from './taskLabels';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { TaskGantt } from './TaskGantt';
-import type { GanttRange } from './TaskGantt';
+import { initialTaskBoardOptions, priorityFilters, taskFilters } from './taskBoardOptions';
+import type { TaskBoardOptions } from './taskBoardOptions';
 import { TaskKanban } from './TaskKanban';
 import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
 import { overdueTaskBucket, taskStatusSummary } from './taskStatusSummary';
 import { useVietnamToday } from './useVietnamToday';
 import { searchByName } from '../../utils/search';
-import { listTaskAssignees, taskPriorities, taskStatuses } from './tasks';
+import { listTaskAssignees, taskStatuses } from './tasks';
 import type { AssignmentProject, Task, TaskAssignee } from './tasks';
 import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 
-const taskFilters = ['Tất cả', 'Chưa xong', overdueTaskLabel, ...taskStatuses] as const;
 const statusOptions = taskFilters.map(value => ({ value, label: value }));
-const priorityFilters = ['', ...taskPriorities, taskUnsetLabel] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
 const ganttRangeChoices = [
   { value: 'month', label: 'Theo tháng' },
   { value: 'week', label: 'Theo tuần' },
 ] as const;
-type TaskFilter = typeof taskFilters[number];
-type PriorityFilter = typeof priorityFilters[number];
-type TaskView = 'list' | 'kanban' | 'gantt';
-
-export type TaskBoardOptions = {
-  search: string; filter: TaskFilter; assignee: string; priority: PriorityFilter; project: string | null;
-  view: TaskView; ganttRange: GanttRange;
-};
-export const initialTaskBoardOptions: TaskBoardOptions = {
-  search: '', filter: 'Tất cả', assignee: '', priority: '', project: null, view: 'list', ganttRange: 'month',
-};
 
 function assigneeKey(task: Task) {
   const name = task.assignee?.trim();
@@ -186,7 +174,7 @@ export function TaskBoard({
       : taskStatus(task) === status),
   })).filter(column => (filter === 'Tất cả' && column.status !== 'Khác') || column.tasks.length > 0);
 
-  function selectFilter(value: TaskFilter) {
+  function selectFilter(value: TaskBoardOptions['filter']) {
     onOptionsChange({ ...options, filter: value });
   }
 

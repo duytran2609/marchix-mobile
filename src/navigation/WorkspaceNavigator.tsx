@@ -1,27 +1,32 @@
-import { useEffect, useState } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ActivityIndicator } from 'react-native';
+import { DeferredContent } from '../components/DeferredContent';
 import type { MemberSession } from '../features/auth/useSession';
 import { findNotificationTask } from '../features/notifications/notifications';
 import type { useReminderSettings } from '../features/settings/reminderSettings';
-import { initialTaskBoardOptions } from '../features/tasks/TaskBoard';
+import { initialTaskBoardOptions } from '../features/tasks/taskBoardOptions';
 import type { useWorkspaceTasks } from '../features/tasks/useWorkspaceTasks';
 import { usePlanningDrafts } from '../features/weekly-plan/usePlanningDrafts';
-import { AttendanceScreen } from '../screens/AttendanceScreen';
-import { CashScreen } from '../screens/CashScreen';
-import { KpiScreen } from '../screens/KpiScreen';
 import { OverviewScreen } from '../screens/OverviewScreen';
-import { PayrollScreen } from '../screens/PayrollScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
-import { ProjectsScreen } from '../screens/ProjectsScreen';
-import { RequestsScreen } from '../screens/RequestsScreen';
-import { ReviewQueueScreen } from '../screens/ReviewQueueScreen';
-import { LinkedTaskDetail, TaskDetailPopup, TaskDetailScreen, TaskUnavailable } from '../screens/TaskDetailScreen';
-import { TasksScreen } from '../screens/TasksScreen';
-import { RecordsScreen } from '../screens/RecordsScreen';
-import { WeeklyPlanScreen } from '../screens/WeeklyPlanScreen';
 import { useTheme } from '../theme/theme';
 import type { WorkspaceRoute } from './workspaceRoutes';
+
+const AttendanceScreen = lazy(() => import('../screens/AttendanceScreen').then(module => ({ default: module.AttendanceScreen })));
+const CashScreen = lazy(() => import('../screens/CashScreen').then(module => ({ default: module.CashScreen })));
+const KpiScreen = lazy(() => import('../screens/KpiScreen').then(module => ({ default: module.KpiScreen })));
+const PayrollScreen = lazy(() => import('../screens/PayrollScreen').then(module => ({ default: module.PayrollScreen })));
+const ProfileScreen = lazy(() => import('../screens/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const ProjectsScreen = lazy(() => import('../screens/ProjectsScreen').then(module => ({ default: module.ProjectsScreen })));
+const RequestsScreen = lazy(() => import('../screens/RequestsScreen').then(module => ({ default: module.RequestsScreen })));
+const ReviewQueueScreen = lazy(() => import('../screens/ReviewQueueScreen').then(module => ({ default: module.ReviewQueueScreen })));
+const TasksScreen = lazy(() => import('../screens/TasksScreen').then(module => ({ default: module.TasksScreen })));
+const RecordsScreen = lazy(() => import('../screens/RecordsScreen').then(module => ({ default: module.RecordsScreen })));
+const WeeklyPlanScreen = lazy(() => import('../screens/WeeklyPlanScreen').then(module => ({ default: module.WeeklyPlanScreen })));
+const LinkedTaskDetail = lazy(() => import('../screens/TaskDetailScreen').then(module => ({ default: module.LinkedTaskDetail })));
+const TaskDetailPopup = lazy(() => import('../screens/TaskDetailScreen').then(module => ({ default: module.TaskDetailPopup })));
+const TaskDetailScreen = lazy(() => import('../screens/TaskDetailScreen').then(module => ({ default: module.TaskDetailScreen })));
+const TaskUnavailable = lazy(() => import('../screens/TaskDetailScreen').then(module => ({ default: module.TaskUnavailable })));
 
 export function WorkspaceNavigator({
   email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt,
@@ -105,16 +110,18 @@ export function WorkspaceNavigator({
       onOpenCash={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'cash', id } })}
       onOpenRequest={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'request', id } })}
       onOpenRecord={id => setRoute({ screen: 'cho-duyet', detail: { kind: 'record', id } })} />
-    {route.detail?.kind === 'cash' && <CashScreen key={route.detail.id}
-      access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.detail.id}
-      onBackToReview={openReviewQueue} />}
-    {route.detail?.kind === 'request' && <RequestsScreen key={route.detail.id}
-      email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
-      initialRequestId={route.detail.id} onBackToReview={openReviewQueue}
-      tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />}
-    {route.detail?.kind === 'record' && <RecordsScreen key={`${route.detail.id}-${canManageRecords}`}
-      email={email} canManageRecords={canManageRecords} recordId={route.detail.id} onSelect={openReviewQueue}
-      onBackToReview={openReviewQueue} />}
+    {route.detail && <DeferredContent key={`${route.detail.kind}-${route.detail.id}`}>
+      {route.detail.kind === 'cash' && <CashScreen
+        access={{ email, isAdmin, canReadCash, canReviewCash }} initialCashId={route.detail.id}
+        onBackToReview={openReviewQueue} />}
+      {route.detail.kind === 'request' && <RequestsScreen
+        email={email} name={name} isAdmin={isAdmin} canReviewRequests={canReviewRequests}
+        initialRequestId={route.detail.id} onBackToReview={openReviewQueue}
+        tasks={tasksComplete ? tasks : null} tasksError={error || sentError} onRetryTasks={retryTasks} />}
+      {route.detail.kind === 'record' && <RecordsScreen key={String(canManageRecords)}
+        email={email} canManageRecords={canManageRecords} recordId={route.detail.id} onSelect={openReviewQueue}
+        onBackToReview={openReviewQueue} />}
+    </DeferredContent>}
   </>;
   if (route.screen === 'du-an') return <ProjectsScreen key={`${isAdmin}-${canManageProjects}`} route={route}
     onNavigate={next => setRoute(current => current === route ? next : current)}
@@ -153,8 +160,10 @@ export function WorkspaceNavigator({
       onRetry={retryTasks} options={options} onOptionsChange={setOptions}
       onOpenTask={task => setRoute({ screen: 'cong-viec', taskPopupId: task.id })}
       showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={onDragChange} />
-    {taskPopupId && <TaskDetailPopup key={taskPopupId} id={taskPopupId} task={popupTask}
-      email={email} name={name} onClose={() => setRoute(current =>
-        current.screen === 'cong-viec' && current.taskPopupId === taskPopupId ? { screen: 'cong-viec' } : current)} />}
+    {taskPopupId && <DeferredContent key={taskPopupId}>
+      <TaskDetailPopup id={taskPopupId} task={popupTask} email={email} name={name}
+        onClose={() => setRoute(current =>
+          current.screen === 'cong-viec' && current.taskPopupId === taskPopupId ? { screen: 'cong-viec' } : current)} />
+    </DeferredContent>}
   </>;
 }

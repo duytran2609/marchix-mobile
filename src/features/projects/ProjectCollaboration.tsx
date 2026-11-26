@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { Button } from '../../components/Button';
-import { DisclosureButton } from '../../components/DisclosureButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { auth, pilotMode } from '../../services/firebase/firebase';
 import type { AttachmentFile } from '../../utils/attachmentFile';
@@ -16,7 +15,7 @@ import type { CollaborationMember } from './projectCollaborationStore';
 import type { Project } from './projects';
 
 export function ProjectCollaboration(props: {
-  project: Project; email: string; isAdmin: boolean; tasks: Task[]; onOpenTask: (task: Task) => void;
+  section: 'discussion' | 'library'; project: Project; email: string; isAdmin: boolean; tasks: Task[]; onOpenTask: (task: Task) => void;
 }) {
   const styles = useScreenStyles();
   const { project, email, isAdmin } = props;
@@ -27,15 +26,13 @@ export function ProjectCollaboration(props: {
   </View>;
 }
 
-function CollaborationWorkspace({ project, email, isAdmin, tasks, onOpenTask }: {
-  project: Project; email: string; isAdmin: boolean; tasks: Task[]; onOpenTask: (task: Task) => void;
+function CollaborationWorkspace({ section, project, email, isAdmin, tasks, onOpenTask }: {
+  section: 'discussion' | 'library'; project: Project; email: string; isAdmin: boolean; tasks: Task[]; onOpenTask: (task: Task) => void;
 }) {
   const styles = useScreenStyles();
   const [members, setMembers] = useState<CollaborationMember[]>([]);
   const [membersError, setMembersError] = useState(false);
   const [memberRetry, setMemberRetry] = useState(0);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [libraryOpened, setLibraryOpened] = useState(false);
   const [preview, setPreview] = useState<AttachmentFile>();
   const read = useCollaborationAction();
   useEffect(() => {
@@ -61,13 +58,9 @@ function CollaborationWorkspace({ project, email, isAdmin, tasks, onOpenTask }: 
   return <View style={styles.stack}>
     {read.busy && <Text style={styles.muted}>Đang mở tệp…</Text>}
     <CollaborationFeedback error={read.error} />
-    <ProjectDiscussion project={project} email={email} isAdmin={isAdmin} team={team} tasks={tasks}
-      memberName={memberName} memberPhoto={memberPhoto} openFile={openFile} onOpenTask={onOpenTask} />
-    <DisclosureButton label="Ảnh, tệp & thư mục" expanded={showLibrary}
-      onPress={() => { setLibraryOpened(true); setShowLibrary(value => !value); }} />
-    {libraryOpened && <View style={showLibrary ? styles.stack : { display: 'none' }}>
-      <ProjectLibrary id={project.id} email={email} isAdmin={isAdmin} memberName={memberName} openFile={openFile} />
-    </View>}
+    {section === 'discussion' ? <ProjectDiscussion project={project} email={email} isAdmin={isAdmin} team={team} tasks={tasks}
+      memberName={memberName} memberPhoto={memberPhoto} onOpenTask={onOpenTask} />
+      : <ProjectLibrary id={project.id} email={email} isAdmin={isAdmin} memberName={memberName} openFile={openFile} />}
     {membersError && <>
       <CollaborationFeedback error="Không tải được danh sách thành viên." />
       <Button label="Tải lại thành viên" secondary onPress={() => { setMembersError(false); setMemberRetry(value => value + 1); }} />

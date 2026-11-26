@@ -10,7 +10,8 @@ import { ProjectFinance } from '../features/projects/ProjectFinance';
 import { ProjectCollaboration } from '../features/projects/ProjectCollaboration';
 import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../features/projects/projects';
 import type { Project } from '../features/projects/projects';
-import { initialTaskBoardOptions, TaskBoard } from '../features/tasks/TaskBoard';
+import { TaskBoard } from '../features/tasks/TaskBoard';
+import { initialTaskBoardOptions } from '../features/tasks/taskBoardOptions';
 import { StatusProgress } from '../features/tasks/TaskProgress';
 import { formatTaskDate } from '../features/tasks/taskDates';
 import type { Task } from '../features/tasks/tasks';
@@ -20,7 +21,7 @@ import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 
 const sections = [
-  ['work', 'Công việc đính kèm'], ['finance', 'Tài chính'], ['library', 'Trao đổi & tài liệu'],
+  ['work', 'Công việc'], ['finance', 'Tài chính'], ['discussion', 'Trao đổi'], ['library', 'Tài liệu'],
 ] as const;
 
 export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, onProjectExpense, onProjectCash, email, name, isAdmin, canManageProjects, canReadCash,
@@ -77,7 +78,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
           onChange={projectId => {
             if (projectId === project?.id) return;
             setBoard({ ...initialTaskBoardOptions, view: 'kanban' });
-            navigate({ projectId, section: section === 'finance' || section === 'library' ? section : undefined });
+            navigate({ projectId, section: section === 'work' ? undefined : section });
           }} />}
     </View>
     {projects && route.projectId && !project && !projectError && <Text accessibilityRole="alert" style={styles.error}>
@@ -114,7 +115,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
           {sections.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
             aria-selected={section === id}
             onPress={() => navigate({ projectId: project.id, section: id })}
-            style={[local.tab, (id === 'work' || id === 'library') && local.detailTab, section === id && { backgroundColor: colors.paper }]}>
+            style={[local.tab, section === id && { backgroundColor: colors.paper }]}>
             <Text style={[local.tabLabel, { color: colors.muted }, section === id && { color: colors.accent, fontWeight: '800' }]}>
               {label}
             </Text>
@@ -123,7 +124,7 @@ export function ProjectsScreen({ route, onNavigate, onOpenTask, onDragChange, on
         {section === 'finance' ? <ProjectFinance key={`${project.id}-${canReadCash}`} project={project}
           canReadCash={canReadCash} isAdmin={isAdmin} email={email}
           onExpense={onProjectExpense} onCash={id => onProjectCash(project.id, id)} />
-          : section === 'library' ? <ProjectCollaboration key={project.id} project={project} email={email} isAdmin={isAdmin}
+          : (section === 'discussion' || section === 'library') ? <ProjectCollaboration section={section} key={project.id} project={project} email={email} isAdmin={isAdmin}
             tasks={projectTasks ?? []} onOpenTask={onOpenTask} /> : <>
           {taskError ? <View style={styles.stack}>
             <Text accessibilityRole="alert" style={styles.error}>Không tải được đầy đủ công việc dự án.</Text>
@@ -162,6 +163,5 @@ const local = StyleSheet.create({
   tabs: { flexDirection: 'row', gap: 4, padding: 3, borderRadius: 10 },
   tab: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 8,
     justifyContent: 'center' },
-  detailTab: { flex: 1.45 },
   tabLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
 });

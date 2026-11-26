@@ -10,7 +10,6 @@ import { SegmentedButtons } from '../components/SegmentedButtons';
 import { useToast } from '../components/Toast';
 import { EmployeeForm, PayBreakdown, PayEditor, PayrollModal } from '../features/payroll/PayrollForms';
 import { EmployeeTable, PayrollTable } from '../features/payroll/PayrollTable';
-import { exportPayroll, exportPayslip } from '../features/payroll/exportPayroll';
 import { amount, calculatePay, locked, money, monthLabel, recordedAdvanceRequests } from '../features/payroll/payroll';
 import type { PayrollRow } from '../features/payroll/payrollColumns';
 import { approvedAdvanceRequests, confirmOwnPayslip, createPayrollExpenses, saveEmployee, watchPayroll, writePayroll } from '../features/payroll/payrollStore';
@@ -76,6 +75,7 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
 
   function downloadSlip(slipMonth: string, row: PayrollRow) {
     void run(async () => {
+      const { exportPayslip } = await import('../features/payroll/exportPayroll');
       if (await exportPayslip(slipMonth, row)) return 'Đã mở tệp Excel phiếu lương.';
     });
   }
@@ -235,6 +235,7 @@ export function PayrollScreen({ email, isAdmin, initialMonth, onOpenAdvance }: {
         <PayrollTable month={month} rows={displayRows} />
         <Button label="Xuất Excel" secondary disabled={busy} onPress={() =>
           void run(async () => {
+            const { exportPayroll } = await import('../features/payroll/exportPayroll');
             if (await exportPayroll(month, displayRows)) return 'Đã mở tệp xuất bảng lương.';
           })} />
       </>}

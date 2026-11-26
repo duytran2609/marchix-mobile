@@ -10,7 +10,7 @@ import type { ReminderWindow } from '../features/settings/reminderSettings';
 import { DueTaskReminders } from '../features/tasks/DueTaskReminders';
 import { TaskAssignmentForm } from '../features/tasks/TaskAssignmentForm';
 import { TaskBoard } from '../features/tasks/TaskBoard';
-import type { TaskBoardOptions } from '../features/tasks/TaskBoard';
+import type { TaskBoardOptions } from '../features/tasks/taskBoardOptions';
 import { deleteTask, watchTeamTasks } from '../features/tasks/tasks';
 import type { Task } from '../features/tasks/tasks';
 import { taskAssignmentEnabled } from '../services/firebase/firebase';

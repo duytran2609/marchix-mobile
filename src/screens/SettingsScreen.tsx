@@ -132,7 +132,8 @@ function ReminderTimingOptions({ reminders }: { reminders: ReturnType<typeof use
           <Text style={styles.label}>Số ngày trước hạn</Text>
           <View style={optionStyles.customTimingRow}>
             <TextInput accessibilityLabel="Số ngày trước hạn" inputMode="numeric" keyboardType="number-pad"
-              value={input} onChangeText={setDraft} style={[styles.input, optionStyles.customTimingInput]} />
+              value={input} onChangeText={setDraft} maxLength={String(maxReminderDays).length}
+              style={[styles.input, optionStyles.customTimingInput]} />
             <Button label="Lưu thời điểm" disabled={!canSave} onPress={() => void saveCustom()} />
           </View>
           <Text style={styles.muted}>Nhập số ngày từ 1 đến {maxReminderDays}.</Text>

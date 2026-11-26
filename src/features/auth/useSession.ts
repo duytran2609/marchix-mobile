@@ -1,6 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { auth, configError, db } from '../../services/firebase/firebase';
 import { rememberAccount } from './recentAccounts';
 
@@ -23,9 +24,9 @@ export function useSession() {
     const stopAuth = onAuthStateChanged(auth, user => {
       stopMembership?.();
       const uid = user?.uid ?? null;
-      // The first auth notification can restore a persisted session.
+      // Native launches also request a reminder when Firebase restores the signed-in user.
       if (uid !== previousUid) {
-        setShowLoginReminder(previousUid !== undefined && uid !== null);
+        setShowLoginReminder(uid !== null && (Platform.OS !== 'web' || previousUid !== undefined));
         previousUid = uid;
       }
       if (!user) {

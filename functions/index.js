@@ -581,6 +581,50 @@ async function appendMobileTaskDiscussion(request, isReply) {
 exports.addMobileTaskAttachments = onCall(request => appendMobileTaskDiscussion(request, false));
 exports.replyToMobileTaskComment = onCall(request => appendMobileTaskDiscussion(request, true));
 
+exports.updateMobileTaskComment = onCall(async request => {
+  const { taskId, target, message } = request.data ?? {};
+  const { email, db } = assignmentContext(request, 'chỉnh sửa trao đổi', false);
+  if (typeof taskId !== 'string' || !/^[\w-]{1,150}$/.test(taskId) ||
+    !Number.isSafeInteger(target?.index) || target.index < 0 ||
+    typeof target.at !== 'string' || !target.at || target.at.length > 64 ||
+    (message !== null && (typeof message !== 'string' || message.trim().length > 1000))) {
+    throw new HttpsError('invalid-argument', 'Nội dung hoặc mã trao đổi không hợp lệ.');
+  }
+  if (target.by !== email) {
+    throw new HttpsError('permission-denied', 'Bạn chỉ có thể thay đổi trao đổi do mình viết.');
+  }
+  const ref = db.collection('tasks').doc(taskId);
+  await db.runTransaction(async transaction => {
+    const [member, snapshot] = await transaction.getAll(db.collection('members').doc(email), ref);
+    const task = snapshot.data();
+    if (!activeMember(member) || !task || (task.assigneeEmail !== email && task.assignedBy !== email)) {
+      throw new HttpsError('permission-denied', 'Bạn không có quyền thay đổi trao đổi này.');
+    }
+    if (task.status === 'Xong') {
+      throw new HttpsError('failed-precondition', 'Công việc đã xong và chỉ có thể xem chi tiết.');
+    }
+    const comments = Array.isArray(task.comments) ? task.comments : [];
+    const matches = comment => comment?.by === email && comment?.at === target.at;
+    const index = matches(comments[target.index]) ? target.index : comments.findIndex(matches);
+    if (index < 0) throw new HttpsError('not-found', 'Trao đổi của bạn không còn tồn tại.');
+    const comment = comments[index];
+    if (comment.kind === 'assignment' || (task.assignedBy === email && comment.at === task.createdAt)) {
+      throw new HttpsError('failed-precondition', 'Lời nhắn giao việc được quản lý cùng công việc.');
+    }
+    if (message === null) {
+      comments.splice(index, 1);
+    } else {
+      const text = message.trim();
+      if (!text && !comment.files?.length) {
+        throw new HttpsError('invalid-argument', 'Vui lòng nhập nội dung trao đổi.');
+      }
+      comments[index] = { ...comment, text };
+    }
+    transaction.update(ref, { comments });
+  });
+  return { ok: true };
+});
+
 exports.downloadMobileTaskAttachment = onCall(async request => {
   const { email, db } = assignmentContext(request, 'tải tệp đính kèm');
   const { taskId, fileId } = request.data ?? {};

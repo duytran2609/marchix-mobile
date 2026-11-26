@@ -73,16 +73,15 @@ async function attach(batch: WriteBatch, projectId: string, email: string, folde
 }
 
 export async function publishProjectPost(projectId: string, email: string, input: {
-  title: string; body: string; kind: PostKind; taskId: string; mentions: string[]; picked: PickedAttachment[];
+  title: string; body: string; kind: PostKind; taskId: string; mentions: string[];
 }) {
   const title = input.title.trim();
   const body = input.body.trim();
   if (!title || !body) throw Error('Nhập tiêu đề và nội dung trao đổi.');
   const batch = writeBatch(db);
   const ref = doc(projectCollection(projectId, 'posts'));
-  const files = await attach(batch, projectId, email, 'Trao đổi', input.picked);
   const mentions = [...new Set(input.mentions)].filter(value => value !== email);
-  batch.set(ref, { title, body, kind: input.kind, taskId: input.taskId, mentions, files,
+  batch.set(ref, { title, body, kind: input.kind, taskId: input.taskId, mentions, files: [],
     status: 'open', pinned: false, conclusion: '', createdBy: email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   await batch.commit();
   const results = await Promise.allSettled(mentions.map(async to => {
@@ -101,12 +100,11 @@ export async function publishProjectPost(projectId: string, email: string, input
 }
 
 export async function publishProjectComment(projectId: string, postId: string, email: string, body: string,
-  replyTo: string, picked: PickedAttachment[]) {
+  replyTo: string) {
   if (!body.trim()) throw Error('Nhập nội dung bình luận.');
   const batch = writeBatch(db);
-  const files = await attach(batch, projectId, email, 'Trao đổi', picked);
   batch.set(doc(collection(postRef(projectId, postId), 'comments')), {
-    body: body.trim(), replyTo, files, createdBy: email, createdAt: serverTimestamp(),
+    body: body.trim(), replyTo, files: [], createdBy: email, createdAt: serverTimestamp(),
   });
   await batch.commit();
 }

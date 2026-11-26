@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef, ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button } from '../../components/Button';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
+import { DropdownOverlay, useDropdownAnchor } from '../../components/DropdownOverlay';
 import { EmptyState } from '../../components/EmptyState';
 import { TextInput } from '../../components/TextInput';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
@@ -16,7 +19,7 @@ import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachmen
 import type { PickedAttachment } from './taskAttachments';
 import type { AttachmentFile } from '../../utils/attachmentFile';
 import { addTaskAttachments, addTaskComment, commentMaxLength, findTaskReplyIndex, getAssignmentComment,
-  replyToTaskComment } from './tasks';
+  replyToTaskComment, updateTaskComment } from './tasks';
 import type { Task, TaskAssignee, TaskAttachment, TaskReplyTarget } from './tasks';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
@@ -42,6 +45,11 @@ export function TaskDiscussion({ task, email, name, members, children }: {
   const openingFile = useRef(false);
   const [sort, setSort] = useState<DiscussionSort>('oldest');
   const [term, setTerm] = useState('');
+  const [edit, setEdit] = useState<{ target: TaskReplyTarget; text: string }>();
+  const [deletion, setDeletion] = useState<TaskReplyTarget>();
+  const [changing, setChanging] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const changeInFlight = useRef(false);
   const discussionOpen = task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
   const canComment = discussionOpen && task.assigneeEmail === email;
   const canReply = discussionOpen && (canComment || task.assignedBy === email);
@@ -64,6 +72,34 @@ export function TaskDiscussion({ task, email, name, members, children }: {
     .filter(({ comment }) => !query || comment.text?.toLocaleLowerCase('vi').includes(query))
     .map(({ index }) => index));
   const orderedMessages = orderDiscussionMessages(allComments, visibleIndices, sort);
+  const editIndex = edit ? findTaskReplyIndex(allComments, edit.target) : -1;
+
+  async function changeComment(target: TaskReplyTarget, message: string | null) {
+    if (changeInFlight.current || !canReply) return;
+    changeInFlight.current = true;
+    setChanging(true);
+    setDeleteError('');
+    try {
+      await updateTaskComment({ taskId: task.id, target, message });
+      if (message === null) {
+        setDeletion(undefined);
+        if (replyTo?.by === target.by && replyTo.at === target.at) {
+          setReplyTo(undefined);
+          setReplyMessage('');
+          setReplyFiles([]);
+        }
+      } else {
+        setEdit(undefined);
+      }
+      showToast(message === null ? 'Đã xóa trao đổi.' : 'Đã lưu trao đổi.');
+    } catch {
+      if (message === null) setDeleteError('Chưa xóa được trao đổi. Vui lòng thử lại.');
+      else showToast('Chưa lưu được trao đổi. Vui lòng thử lại.', 'error');
+    } finally {
+      changeInFlight.current = false;
+      setChanging(false);
+    }
+  }
 
   useEffect(() => {
     if (replyTo && canReply) input.current?.focus();
@@ -166,12 +202,25 @@ export function TaskDiscussion({ task, email, name, members, children }: {
           const author = authorName(comment.by);
           const photo = member?.photoURL || (self ? auth.currentUser?.photoURL : null);
           const time = formatVietnamDateTime(comment.at);
+          const target = { index, by: comment.by, at: comment.at };
+          const editing = canReply && edit && editIndex === index;
           return <DiscussionMessage key={`${comment.at}-${index}`} author={author} time={time} photoURL={photo}
             first={position === 0} indented={parentIndex >= 0} replyDisabled={sending || picking}
+            actions={!editing && self && canReply && !!comment.at && comment !== assignmentMessage && comment.kind !== 'assignment' &&
+              <TaskCommentMenu disabled={changing} onEdit={() => setEdit({ target, text: comment.text ?? '' })}
+                onDelete={() => { setDeleteError(''); setDeletion(target); }} />}
+            footerActions={editing && <View style={styles.editActions}>
+              <Button label="Hủy" secondary disabled={changing} onPress={() => setEdit(undefined)} />
+              <Button label={changing ? 'Đang lưu…' : 'Lưu'} disabled={changing || (!edit.text.trim() && !discussionFiles(comment).length)}
+                onPress={() => void changeComment(edit.target, edit.text.trim())} />
+            </View>}
             onReply={canReply && comment.by && comment.at ? () => setReplyTo({ index, by: comment.by, at: comment.at }) : undefined}>
             {comment === assignmentMessage ? <Text style={styles.discussionTime}>Lời nhắn khi giao việc</Text> : null}
             {comment.replyTo ? renderQuote(comment.replyTo) : null}
-            {comment.text ? <Text style={screenStyles.body}>{comment.text}</Text> : null}
+            {editing ? <TextInput accessibilityLabel="Chỉnh sửa nội dung trao đổi" value={edit.text} multiline
+              autoFocus editable={!changing} maxLength={commentMaxLength} style={[screenStyles.input, screenStyles.messageInput]}
+              onChangeText={text => setEdit({ ...edit, text })} />
+              : comment.text ? <Text style={screenStyles.body}>{comment.text}</Text> : null}
             {discussionFiles(comment).map((file, index) => <DiscussionAttachment key={`${file.id}-${index}`}
               file={file} detail={openingFileId === file.id ? 'Đang mở…' : formatFileSize(file.size)}
               disabled={!!openingFileId} onOpen={taskAssignmentEnabled ? () => void openFile(file) : undefined} />)}
@@ -200,7 +249,37 @@ export function TaskDiscussion({ task, email, name, members, children }: {
 
   return <>
     {children(history, composer)}
+    {!!deletion && <Modal transparent statusBarTranslucent navigationBarTranslucent
+      onRequestClose={() => { if (!changing) setDeletion(undefined); }}>
+      <ConfirmDialog label="Xóa trao đổi" title="Xóa trao đổi?" message="Trao đổi này sẽ bị xóa khỏi công việc."
+        action="Xóa" pendingAction="Đang xóa…" pending={changing} error={deleteError}
+        onCancel={() => setDeletion(undefined)} onConfirm={() => void changeComment(deletion, null)} />
+    </Modal>}
     {preview?.taskId === task.id && <AttachmentPreview file={preview.file} onClose={() => setPreview(undefined)} />}
+  </>;
+}
+
+function TaskCommentMenu({ disabled, onEdit, onDelete }: { disabled: boolean; onEdit: () => void; onDelete: () => void }) {
+  const styles = useStyles();
+  const ui = useScreenStyles();
+  const { trigger, anchor, open, close } = useDropdownAnchor();
+  const icon = <Text aria-hidden style={styles.menuIcon}>⋯</Text>;
+  return <>
+    <Pressable ref={trigger} accessibilityRole="button" accessibilityLabel="Tùy chọn trao đổi"
+      accessibilityState={{ expanded: !!anchor }} style={styles.menuButton} disabled={disabled} onPress={open}>
+      {icon}
+    </Pressable>
+    {anchor && <DropdownOverlay anchor={anchor} onClose={close} triggerStyle={styles.menuButton}
+      triggerContent={icon} panelStyle={styles.menuPanel} keepAttached minWidth={136} minHeight={90} maxHeight={110}>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <Pressable accessibilityRole="button" style={styles.menuItem} onPress={() => { close(); onEdit(); }}>
+          <Text style={ui.body}>Chỉnh sửa</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" style={styles.menuItem} onPress={() => { close(); onDelete(); }}>
+          <Text style={[ui.body, styles.deleteAction]}>Xóa</Text>
+        </Pressable>
+      </ScrollView>
+    </DropdownOverlay>}
   </>;
 }
 
@@ -239,6 +318,14 @@ function discussionFiles(comment: NonNullable<Task['comments']>[number]) {
 }
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
+  editActions: { marginStart: 'auto', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
+  menuButton: { alignSelf: 'center', width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    transform: [{ translateY: -4 }] },
+  menuIcon: { color: colors.muted, fontSize: 24, lineHeight: 28, fontWeight: '700' },
+  menuPanel: { borderWidth: 1, borderColor: colors.line, borderRadius: 9,
+    backgroundColor: colors.paper, boxShadow: '0 8px 22px rgba(33, 25, 53, 0.18)' },
+  menuItem: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+  deleteAction: { color: colors.danger },
   discussionTime: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   draftFiles: { maxHeight: 124 },
   draftFileList: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },

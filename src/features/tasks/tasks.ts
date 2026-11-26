@@ -258,6 +258,10 @@ export async function addTaskComment(taskId: string, email: string, message: str
   });
 }
 
+export const updateTaskComment = httpsCallable<{ taskId: string; target: TaskReplyTarget; message: string | null }>(
+  taskFunctions, 'updateMobileTaskComment', { timeout: 12000 },
+);
+
 export const setTaskChecklistItem = pilotMode ? pilotChecklist : httpsCallable<{
   taskId: string;
   index: number;

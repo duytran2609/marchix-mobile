@@ -16,16 +16,16 @@ export function NumberStepper({ value, onChangeText, accessibilityLabel, editabl
   const [, integer, separator, fraction] = /^(\d*)(?:([.,])(\d*))?$/.exec(text) ?? [];
   const whole = text === '' ? emptyValue : integer || fraction ? Number(integer) : NaN;
 
-  return <View style={styles.frame}>
-    <TextInput {...props} accessibilityLabel={accessibilityLabel} editable={editable}
-      value={value} onChangeText={onChangeText} maxLength={maxLength} style={[style, styles.input]} />
+  const limit = maxLength ?? String(max).length;
+  return <TextInput {...props} accessibilityLabel={accessibilityLabel} editable={editable}
+    value={value} onChangeText={onChangeText} maxLength={limit} style={[style, styles.input]} accessory={
     <View style={styles.arrows}>
       {([1, -1] as const).map(step => {
         const nextWhole = whole + step;
         const result = fraction ? `${nextWhole}${separator}${fraction}` : String(nextWhole);
         const next = Number(result.replace(',', '.'));
         const disabled = !editable || !Number.isSafeInteger(nextWhole) || nextWhole < 0 || next < min || next > max ||
-          result.length > (maxLength ?? Infinity);
+          result.length > limit;
         return <Pressable key={step} accessibilityRole="button" disabled={disabled}
           accessibilityState={{ disabled }}
           accessibilityLabel={`${step === 1 ? 'Tăng' : 'Giảm'} ${accessibilityLabel.toLocaleLowerCase('vi')}`}
@@ -35,11 +35,10 @@ export function NumberStepper({ value, onChangeText, accessibilityLabel, editabl
         </Pressable>;
       })}
     </View>
-  </View>;
+  } />;
 }
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
-  frame: { position: 'relative' },
   input: { paddingRight: 36 },
   arrows: { position: 'absolute', top: 1, bottom: 1, right: 1, width: 30, borderLeftWidth: 1,
     borderTopRightRadius: 8, borderBottomRightRadius: 8, borderColor: colors.line, backgroundColor: colors.accentSoft },

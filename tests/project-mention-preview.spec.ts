@@ -55,7 +55,7 @@ for (const mode of ['pilot', 'structured', 'missing-project', 'legacy'] as const
         await expect(page.getByRole('alert')).toContainText('Không tìm thấy dự án từ thông báo');
       } else {
         await expect(page.getByRole('heading', { name: targetName, exact: true })).toBeVisible();
-        await expect(page.getByRole('region', { name: 'Trao đổi & tài liệu', exact: true })).toBeVisible();
+        await expect(page.getByRole('region', { name: 'Trao đổi', exact: true })).toBeVisible();
         await expect(page.getByRole('heading', { name: postTitle, exact: true })).toBeVisible();
       }
       await expect(page.getByRole('heading', { name: firstName, exact: true })).toHaveCount(0);

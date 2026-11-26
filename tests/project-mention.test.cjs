@@ -71,7 +71,7 @@ for (const pilotMode of [true, false]) {
     });
     assert.equal(await store.publishProjectPost('ZZ-target-project', 'sender@example.test', {
       title: 'Fake post', body: 'Fake body', kind: 'Cập nhật', taskId: '',
-      mentions: ['recipient@example.test', 'second@example.test', 'recipient@example.test', 'sender@example.test'], picked: [],
+      mentions: ['recipient@example.test', 'second@example.test', 'recipient@example.test', 'sender@example.test'],
     }), 0);
     assert.equal(written.length, 2);
     assert.notEqual(written[0].ref.id, written[1].ref.id);

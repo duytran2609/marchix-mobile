@@ -166,9 +166,9 @@ export function ProjectEditor({ project, canChangeOwner, onCancel, onSaved }: {
               value={status} onChange={setStatus} disabled={saving} />
             <Text style={styles.label}>Trần vốn dự án (VNĐ)</Text>
             <TextInput accessibilityLabel="Trần vốn dự án (VNĐ)" editable={!saving} keyboardType="number-pad"
-              placeholder="Nhập số tiền, ví dụ 5.000.000" style={styles.input}
+              placeholder="Nhập số tiền, ví dụ 5.000.000" style={styles.input} maxLength={21}
               value={budget.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-              onChangeText={value => setBudget(value.replace(/\D/g, ''))} />
+              onChangeText={value => setBudget(value.replace(/\D/g, '').slice(0, 16))} />
             {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           </PopupBody>
         </View>

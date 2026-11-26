@@ -1,8 +1,9 @@
 import { signOut } from 'firebase/auth';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, useEffect, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { KeyboardScrollView } from '../components/KeyboardScrollView';
+import { DeferredContent } from '../components/DeferredContent';
 import { useToast } from '../components/Toast';
 import { watchMemberAvatar } from '../features/auth/memberAvatar';
 import type { MemberSession } from '../features/auth/useSession';
@@ -19,11 +20,12 @@ import { maxPinnedTabs, usePinnedTabs, usePinningEnabled } from '../navigation/u
 import type { PinnableTab } from '../navigation/usePinnedTabs';
 import { workflowRouteForLink, workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
-import { SettingsScreen } from '../screens/SettingsScreen';
 import { auth } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
 import { workspaceHeaderPadding, WorkspaceHeader } from './WorkspaceHeader';
+
+const SettingsScreen = lazy(() => import('../screens/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
 
 export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests,
   canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords, accountCreatedAt,
@@ -102,7 +104,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         return;
       }
       setShowAssignment(false);
-      setRoute({ screen: 'du-an', projectId: note.projectId, section: 'library' });
+      setRoute({ screen: 'du-an', projectId: note.projectId, section: 'discussion' });
       return;
     }
     const task = notificationTaskTarget(note);
@@ -132,18 +134,18 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
         style={route.screen === 'cai-dat' && styles.hidden} contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
           route.screen === 'tong-quan' && styles.overviewPage]}>
-          <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
+          <DeferredContent><WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
             accountCreatedAt={accountCreatedAt}
             canReadCash={canReadCash} canReviewCash={canReviewCash} canReviewRequests={canReviewRequests}
             canManageProjects={canManageProjects} canReadTeamPlans={canReadTeamPlans}
             canReadTeamKpi={canReadTeamKpi} canManageRecords={canManageRecords}
             route={route} setRoute={setRoute} reminders={reminders} taskFeed={taskFeed}
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}
-            onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} />
+            onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} /></DeferredContent>
         </View>
       </KeyboardScrollView>
-      {route.screen === 'cai-dat' && <SettingsScreen key={String(isAdmin)} reminders={reminders} pinning={pinning}
-        isAdmin={isAdmin} email={email} />}
+      {route.screen === 'cai-dat' && <DeferredContent><SettingsScreen key={String(isAdmin)} reminders={reminders}
+        pinning={pinning} isAdmin={isAdmin} email={email} /></DeferredContent>}
       {pinningEnabled && (
         <WorkspaceBottomNav pins={pinnedTabs.value} activeTab={activeTab} isAdmin={isAdmin} onSelect={selectTab} />
       )}
