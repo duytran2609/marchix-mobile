@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef, ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { DeleteIconButton } from '../../components/DeleteIconButton';
 import { EmptyState } from '../../components/EmptyState';
 import { TextInput } from '../../components/TextInput';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DiscussionAttachment, DiscussionComposer, DiscussionHeader, DiscussionHistory,
   DiscussionMessage, DiscussionQuote } from '../../components/Discussion';
+import type { DiscussionSort } from '../../components/Discussion';
 import { SearchInput } from '../../components/SearchInput';
 import { useToast } from '../../components/Toast';
 import { auth, pilotMode, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { formatVietnamDateTime } from '../../utils/dateTime';
 import { attachmentLimit, formatFileSize, pickTaskAttachments, readTaskAttachment, readTaskAttachments } from './taskAttachments';
+import type { PickedAttachment } from './taskAttachments';
 import type { AttachmentFile } from '../../utils/attachmentFile';
-import { addTaskAttachments, addTaskComment, commentMaxLength, findTaskReplyIndex, getAssignmentComment } from './tasks';
+import { addTaskAttachments, addTaskComment, commentMaxLength, findTaskReplyIndex, getAssignmentComment,
+  replyToTaskComment } from './tasks';
 import type { Task, TaskAssignee, TaskAttachment, TaskReplyTarget } from './tasks';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { createThemedStyles } from '../../theme/theme';
@@ -26,18 +30,26 @@ export function TaskDiscussion({ task, email, name, members, children }: {
   const showToast = useToast();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [message, setMessage] = useState('');
+  const [draftFiles, setDraftFiles] = useState<PickedAttachment[]>([]);
   const [replyTo, setReplyTo] = useState<TaskReplyTarget>();
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyFiles, setReplyFiles] = useState<PickedAttachment[]>([]);
   const [sending, setSending] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const draftBusy = useRef(false);
   const [openingFileId, setOpeningFileId] = useState('');
   const [preview, setPreview] = useState<{ taskId: string; file: AttachmentFile }>();
   const openingFile = useRef(false);
-  const [sort, setSort] = useState<'oldest' | 'newest'>('oldest');
+  const [sort, setSort] = useState<DiscussionSort>('oldest');
   const [term, setTerm] = useState('');
   const discussionOpen = task.status !== 'Xong' && (!pilotMode || taskAssignmentEnabled);
   const canComment = discussionOpen && task.assigneeEmail === email;
   const canReply = discussionOpen && (canComment || task.assignedBy === email);
-  const canAttach = canComment && taskAssignmentEnabled && !replyTo;
+  const canAttach = (replyTo ? canReply : canComment) && taskAssignmentEnabled;
+  const text = (replyTo ? replyMessage : message).trim();
+  const files = replyTo ? replyFiles : draftFiles;
+  const setFiles = replyTo ? setReplyFiles : setDraftFiles;
+  const hasDraftFiles = canAttach && files.length > 0;
   const allComments = task.comments ?? [];
   const assignmentMessage = getAssignmentComment(task);
   const comments = allComments.map((comment, index) => ({ comment, index }))
@@ -48,10 +60,10 @@ export function TaskDiscussion({ task, email, name, members, children }: {
   if (assignmentMessage && (assignmentMessage.text || discussionFiles(assignmentMessage).length)) {
     messages.unshift({ comment: assignmentMessage, index: allComments.indexOf(assignmentMessage) });
   }
-  const orderedMessages = messages
+  const visibleIndices = new Set(messages
     .filter(({ comment }) => !query || comment.text?.toLocaleLowerCase('vi').includes(query))
-    .map(entry => ({ ...entry, time: Date.parse(entry.comment.at) || 0 }))
-    .sort((a, b) => sort === 'oldest' ? a.time - b.time || a.index - b.index : b.time - a.time || b.index - a.index);
+    .map(({ index }) => index));
+  const orderedMessages = orderDiscussionMessages(allComments, visibleIndices, sort);
 
   useEffect(() => {
     if (replyTo && canReply) input.current?.focus();
@@ -70,39 +82,59 @@ export function TaskDiscussion({ task, email, name, members, children }: {
   }
 
   async function send() {
-    if (!(replyTo ? canReply : canComment) || sending || uploading || !message.trim()) return;
+    if (draftBusy.current || !(replyTo ? canReply : canComment) || (!text && !hasDraftFiles)) return;
     if (replyTo && findTaskReplyIndex(allComments, replyTo) < 0) {
       showToast('Trao đổi gốc không còn tồn tại.', 'error');
       return;
     }
+    draftBusy.current = true;
     setSending(true);
     try {
-      await addTaskComment(task.id, email, message, replyTo);
-      setMessage('');
-      setReplyTo(undefined);
+      if (replyTo) {
+        await replyToTaskComment({ taskId: task.id, message: text, replyTo,
+          attachments: hasDraftFiles ? await readTaskAttachments(files) : [] });
+      } else if (hasDraftFiles) {
+        await addTaskAttachments({ taskId: task.id, message: text, attachments: await readTaskAttachments(files) });
+      } else {
+        await addTaskComment(task.id, email, text);
+      }
+      if (replyTo) {
+        setReplyMessage('');
+        setReplyFiles([]);
+        setReplyTo(undefined);
+      } else {
+        setMessage('');
+        setDraftFiles([]);
+      }
+      showToast(replyTo ? 'Đã gửi trả lời.' : hasDraftFiles ? 'Đã gửi trao đổi kèm tệp.' : 'Đã gửi trao đổi.');
     } catch {
-      showToast('Chưa gửi được trao đổi. Kiểm tra kết nối và thử lại.', 'error');
+      showToast(replyTo ? 'Chưa gửi được trả lời. Kiểm tra kết nối rồi thử lại.'
+        : 'Chưa gửi được trao đổi. Kiểm tra kết nối rồi thử lại.', 'error');
     } finally {
+      draftBusy.current = false;
       setSending(false);
     }
   }
 
-  async function upload() {
-    if (!canAttach || sending || uploading) return;
-    setUploading(true);
+  async function pickFiles() {
+    if (!canAttach || draftBusy.current) return;
+    draftBusy.current = true;
+    setPicking(true);
     try {
-      const files = await pickTaskAttachments();
-      if (!files.length) return;
-      const limit = attachmentLimit(files);
+      const picked = await pickTaskAttachments();
+      if (!picked.length) return;
+      const next = [...files, ...picked];
+      const limit = attachmentLimit(next);
       if (limit) {
         showToast(limit, 'error');
         return;
       }
-      await addTaskAttachments({ taskId: task.id, attachments: await readTaskAttachments(files) });
+      setFiles(next);
     } catch {
-      showToast('Chưa gửi được tệp. Kiểm tra kết nối và thử lại.', 'error');
+      showToast('Không chọn được tệp. Vui lòng thử lại.', 'error');
     } finally {
-      setUploading(false);
+      draftBusy.current = false;
+      setPicking(false);
     }
   }
 
@@ -128,14 +160,14 @@ export function TaskDiscussion({ task, email, name, members, children }: {
       <DiscussionHistory>
         {orderedMessages.length === 0 ? <EmptyState icon={query ? 'search' : 'chat'}
           message={query ? 'Không tìm thấy trao đổi phù hợp.' : 'Chưa có trao đổi.'} /> : null}
-        {orderedMessages.map(({ comment, index }, position) => {
+        {orderedMessages.map(({ comment, index, parentIndex }, position) => {
           const member = members.get(comment.by);
           const self = comment.by === email;
           const author = authorName(comment.by);
           const photo = member?.photoURL || (self ? auth.currentUser?.photoURL : null);
           const time = formatVietnamDateTime(comment.at);
           return <DiscussionMessage key={`${comment.at}-${index}`} author={author} time={time} photoURL={photo}
-            first={position === 0} replyDisabled={sending || uploading}
+            first={position === 0} indented={parentIndex >= 0} replyDisabled={sending || picking}
             onReply={canReply && comment.by && comment.at ? () => setReplyTo({ index, by: comment.by, at: comment.at }) : undefined}>
             {comment === assignmentMessage ? <Text style={styles.discussionTime}>Lời nhắn khi giao việc</Text> : null}
             {comment.replyTo ? renderQuote(comment.replyTo) : null}
@@ -150,15 +182,55 @@ export function TaskDiscussion({ task, email, name, members, children }: {
   );
 
   const composer = canComment || (canReply && replyTo) ? (
-    <DiscussionComposer inputRef={input} message={message} onChange={setMessage} placeholder="Nhập trao đổi về công việc"
-      maxLength={commentMaxLength} sending={sending} attachmentBusy={uploading} onAttach={canAttach ? upload : undefined}
-      quote={replyTo && renderQuote(replyTo)} onCancelReply={() => setReplyTo(undefined)} onSend={send} />
+    <DiscussionComposer inputRef={input} message={replyTo ? replyMessage : message}
+      onChange={replyTo ? setReplyMessage : setMessage} placeholder="Nhập trao đổi về công việc"
+      maxLength={commentMaxLength} sending={sending} attachmentBusy={picking} onAttach={canAttach ? pickFiles : undefined}
+      attachments={hasDraftFiles && <ScrollView style={styles.draftFiles} keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.draftFileList}>
+        {files.map((file, index) => <DiscussionAttachment key={index} file={file} detail={formatFileSize(file.size)}
+          action={<DeleteIconButton label={`Bỏ tệp ${file.name}`} disabled={sending || picking}
+            onPress={() => setFiles(current => current.filter((_, position) => position !== index))} />} />)}
+      </ScrollView>}
+      canSend={!!text || hasDraftFiles} quote={replyTo && renderQuote(replyTo)} onCancelReply={() => {
+        setReplyTo(undefined);
+        setReplyMessage('');
+        setReplyFiles([]);
+      }} onSend={send} />
   ) : null;
 
   return <>
     {children(history, composer)}
     {preview?.taskId === task.id && <AttachmentPreview file={preview.file} onClose={() => setPreview(undefined)} />}
   </>;
+}
+
+function orderDiscussionMessages(comments: NonNullable<Task['comments']>, visible: Set<number>, sort: DiscussionSort) {
+  const entries = comments.map((comment, index) => {
+    const parent = comment.replyTo ? findTaskReplyIndex(comments, comment.replyTo) : -1;
+    return { comment, index, parentIndex: parent < index ? parent : -1, time: Date.parse(comment.at) || 0 };
+  });
+  // A visible reply also needs its earlier ancestors, even outside the recent list or search results.
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const { parentIndex } = entries[index];
+    if (parentIndex >= 0 && visible.has(index)) visible.add(parentIndex);
+  }
+  const siblingsByParent = new Map<number, typeof entries>();
+  const direction = sort === 'oldest' ? 1 : -1;
+  for (const entry of entries.filter(({ index }) => visible.has(index))
+    .sort((a, b) => direction * (a.time - b.time || a.index - b.index))) {
+    const siblings = siblingsByParent.get(entry.parentIndex);
+    if (siblings) siblings.push(entry);
+    else siblingsByParent.set(entry.parentIndex, [entry]);
+  }
+  const ordered: typeof entries = [];
+  const pending = (siblingsByParent.get(-1) ?? []).reverse();
+  while (pending.length > 0) {
+    const entry = pending.pop()!;
+    ordered.push(entry);
+    const replies = siblingsByParent.get(entry.index);
+    if (replies) pending.push(...replies.reverse());
+  }
+  return ordered;
 }
 
 function discussionFiles(comment: NonNullable<Task['comments']>[number]) {
@@ -168,4 +240,6 @@ function discussionFiles(comment: NonNullable<Task['comments']>[number]) {
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   discussionTime: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  draftFiles: { maxHeight: 124 },
+  draftFileList: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
 }));

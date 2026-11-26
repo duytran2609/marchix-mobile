@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ClickableCardHeader } from '../../components/CardChevron';
-import { AppState, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { ReminderWindow } from '../settings/reminderSettings';
 import { useScreenStyles } from '../../theme/screenStyles';
-import { formatDue, shiftDay, todayInVietnam } from './taskDates';
+import { formatDue, shiftDay } from './taskDates';
 import type { Task } from './tasks';
+import { useVietnamToday } from './useVietnamToday';
 
 export function DueTaskReminders({ tasks, email, window, onOpen }: {
   tasks: Task[];
@@ -13,21 +14,8 @@ export function DueTaskReminders({ tasks, email, window, onOpen }: {
   onOpen: (task: Task) => void;
 }) {
   const styles = useScreenStyles();
-  const [today, setToday] = useState(todayInVietnam);
+  const today = useVietnamToday(window !== 'off');
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
-    if (window === 'off') return;
-    const refresh = () => setToday(todayInVietnam());
-    refresh();
-    const timer = setInterval(refresh, 30_000);
-    const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active') refresh();
-    });
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
-  }, [window]);
 
   if (window === 'off') return null;
   const days = new Set(Array.from({ length: window + 1 }, (_, index) => shiftDay(today, index)));

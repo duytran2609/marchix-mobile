@@ -1,12 +1,11 @@
 import { EmptyState } from '../components/EmptyState';
 import { PaginatedList } from '../components/PaginatedList';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import type { ReactNode } from 'react';
 import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
-import { Dropdown } from '../components/Dropdown';
 import { PageHeader } from '../components/PageHeader';
 import { OverviewGreeting } from '../components/OverviewGreeting';
 import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
@@ -16,10 +15,12 @@ import { projectMetrics, watchPilotProjectTasks, watchProjects } from '../featur
 import type { Project } from '../features/projects/projects';
 import { pendingRequest, watchRequests } from '../features/requests/requests';
 import type { StaffRequest } from '../features/requests/requests';
-import { formatDue, shiftDay, todayInVietnam } from '../features/tasks/taskDates';
+import { formatDue, formatTaskDate, shiftDay } from '../features/tasks/taskDates';
+import { overdueTaskLabel } from '../features/tasks/taskLabels';
 import type { Task } from '../features/tasks/tasks';
-import { taskStatusSummary } from '../features/tasks/taskStatusSummary';
+import { overdueTaskBucket, taskStatusSummary } from '../features/tasks/taskStatusSummary';
 import { statusTone } from '../features/tasks/TaskProgress';
+import { useVietnamToday } from '../features/tasks/useVietnamToday';
 import { mondayOf, suggestWeekTasks } from '../features/weekly-plan/weeklyPlan';
 import type { WorkspaceRoute } from '../navigation/workspaceRoutes';
 import { pilotMode } from '../services/firebase/firebase';
@@ -33,6 +34,7 @@ const decisionFilters = [
   { value: 'don-tu', label: 'Đơn từ' }, { value: 'thu-chi', label: 'Thu chi' }, { value: 'du-an', label: 'Dự án' },
 ] as const;
 type DecisionFilter = typeof decisionFilters[number]['value'];
+const weekDayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const waiting = (row: Cash) => ['Chờ thu', 'Chờ chi'].includes(cashStatus(row));
 const amount = (rows: Cash[]) => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 const taskRoute = (task: Task): WorkspaceRoute => ({
@@ -118,6 +120,7 @@ export function OverviewScreen({
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('all');
   const [showDebt, setShowDebt] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedWeekDay, setSelectedWeekDay] = useState<string | null>(null);
   const useOverviewTasks = isAdmin || pilotMode;
 
   useEffect(() => {
@@ -146,16 +149,28 @@ export function OverviewScreen({
   const tasks = tasksError ? 'error' : personalTasks;
   const projectTasks = pilotMode ? overviewTasks : tasks;
   const decisionTasks = useOverviewTasks ? overviewTasks : tasks;
-  const today = todayInVietnam();
+  const today = useVietnamToday(true);
   const nextWeek = shiftDay(today, 7);
-  const weekEnd = shiftDay(mondayOf(today), 6);
+  const weekStart = mondayOf(today);
+  const weekEnd = shiftDay(weekStart, 6);
   const myWeekTasks = Array.isArray(tasks) ? suggestWeekTasks(tasks, email, today, weekEnd) : [];
+  const weekDays = weekDayLabels.map((label, index) => {
+    const date = shiftDay(weekStart, index);
+    return { date, label, tasks: myWeekTasks.filter(task => task.due === date) };
+  }).filter(day => day.date >= today);
+  const activeWeekDay = weekDays.find(day => day.date === selectedWeekDay) ??
+    weekDays.find(day => day.tasks.length > 0) ?? weekDays[0];
+  const maxWeekTasks = Math.max(1, ...weekDays.map(day => day.tasks.length));
   const summary = taskStatusSummary(Array.isArray(tasks) ? tasks : []);
-  const selectedGroup = summary.find(bucket => bucket.status === group && bucket.tasks.length > 0);
+  const overdue = overdueTaskBucket(summary, today);
+  const selectedGroup = [...summary, overdue].find(bucket => bucket.status === group && bucket.tasks.length > 0);
   const selectedStatus = selectedGroup?.status;
   const taskSegments = summary.map(({ status, tasks }) => ({
     status, count: tasks.length, color: ringStatusColor(status),
   }));
+  const taskLegend = [...taskSegments, {
+    status: overdue.status, count: overdue.tasks.length, color: statusTone(overdue.status, colors).text,
+  }];
   function ringStatusColor(status: string) {
     if (status === 'Khác') return colors.accent;
     if (status === 'Chờ duyệt') return colors.warning;
@@ -180,6 +195,9 @@ export function OverviewScreen({
   const cashMonth = series.find(item => item.key === selectedMonth) ?? series[series.length - 1];
   const pendingRequests = (Array.isArray(requests) ? requests : []).filter(row => row.status === pendingRequest);
   const lateCash = scheduled.filter(row => row.dueDate && row.dueDate < today);
+  const unscheduledCash = scheduled.filter(row => !row.dueDate).length;
+  const cashDueScale = Math.max(1, income, expense);
+  const cashBalance = income - expense;
 
   const decisions: Entry[] = [];
   const activeProjects = (Array.isArray(projects) ? projects : [])
@@ -213,19 +231,22 @@ export function OverviewScreen({
     }
   }
 
-  function row(entry: Entry & { metadata?: ReactNode }, key: string | number) {
+  function row(entry: Entry, key: string | number) {
     return <Pressable key={key} accessibilityRole="button" onPress={() => onNavigate(entry.route)} style={styles.row}>
       <View style={styles.grow}>
         <Text style={screen.label}>{entry.label}</Text>
         {!!entry.detail && <Text style={screen.muted}>{entry.detail}</Text>}
-        {entry.metadata}
       </View>
       <CardChevron />
     </Pressable>;
   }
 
-  function projectField(label: string, value: string) {
-    return <Text style={screen.muted}><Text style={screen.metadataLabel}>{label}: </Text>{value}</Text>;
+  function weekTaskRow(task: Task) {
+    return row({
+      label: task.title,
+      detail: task.status === 'Vướng' ? `Đang vướng · ${formatDue(task.due)}` : formatDue(task.due),
+      route: taskRoute(task),
+    }, task.id);
   }
 
   function card(title: string, children: ReactNode, options?: { primary?: boolean; action?: ReactNode }) {
@@ -252,7 +273,10 @@ export function OverviewScreen({
 
   const sources = [tasks, projectTasks, projects, ...(isAdmin ? [cash, requests, decisionTasks] : canReadCash ? [cash] : [])];
   const unavailable = sources.includes('error');
-  const entries = decisions.filter(entry => decisionFilter === 'all' || entry.route.screen === decisionFilter);
+  const decisionGroups = decisionFilters.map(filter => ({
+    ...filter, items: filter.value === 'all' ? decisions : decisions.filter(entry => entry.route.screen === filter.value),
+  }));
+  const entries = decisionGroups.find(group => group.value === decisionFilter)?.items ?? [];
   const incomplete = sources.some(source => !Array.isArray(source));
 
   return <>
@@ -260,18 +284,44 @@ export function OverviewScreen({
     <OverviewGreeting name={name} email={email} />
     <DailyChecklist email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
       canReviewRequests={canReviewRequests} cash={cash} requests={requests} onNavigate={onNavigate} onRetry={reload} />
-    {isAdmin && <View style={screen.choices}>
-      <Button secondary label={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
-        onPress={() => setShowDecisions(value => !value)} />
-    </View>}
     {unavailable && <Button secondary label="Tải lại dữ liệu" onPress={reload} />}
-    {isAdmin && showDecisions && <View style={screen.panel}>
-      <Text accessibilityRole="header" style={screen.cardTitle}>Việc cần quyết định</Text>
-      <Dropdown label="Loại việc" value={decisionFilter} choices={decisionFilters}
-        onChange={setDecisionFilter} />
-      {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
-      <PaginatedList items={entries} resetKey={decisionFilter}>{pageItems => pageItems.map(row)}</PaginatedList>
-      {!entries.length && !incomplete && <EmptyState icon="approval" message="Không có mục cần xử lý." />}
+    {isAdmin && <View style={screen.panel}>
+      <Pressable accessibilityRole="button"
+        accessibilityLabel={incomplete ? 'Cần quyết định' : `Cần quyết định (${decisions.length})`}
+        accessibilityState={{ expanded: showDecisions }} aria-expanded={showDecisions} style={styles.decisionSummary}
+        onPress={() => {
+          setDecisionFilter('all');
+          setShowDecisions(value => !value);
+        }}>
+        <View aria-hidden style={styles.decisionBadge}>
+          <Text style={styles.decisionValue}>{incomplete ? '–' : decisions.length}</Text>
+        </View>
+        <Text style={[screen.cardTitle, styles.grow]}>Cần quyết định</Text>
+        <View style={showDecisions ? styles.chevronUp : styles.chevronDown}><CardChevron /></View>
+      </Pressable>
+      <View style={styles.metrics}>
+        {decisionGroups.slice(1).map(({ value, label, items }) => {
+          const selected = showDecisions && decisionFilter === value;
+          return <Pressable key={value} accessibilityRole="button" aria-pressed={selected}
+            accessibilityLabel={incomplete ? label : `${label}, ${items.length} mục cần quyết định`}
+            accessibilityState={{ selected }} style={[styles.metricTile, selected && styles.tileSelected]}
+            onPress={() => {
+              setDecisionFilter(value);
+              setShowDecisions(!selected);
+            }}>
+            <Text style={[styles.metricNumber, items.length > 0 && !incomplete && styles.attention]}>
+              {incomplete ? '–' : items.length}
+            </Text>
+            <Text style={screen.muted}>{label}</Text>
+          </Pressable>;
+        })}
+      </View>
+      {showDecisions && <>
+        <Text accessibilityRole="header" style={screen.cardTitle}>Việc cần quyết định</Text>
+        {incomplete && <Text style={screen.muted}>{unavailable ? 'Một phần dữ liệu chưa tải được.' : 'Đang tải thêm dữ liệu…'}</Text>}
+        <PaginatedList items={entries} resetKey={decisionFilter}>{pageItems => pageItems.map(row)}</PaginatedList>
+        {!entries.length && !incomplete && <EmptyState icon="approval" message="Không có mục cần xử lý." />}
+      </>}
     </View>}
     <View style={styles.grid}>
       {canReadCash && card('Dòng tiền thực tế', state(cash, <>
@@ -315,9 +365,10 @@ export function OverviewScreen({
       {card('Tình trạng công việc', state(tasks, <>
         <Text style={screen.muted}>Công việc tôi nhận hoặc giao, gồm cả việc đã xong.</Text>
         <View style={styles.taskSummary}>
-          <TaskRing segments={taskSegments} selected={selectedStatus} onSelect={toggleStatus} />
+          <TaskRing segments={taskSegments} selected={selectedStatus === overdueTaskLabel ? undefined : selectedStatus}
+            onSelect={toggleStatus} />
           <View style={styles.taskLegend}>
-            {taskSegments.map(({ status, count, color }) => <Pressable key={status} accessibilityRole="button"
+            {taskLegend.map(({ status, count, color }) => <Pressable key={status} accessibilityRole="button"
               aria-expanded={selectedStatus === status} disabled={!count}
               onPress={() => toggleStatus(status)}
               style={[styles.legendRow, selectedStatus && selectedStatus !== status && styles.dimmed]}>
@@ -337,45 +388,89 @@ export function OverviewScreen({
       {card('Tiến độ dự án', state(projects, <>
         {!activeProjects.length && <EmptyState icon="project" message="Chưa có dự án đang theo dõi." />}
         {activeProjects.slice(0, 4).map(({ project, metrics, count, risk }) => {
-          const { progress, done } = metrics;
-          const progressText = projectTasks === 'error' ? 'Không tải được' : !projectTasks ? 'Đang tải…' : progress === null
-            ? 'Chưa có việc trong phạm vi xem' : `${progress}%`;
-          return <View key={project.id}>
-            {row({ label: project.name, route: { screen: 'du-an', projectId: project.id },
-              metadata: <View style={styles.projectMetadata}>
-                {risk && projectField('Theo dõi', 'Cần chú ý')}
-                {progress !== null && projectField('Việc đã duyệt', `${done}/${count}`)}
-                {projectField('Tiến độ', progressText)}
-              </View> }, project.id)}
-            {progress !== null && bar(progress, colors.accent)}
-          </View>;
+          const { progress, done, overdue, blocked } = metrics;
+          return <Pressable key={project.id} accessibilityRole="button" style={styles.projectTile}
+            onPress={() => onNavigate({ screen: 'du-an', projectId: project.id })}>
+            <View style={styles.cardHeading}>
+              <Text style={[screen.label, styles.grow]}>{project.name}</Text>
+              {progress !== null && <Text style={styles.projectPercent}>{progress}%</Text>}
+              <CardChevron />
+            </View>
+            {progress !== null
+              ? bar(progress, progress === 100 ? colors.success : colors.accent)
+              : <Text style={screen.muted}>{projectTasks === 'error' ? 'Không tải được' :
+                !projectTasks ? 'Đang tải…' : 'Chưa có việc trong phạm vi xem'}</Text>}
+            <View style={styles.projectChips}>
+              {progress !== null && <Text style={[styles.chip, styles.successChip]}>{done}/{count} việc xong</Text>}
+              {overdue > 0 && <Text style={[styles.chip, styles.dangerChip]}>{overdue} quá hạn</Text>}
+              {blocked > 0 && <Text style={[styles.chip, styles.warningChip]}>{blocked} đang vướng</Text>}
+              {risk && overdue === 0 && blocked === 0 && <Text style={[styles.chip, styles.warningChip]}>Cần chú ý</Text>}
+            </View>
+          </Pressable>;
         })}
       </>), { primary: true, action: <Pressable accessibilityRole="button" style={styles.inlineAction}
         onPress={() => onNavigate({ screen: 'du-an' })}><Text style={styles.link}>Tất cả dự án</Text></Pressable> })}
       {isAdmin && card('Thu chi đến hạn', state(cash, <>
         <Text style={screen.muted}>7 ngày tới · Khoản đã duyệt</Text>
-        <View style={styles.cardHeading}><Text style={[screen.label, screen.metadataLabel]}>Phải thu</Text><Text style={[screen.label, screen.metadataValue]}>{vnd.format(income)}</Text></View>
-        {bar(100 * income / Math.max(1, income, expense), colors.success)}
-        <View style={styles.cardHeading}><Text style={[screen.label, screen.metadataLabel]}>Phải chi</Text><Text style={[screen.label, screen.metadataValue]}>{vnd.format(expense)}</Text></View>
-        {bar(100 * expense / Math.max(1, income, expense), colors.accent)}
+        <View style={styles.cashComparison}>
+          {[
+            { label: 'Phải thu', value: income, color: colors.success },
+            { label: 'Phải chi', value: expense, color: colors.accent },
+          ].map(({ label, value, color }) => <View key={label} style={styles.cashLine}>
+            <View style={[styles.cardHeading, styles.cashHeading]}>
+              <Text style={[screen.label, styles.grow]}>{label}</Text>
+              <Text style={[styles.cashValue, { color }]}>{vnd.format(value)}</Text>
+            </View>
+            {bar(100 * value / cashDueScale, color)}
+          </View>)}
+        </View>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDebt }}
           style={styles.sectionAction} onPress={() => setShowDebt(value => !value)}>
           <Text style={styles.sectionActionLabel}>Chi tiết công nợ</Text>
         </Pressable>
         {showDebt && <>
-          <Text style={[screen.body, screen.metadataValue]}><Text style={screen.metadataLabel}>Chênh lệch </Text>{vnd.format(income - expense)}</Text>
-          <Text style={screen.muted}>{lateCash.length} khoản quá hạn · {scheduled.filter(item => !item.dueDate).length} khoản chưa có hạn</Text>
+          <View style={styles.metricTile}>
+            <Text style={[styles.cashValue, cashBalance < 0 && styles.attention]}>{vnd.format(cashBalance)}</Text>
+            <Text style={screen.muted}>Chênh lệch 7 ngày</Text>
+          </View>
+          <View style={styles.metrics}>
+            <View style={styles.metricTile}>
+              <Text style={[styles.metricNumber, lateCash.length > 0 && styles.attention]}>{lateCash.length}</Text>
+              <Text style={screen.muted}>Khoản quá hạn</Text>
+            </View>
+            <View style={styles.metricTile}>
+              <Text style={styles.metricNumber}>{unscheduledCash}</Text>
+              <Text style={screen.muted}>Khoản chưa có hạn</Text>
+            </View>
+          </View>
           <Button secondary label="Mở Thu chi" onPress={() => onNavigate({ screen: 'thu-chi' })} />
         </>}
       </>))}
       {card('Việc của tôi tuần này', state(tasks, <>
-        {myWeekTasks.length === 0
-          ? <EmptyState icon="calendar" message="Bạn không có việc cần làm đến hạn từ hôm nay đến hết tuần." />
-          : myWeekTasks.slice(0, 3).map(task => row({
-            label: task.title,
-            detail: task.status === 'Vướng' ? `Đang vướng · ${formatDue(task.due)}` : formatDue(task.due),
-            route: taskRoute(task),
-          }, task.id))}
+        <ScrollView horizontal contentContainerStyle={styles.weekChart}>
+          {weekDays.map(({ date, label, tasks }) => {
+            const selected = date === activeWeekDay.date;
+            return <Pressable key={date} accessibilityRole="button" aria-pressed={selected}
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${date === today ? 'Hôm nay, ' : ''}${formatTaskDate(date)}, ${tasks.length} việc đến hạn`}
+              style={[styles.weekDay, selected && styles.tileSelected]} onPress={() => setSelectedWeekDay(date)}>
+              <Text style={styles.weekCount}>{tasks.length}</Text>
+              <View aria-hidden style={styles.weekTrack}>
+                <View style={[styles.weekColumn, { height: `${100 * tasks.length / maxWeekTasks}%` }]} />
+              </View>
+              <Text style={styles.weekLabel}>{label}</Text>
+              <Text style={styles.weekDate}>{formatTaskDate(date).slice(0, 5)}</Text>
+            </Pressable>;
+          })}
+        </ScrollView>
+        <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={screen.label}>
+          {activeWeekDay.date === today ? 'Hôm nay' : formatTaskDate(activeWeekDay.date).slice(0, 5)} · {activeWeekDay.tasks.length} việc đến hạn
+        </Text>
+        {activeWeekDay.tasks.length === 0
+          ? <EmptyState icon="calendar" message={myWeekTasks.length ? 'Không có việc đến hạn ngày này.' : 'Không có việc đến hạn từ hôm nay đến hết tuần.'} />
+          : activeWeekDay.tasks.length > 5
+            ? <PaginatedList items={activeWeekDay.tasks} resetKey={activeWeekDay.date}>{pageItems => pageItems.map(weekTaskRow)}</PaginatedList>
+            : activeWeekDay.tasks.map(weekTaskRow)}
         <Pressable accessibilityRole="button" style={styles.sectionAction}
           onPress={() => onNavigate({ screen: 'ke-hoach-tuan' })}>
           <Text style={styles.sectionActionLabel}>Mở kế hoạch tuần</Text>
@@ -396,7 +491,38 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: lightColors.accent },
   sectionActionLabel: { color: lightColors.onAccent, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   grow: { flex: 1, minWidth: 0 },
-  projectMetadata: { gap: 2, marginTop: 4 },
+  decisionSummary: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  decisionBadge: { minWidth: 48, minHeight: 48, paddingHorizontal: 8, borderRadius: 12, backgroundColor: colors.accentSoft,
+    alignItems: 'center', justifyContent: 'center' },
+  decisionValue: { color: colors.accent, fontSize: 26, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  chevronUp: { transform: [{ rotate: '-90deg' }] },
+  chevronDown: { transform: [{ rotate: '90deg' }] },
+  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  metricTile: { flexGrow: 1, flexBasis: '44%', minHeight: 62, gap: 2, padding: 10, borderRadius: 12,
+    backgroundColor: colors.background, borderWidth: 1, borderColor: colors.line },
+  tileSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  metricNumber: { fontSize: 21, fontWeight: '800', color: colors.ink, fontVariant: ['tabular-nums'] },
+  attention: { color: colors.danger },
+  projectTile: { gap: 8, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.background },
+  projectPercent: { color: colors.accent, fontSize: 21, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  projectChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { fontSize: 12, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: 'hidden' },
+  successChip: { color: colors.success, backgroundColor: colors.successSoft },
+  dangerChip: { color: colors.danger, backgroundColor: colors.dangerSoft },
+  warningChip: { color: colors.warning, backgroundColor: colors.warningSoft },
+  cashComparison: { gap: 12, padding: 12, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.line },
+  cashLine: { gap: 6 },
+  cashHeading: { flexWrap: 'wrap' },
+  cashValue: { color: colors.ink, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  weekChart: { flexGrow: 1, gap: 3, paddingBottom: 4 },
+  weekDay: { flex: 1, minWidth: 44, alignItems: 'center', gap: 3, paddingHorizontal: 2, paddingVertical: 6,
+    backgroundColor: colors.background, borderWidth: 1, borderColor: colors.line, borderRadius: 9 },
+  weekCount: { color: colors.ink, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  weekTrack: { width: '70%', maxWidth: 26, height: 52, justifyContent: 'flex-end', backgroundColor: colors.surfaceMuted,
+    borderRadius: 4, overflow: 'hidden' },
+  weekColumn: { width: '100%', backgroundColor: colors.accent, borderRadius: 4 },
+  weekLabel: { color: colors.ink, fontSize: 12, fontWeight: '700' },
+  weekDate: { color: colors.muted, fontSize: 11 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: colors.line },
   chart: { height: 140, flexDirection: 'row', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.line },

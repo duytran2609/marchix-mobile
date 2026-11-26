@@ -1,3 +1,5 @@
+import { daysOverdue } from './taskDates';
+import { overdueTaskLabel } from './taskLabels';
 import { taskStatus, taskStatuses } from './taskStatuses';
 
 /** Summarize already-authorized tasks using the same statuses as the task board. */
@@ -13,4 +15,13 @@ export function taskStatusSummary<T extends { id: string; status: string }>(
     buckets.get(key)!.push(task);
   }
   return Array.from(buckets, ([status, tasks]) => ({ status, tasks }));
+}
+
+export function overdueTaskBucket<T extends { status: string; due?: string }>(
+  summary: readonly { tasks: readonly T[] }[], today: string,
+) {
+  return {
+    status: overdueTaskLabel,
+    tasks: summary.flatMap(bucket => bucket.tasks.filter(task => daysOverdue(task, today) > 0)),
+  };
 }

@@ -38,6 +38,7 @@ const listAssignees = httpsCallable(functions, 'listMobileTaskAssignees', { time
 const editAssignment = httpsCallable(functions, 'updateMobileTask', { timeout: 35000 });
 const deleteAssignment = httpsCallable(functions, 'deleteMobileTask', { timeout: 35000 });
 const addAttachments = httpsCallable(functions, 'addMobileTaskAttachments', { timeout: 35000 });
+const replyToComment = httpsCallable(functions, 'replyToMobileTaskComment', { timeout: 35000 });
 const downloadAttachment = httpsCallable(functions, 'downloadMobileTaskAttachment', { timeout: 35000 });
 const login = (email, sub) => signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({
   sub, email, email_verified: true,
@@ -207,20 +208,42 @@ try {
   assert.equal(task.doneAt, '');
   assert.equal(task.reviewNote, rework.note);
   const priorComments = task.comments;
+  await assert.rejects(addAttachments({ ...upload, message: 'a'.repeat(1001) }), { code: 'functions/invalid-argument' });
   await addAttachments(upload);
-  await addAttachments(upload);
+  await addAttachments({ ...upload, message: '  Tài liệu đã cập nhật.  ' });
   const withFiles = (await readTask()).comments;
   assert.deepEqual(withFiles.slice(0, -2), priorComments);
   const [firstFilePost, secondFilePost] = withFiles.slice(-2);
   for (const post of [firstFilePost, secondFilePost]) {
     assert.equal(post.by, staff);
-    assert.equal(post.text, '');
     assert.equal(post.files.length, 1);
     assert.equal(post.files[0].name, attachment.name);
   }
+  assert.equal(firstFilePost.text, '');
+  assert.equal(secondFilePost.text, 'Tài liệu đã cập nhật.');
   assert.notEqual(firstFilePost.files[0].id, secondFilePost.files[0].id);
   const downloaded = await downloadAttachment({ taskId, fileId: firstFilePost.files[0].id });
   assert.equal(downloaded.data.base64, attachment.base64);
+  const target = { index: withFiles.length - 2, by: staff, at: firstFilePost.at };
+  const reply = { taskId, replyTo: target, message: 'Đã xem tài liệu.' };
+  await replyToComment(reply);
+  await login('dongnghiep@example.test', 'marchix-mobile-demo-colleague');
+  await assert.rejects(replyToComment(reply), { code: 'functions/permission-denied' });
+  await login(reviewer, 'marchix-mobile-demo-reviewer');
+  await assert.rejects(replyToComment({ ...reply, replyTo: { ...target, at: 'không còn' } }), { code: 'functions/not-found' });
+  await replyToComment({ ...reply, message: '', attachments: [attachment] });
+  const postedReply = (await readTask()).comments.at(-1);
+  assert.deepEqual(postedReply.replyTo, target);
+  assert.equal(postedReply.text, '');
+  assert.equal(postedReply.by, reviewer);
+  assert.equal(postedReply.files[0].name, attachment.name);
+  const replyNotices = (await adminDb.collection('notifications').where('taskId', '==', taskId).get()).docs
+    .filter(row => row.get('title') === 'Có người trả lời trao đổi của bạn');
+  reminderNotes.push(...replyNotices.map(row => row.ref.path));
+  assert.deepEqual(replyNotices.map(row => ({ from: row.get('from'), to: row.get('to'), read: row.get('read') })),
+    [{ from: reviewer, to: staff, read: false }]);
+  await login(staff, 'marchix-mobile-demo-staff');
+  assert.equal((await downloadAttachment({ taskId, fileId: postedReply.files[0].id })).data.base64, attachment.base64);
   await report({ ...result, note: 'Đã cập nhật kết quả.' });
   task = await readTask();
   assert.notEqual(task.doneAt, firstSubmission);
@@ -240,6 +263,23 @@ try {
   assert.equal(approved.reviewedAt, approved.updatedAt);
   assert.equal(approved.rating, approve.rating);
   assert.equal(approved.reviewNote, approve.note);
+  const reviewNotices = (await adminDb.collection('notifications').where('taskId', '==', taskId).get()).docs
+    .filter(row => ['Có việc chờ duyệt', 'Công việc đã được duyệt', 'Công việc cần làm lại'].includes(row.get('title')));
+  reminderNotes.push(...reviewNotices.map(row => row.ref.path));
+  assert(reviewNotices.every(row => row.get('link') === '#cong-viec' && row.get('read') === false));
+  const taskLabel = `Công việc: ${task.title}`;
+  const submitter = `Nhân viên demo (${staff})`;
+  const judge = `Người giao việc demo (${reviewer})`;
+  assert.deepEqual(reviewNotices.map(row => [row.get('from'), row.get('to'), row.get('title'), row.get('body')]).sort(), [
+    ...[result.note, 'Đã cập nhật kết quả.'].map(note => [
+      staff, reviewer, 'Có việc chờ duyệt', `${taskLabel}\nNgười gửi duyệt: ${submitter}\nKết quả: Chờ duyệt\nBáo cáo kết quả: ${note}`,
+    ]),
+    [reviewer, staff, 'Công việc cần làm lại',
+      `${taskLabel}\nNgười yêu cầu làm lại: ${judge}\nKết quả: Yêu cầu làm lại\nLý do: ${rework.note}`],
+    [reviewer, staff, 'Công việc đã được duyệt',
+      `${taskLabel}\nNgười duyệt: ${judge}\nKết quả: Đã duyệt\nXếp loại: ${approve.rating}\nNhận xét: ${approve.note}`],
+  ].sort());
+  console.log('PASS: gửi duyệt, duyệt và yêu cầu làm lại tạo đúng nội dung thông báo, không trùng khi thử lại.');
   await assert.rejects(addAttachments(upload), { code: 'functions/failed-precondition' });
   await assert.rejects(updateDoc(ref, { comments: [...(approved.comments ?? []), {
     by: staff, at: new Date().toISOString(), text: 'Trao đổi sau khi xong', files: [],
@@ -353,12 +393,13 @@ try {
   const originalTitle = 'Công việc trước khi đổi vai trò';
   const updatedTitle = 'Công việc sau khi đổi vai trò';
   await rolesRef.set({
-    title: originalTitle, assignedBy: reviewer, assigneeEmail: staff, approverEmail: reviewer,
+    title: originalTitle, assignedBy: reviewer, assigneeEmail: staff, assignee: 'Nhân viên demo',
+    approverEmail: reviewer, due: '2026-11-26',
     watchers: [staff, colleague], status: 'Đang làm', updatedAt: '2026-11-01T00:00:00.000Z',
   });
   const roleEdit = {
     taskId: roleChangesId, title: updatedTitle, assigneeEmails: [colleague], approverEmail: admin,
-    watchers: [reviewer, colleague], status: 'Đang làm', due: '', revision: '2026-11-01T00:00:00.000Z',
+    watchers: [reviewer, colleague], status: 'Đang làm', due: '2026-11-28', revision: '2026-11-01T00:00:00.000Z',
   };
   await login(reviewer, 'marchix-mobile-demo-reviewer');
   await editAssignment(roleEdit);
@@ -369,15 +410,20 @@ try {
   reminderNotes.push(...notes.docs.map(row => row.ref.path));
   assert(notes.docs.every(row => row.get('from') === reviewer && row.get('read') === false &&
     row.get('link') === '#cong-viec' && row.get('createdAt') === newRevision));
+  const noticeTask = `Công việc: ${updatedTitle}\n`;
+  const assigneeChange = noticeTask + `Người thực hiện: Nhân viên demo (${staff}) → Đồng nghiệp demo (${colleague})`;
+  const approverChange = noticeTask + `Người duyệt: Người giao việc demo (${reviewer}) → Quản trị demo (${admin})`;
   assert.deepEqual(notes.docs.map(row => [row.get('to'), row.get('title'), row.get('body')]).sort(), [
-    [colleague, 'Bạn được giao việc mới', updatedTitle],
-    [staff, 'Bạn không còn phụ trách thực hiện công việc', originalTitle],
+    [colleague, 'Bạn là người thực hiện mới', assigneeChange],
+    [staff, 'Bạn không còn phụ trách thực hiện công việc', assigneeChange],
     [reviewer, 'Bạn được thêm làm người theo dõi công việc', updatedTitle],
     [staff, 'Bạn không còn theo dõi công việc', originalTitle],
-    [admin, 'Bạn được chỉ định duyệt công việc', updatedTitle],
-    [reviewer, 'Bạn không còn là người duyệt công việc', originalTitle],
+    [admin, 'Bạn được chỉ định duyệt công việc', approverChange],
+    [reviewer, 'Bạn không còn là người duyệt công việc', approverChange],
+    [colleague, 'Người duyệt công việc đã thay đổi', approverChange],
+    [colleague, 'Hạn công việc đã thay đổi', noticeTask + 'Hạn: 26/11/2026 → 28/11/2026'],
   ].sort());
-  console.log('PASS: đổi người thực hiện, người theo dõi và người duyệt gửi đúng thông báo cho các bên.');
+  console.log('PASS: đổi người thực hiện, người theo dõi, hạn và người duyệt gửi đúng nội dung cho các bên.');
 
   const deletionRef = adminDb.doc(`tasks/${deletionId}`);
   const deletionTitle = `Công việc cần xóa ${deletionId}`;

@@ -32,13 +32,13 @@ export function DiscussionHistory({ children }: { children: ReactNode }) {
   return <View style={[ui.panel, styles.history]}>{children}</View>;
 }
 
-export function DiscussionMessage({ author, photoURL, time, first, children, onReply, replyDisabled }: {
+export function DiscussionMessage({ author, photoURL, time, first, indented, children, onReply, replyDisabled }: {
   author: string; photoURL?: string | null; time: string; first?: boolean; children: ReactNode;
-  onReply?: () => void; replyDisabled?: boolean;
+  indented?: boolean; onReply?: () => void; replyDisabled?: boolean;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
-  return <View style={[ui.detailRow, styles.row, first && styles.firstRow]}>
+  return <View style={[ui.detailRow, styles.row, first && styles.firstRow, indented && styles.indentedRow]}>
     <MemberAvatar name={author} photoURL={photoURL} />
     <View style={styles.content}>
       <View style={styles.messageHeader}>
@@ -54,17 +54,24 @@ export function DiscussionMessage({ author, photoURL, time, first, children, onR
   </View>;
 }
 
-export function DiscussionQuote({ author, text }: { author: string; text: string }) {
+function DiscussionReplyLabel({ author }: { author: string }) {
+  const ui = useScreenStyles();
+  const styles = useStyles();
+  return <Text style={[ui.label, styles.replyLabel]}>Trả lời <Text style={ui.label}>{author}</Text></Text>;
+}
+
+export function DiscussionQuote({ author, text }: { author: string; text?: string }) {
   const styles = useStyles();
   const ui = useScreenStyles();
   return <View style={styles.quote}>
-    <Text style={ui.label}>Trả lời {author}</Text>
-    <Text numberOfLines={2} style={ui.muted}>{text}</Text>
+    <DiscussionReplyLabel author={author} />
+    {!!text && <Text numberOfLines={2} ellipsizeMode="tail" style={ui.muted}>{text}</Text>}
   </View>;
 }
 
-export function DiscussionAttachment({ file, detail, onOpen, disabled }: {
-  file: { name: string; type: string }; detail: string; onOpen?: () => void; disabled?: boolean;
+export function DiscussionAttachment({ file, detail, onOpen, openLabel = `Xem tệp ${file.name}`, disabled, action }: {
+  file: { name: string; type: string }; detail: string; onOpen?: () => void; openLabel?: string;
+  disabled?: boolean; action?: ReactNode;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
@@ -73,17 +80,20 @@ export function DiscussionAttachment({ file, detail, onOpen, disabled }: {
     <Text style={ui.muted}>{detail}</Text>
   </AttachmentLabel>;
   const style = [ui.secondary, styles.attachment];
-  return onOpen ? <Pressable accessibilityRole="button" accessibilityLabel={`Xem tệp ${file.name}`}
-    disabled={disabled} style={style} onPress={onOpen}>{content}</Pressable>
-    : <View style={style}>{content}</View>;
+  const trigger = onOpen && <Pressable accessibilityRole="button" accessibilityLabel={openLabel}
+    disabled={disabled} style={action ? styles.attachmentDetails : style} onPress={onOpen}>{content}</Pressable>;
+  return action ? <View style={[style, styles.attachmentWithAction]}>
+    {trigger || <View style={styles.attachmentDetails}>{content}</View>}
+    {action}
+  </View> : trigger || <View style={style}>{content}</View>;
 }
 
 export function DiscussionComposer({ inputRef, message, onChange, placeholder, maxLength, sending, disabled,
-  attachmentBusy, onAttach, quote, onCancelReply, extras, sendLabel, onSend, canSend }: {
+  attachmentBusy, onAttach, quote, onCancelReply, attachments, extras, sendLabel, onSend, canSend }: {
   inputRef?: Ref<ComponentRef<typeof TextInput>>; message: string; onChange: (text: string) => void;
   placeholder: string; maxLength: number; sending: boolean; disabled?: boolean;
   attachmentBusy?: boolean; onAttach?: () => void; quote?: ReactNode; onCancelReply?: () => void;
-  extras?: ReactNode; sendLabel?: string; onSend: () => void; canSend?: boolean;
+  attachments?: ReactNode; extras?: ReactNode; sendLabel?: string; onSend: () => void; canSend?: boolean;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
@@ -96,21 +106,24 @@ export function DiscussionComposer({ inputRef, message, onChange, placeholder, m
         <Text style={styles.replyAction}>Hủy trả lời</Text>
       </Pressable>
     </View>}
-    <View>
-      <TextInput ref={inputRef} accessibilityLabel="Nội dung trao đổi" placeholder={placeholder}
-        style={[ui.input, ui.messageInput, onAttach && styles.inputWithAttachment]}
-        value={message} onChangeText={onChange} multiline maxLength={maxLength} editable={!sending && !disabled} />
-      {onAttach && <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm tệp"
-        accessibilityHint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng."
-        accessibilityState={{ busy: attachmentBusy }} disabled={busy} onPress={onAttach}
-        style={({ pressed }) => [styles.attachButton, (pressed || busy) && ui.dimmed]}>
-        {attachmentBusy ? <ActivityIndicator color={colors.accent} /> :
-          <View aria-hidden pointerEvents="none" style={styles.paperclip}>
-            <View style={[styles.paperclipStroke, styles.paperclipOuter]} />
-            <View style={[styles.paperclipStroke, styles.paperclipTop]} />
-            <View style={[styles.paperclipStroke, styles.paperclipInner]} />
-          </View>}
-      </Pressable>}
+    <View style={attachments ? [ui.secondary, styles.attachmentFrame] : undefined}>
+      <View>
+        <TextInput ref={inputRef} accessibilityLabel="Nội dung trao đổi" placeholder={placeholder}
+          style={[ui.input, ui.messageInput, onAttach && styles.inputWithAttachment, !!attachments && styles.borderlessInput]}
+          value={message} onChangeText={onChange} multiline maxLength={maxLength} editable={!sending && !disabled} />
+        {onAttach && <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm tệp"
+          accessibilityHint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng."
+          accessibilityState={{ busy: attachmentBusy }} disabled={busy} onPress={onAttach}
+          style={({ pressed }) => [styles.attachButton, (pressed || busy) && ui.dimmed]}>
+          {attachmentBusy ? <ActivityIndicator color={colors.accent} /> :
+            <View aria-hidden pointerEvents="none" style={styles.paperclip}>
+              <View style={[styles.paperclipStroke, styles.paperclipOuter]} />
+              <View style={[styles.paperclipStroke, styles.paperclipTop]} />
+              <View style={[styles.paperclipStroke, styles.paperclipInner]} />
+            </View>}
+        </Pressable>}
+      </View>
+      {attachments}
     </View>
     {extras}
     <Button label={sending ? 'Đang gửi…' : sendLabel ?? (quote ? 'Gửi trả lời' : 'Gửi trao đổi')}
@@ -123,18 +136,24 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   sortControl: { width: 172, maxWidth: '65%' },
   history: { gap: 4 },
   attachment: { padding: 10, borderRadius: 9 },
+  attachmentWithAction: { flexDirection: 'row', alignItems: 'center', paddingEnd: 0 },
+  attachmentDetails: { flex: 1, minWidth: 0 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   firstRow: { borderTopWidth: 0, paddingTop: 0 },
+  indentedRow: { marginStart: 20 },
   content: { flex: 1, minWidth: 0, gap: 3 },
   messageHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   author: { flex: 1, minWidth: 0, fontWeight: '800' },
   time: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   quote: { flexShrink: 1, borderLeftWidth: 3, borderLeftColor: colors.accent, backgroundColor: colors.surfaceMuted,
     paddingHorizontal: 8, paddingVertical: 5, gap: 2 },
+  replyLabel: { fontWeight: '400' },
   replyPreview: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   replyButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   messageReply: { justifyContent: 'flex-start', paddingHorizontal: 0 },
   replyAction: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  attachmentFrame: { borderRadius: 9, overflow: 'hidden' },
+  borderlessInput: { borderWidth: 0 },
   inputWithAttachment: { minHeight: 110, paddingBottom: 48 },
   attachButton: { position: 'absolute', right: 4, bottom: 4, width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center' },

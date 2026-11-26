@@ -71,6 +71,21 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
     await expect(page.getByText(state, { exact: true }).first()).toBeVisible();
   }
 
+  async function checkPickedFile(name: string) {
+    const file = button(name);
+    const card = file.locator('..');
+    const remove = card.getByRole('button', { name: `Bỏ tệp ${name}`, exact: true });
+    await expect(remove).toBeVisible();
+    await expect(card).toHaveCSS('border-radius', '9px');
+    await expect(file.getByText(name, { exact: true })).toHaveCSS('font-weight', '700');
+    await expect(button('Xem trước')).toHaveCount(0);
+    await expect(button('Bỏ tệp')).toHaveCount(0);
+    const [fileBox, removeBox, cardBox] = await Promise.all([file.boundingBox(), remove.boundingBox(), card.boundingBox()]);
+    expect(removeBox!.x).toBeGreaterThanOrEqual(fileBox!.x + fileBox!.width);
+    expect(cardBox!.x + cardBox!.width - removeBox!.x - removeBox!.width).toBeLessThanOrEqual(2);
+    return remove;
+  }
+
   async function checkPdfForm(label: string) {
     const dialog = page.getByRole('dialog', { name: label, exact: true });
     const body = dialog.getByRole('heading', { name: label, exact: true }).locator('..');
@@ -178,7 +193,11 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await watcherPicker.getByRole('checkbox', { name: 'Đồng nghiệp demo', exact: true }).click();
   await watcherPicker.getByRole('button', { name: 'Xong', exact: true }).click();
   await choosePdf('Chọn tệp');
-  await preview('Xem trước');
+  const removePdf = await checkPickedFile('marchix.pdf');
+  await preview('marchix.pdf');
+  await removePdf.click();
+  await expect(button('marchix.pdf')).toHaveCount(0);
+  await choosePdf('Chọn tệp');
   await button('Vào sổ và cấp số đến').click();
   await expect(page.getByRole('heading', { name: title + ' đến' })).toBeVisible();
   await expect(detail.getByText(documentDate, { exact: true }).first()).toBeVisible();
@@ -201,14 +220,21 @@ test('Văn thư xử lý văn bản đến, ký cấp số, phát hành và xem 
   await button('+ Lập bản nháp').click();
   await page.getByLabel('Trích yếu', { exact: true }).fill(title + ' đi');
   await page.getByLabel('Nơi nhận', { exact: true }).fill('Đối tác kiểm thử');
-  const textPicker = page.waitForEvent('filechooser');
-  await button('Chọn tệp').click();
-  await (await textPicker).setFiles({
-    name: 'ghi-chu.txt', mimeType: 'text/plain', buffer: Buffer.from('Noi dung tep dinh kem'),
-  });
-  await button('Xem trước').click();
+  async function chooseText() {
+    const picker = page.waitForEvent('filechooser');
+    await button('Chọn tệp').click();
+    await (await picker).setFiles({
+      name: 'ghi-chu.txt', mimeType: 'text/plain', buffer: Buffer.from('Noi dung tep dinh kem'),
+    });
+  }
+  await chooseText();
+  const removeText = await checkPickedFile('ghi-chu.txt');
+  await button('ghi-chu.txt').click();
   await expect(page.getByText('Noi dung tep dinh kem', { exact: true })).toBeVisible();
   await button('Đóng xem trước').click();
+  await removeText.click();
+  await expect(button('ghi-chu.txt')).toHaveCount(0);
+  await chooseText();
   const outgoingDueDate = await chooseDate('Hạn xử lý');
   await button('Lập bản nháp').click();
   await expect(page.getByRole('heading', { name: title + ' đi' })).toBeVisible();

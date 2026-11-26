@@ -144,6 +144,7 @@ Các callable yêu cầu email đã xác minh và thành viên đang hoạt đ�
 Trong Pilot, đặt `EXPO_PUBLIC_ENABLE_TASK_ASSIGNMENT=true` cùng cấu hình Firebase và Google OAuth của Pilot khi build. Bản này dùng các quyền Firestore của Quản lý Marchix.
 Khi tài khoản Pilot không có quyền đọc trực tiếp danh sách `members`, hai form giao việc và chỉnh sửa dùng callable `listMobileTaskAssignees`. Triển khai callable trên dự án Pilot với `MARCHIX_TASK_ASSIGNMENT_ENABLED=true` để các tài khoản đó tải được danh sách.
 Để bật thao tác xóa công việc trên staging hoặc Pilot, triển khai thêm callable `deleteMobileTask` với `MARCHIX_TASK_ASSIGNMENT_ENABLED=true`. Callable kiểm tra người giao việc và ghi thông báo cho những người liên quan trong cùng giao dịch xóa.
+Triển khai callable `replyToMobileTaskComment` trước khi cập nhật app trên staging hoặc Pilot. Callable lưu phản hồi và thông báo cho tác giả trao đổi gốc trong cùng giao dịch. Phản hồi có tệp cần bật `MARCHIX_TASK_ASSIGNMENT_ENABLED=true` trên Functions.
 
 - Trạng thái chỉnh được gồm **Chưa làm**, **Đang làm**, **Vướng**. Tiến độ nhập từ 0 đến 100. Mốc 100% vẫn là tiến độ, còn báo hoàn thành và duyệt là thao tác nghiệp vụ riêng.
 - Bản Emulator và Pilot cho phép đánh dấu việc con và tự tính tiến độ. Sau khi gửi duyệt, trạng thái, tiến độ và checklist được khóa; phần trao đổi vẫn dùng được. Công việc cũ chỉ ghi tên người làm cần được bổ sung `assigneeEmail` trước khi đưa lên mobile.

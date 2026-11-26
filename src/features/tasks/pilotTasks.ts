@@ -4,9 +4,10 @@ import {
 } from 'firebase/firestore';
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { taskRoleNotices } from '../../../functions/taskRoleNotices';
+import { taskChangeNotices } from '../../../functions/taskChangeNotices';
+import { taskReviewNotice } from '../../../functions/taskReviewNotice';
 import { auth, db, taskAssignmentEnabled, taskFunctions } from '../../services/firebase/firebase';
-import type { AssignmentInput, AssignmentProject, AttachmentUpload, ReviewRating, Task, TaskAssignee } from './tasks';
+import type { AssignmentInput, AssignmentProject, AttachmentUpload, ReviewRating, Task, TaskAssignee, TaskAttachmentMessage } from './tasks';
 import { checklistProgress as percent } from './checklistProgress';
 
 export const taskCategoryMaxLength = 160;
@@ -103,8 +104,10 @@ function notify(writer: DocumentWriter, from: string, recipients: (string | unde
   }
 }
 
-export async function pilotAddAttachments({ taskId, attachments }: { taskId: string; attachments: AttachmentUpload[] }) {
+export async function pilotAddAttachments({ taskId, attachments, message = '' }: TaskAttachmentMessage) {
   const by = email();
+  const text = message.trim();
+  if (text.length > 1000) throw new Error('Nội dung trao đổi tối đa 1.000 ký tự.');
   const uploads = uploadBytes(attachments);
   if (!uploads.length) throw new Error('Chọn ít nhất một tệp.');
   const ref = doc(db, 'tasks', taskId);
@@ -114,7 +117,7 @@ export async function pilotAddAttachments({ taskId, attachments }: { taskId: str
     if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
     const at = new Date().toISOString();
     const files = attach(tx, ref, uploads, by, at);
-    tx.update(ref, { comments: [...(task.comments ?? []), { by, at, text: '', files }] });
+    tx.update(ref, { comments: [...(task.comments ?? []), { by, at, text, files }] });
   });
 }
 
@@ -248,7 +251,7 @@ export async function pilotUpdate(input: AssignmentInput & { revision: string; r
     } else if (pendingReviewer) {
       patch.approverEmail = pendingReviewer;
     }
-    for (const { to, title, body } of taskRoleNotices(task, { ...task, ...patch })) {
+    for (const { to, title, body } of taskChangeNotices(task, { ...task, ...patch }, address => people.get(address)?.name)) {
       writeTaskNotice(tx, by, to, ref.id, title, body, now);
     }
     tx.update(ref, patch);
@@ -294,7 +297,10 @@ export async function pilotReport(input: { taskId: string; note: string }) {
     tx.update(ref, { status: requiresReview ? 'Chờ duyệt' : 'Xong', progress: 100, doneAt: now, ...updated(by, now),
       ...(text ? { comments: [...(task.comments ?? []), { by, at: now, text, files: [] }] } : {}) });
     const recipients = requiresReview ? [task.assignedBy, task.approverEmail] : [task.assignedBy];
-    notify(tx, by, recipients, ref.id, requiresReview ? 'Công việc chờ duyệt' : `Việc “${task.title}” chuyển sang Xong`, task.title, now);
+    const notice = requiresReview
+      ? taskReviewNotice({ action: 'submit', taskTitle: task.title, email: by, name: task.assignee, note: text })
+      : { title: `Việc “${task.title}” chuyển sang Xong`, body: task.title };
+    notify(tx, by, recipients, ref.id, notice.title, notice.body, now);
   });
 }
 
@@ -317,8 +323,9 @@ export async function pilotReview(input: { taskId: string; submission: string; d
       doneAt: approved ? task.doneAt || now : '', rating: approved ? input.rating : '',
       reviewNote, reviewedBy: by, reviewedAt: now, ...updated(by, now) };
     tx.update(ref, change);
-    notify(tx, by, [task.assigneeEmail, task.assignedBy], ref.id,
-      approved ? 'Công việc đã được duyệt' : 'Công việc cần làm lại', reviewNote || task.title, now);
+    const notice = taskReviewNotice({ action: input.decision, taskTitle: task.title, email: by,
+      name: member.name, rating: input.rating, note: reviewNote });
+    notify(tx, by, [task.assigneeEmail, task.assignedBy], ref.id, notice.title, notice.body, now);
   });
 }
 

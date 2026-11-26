@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import type { Palette } from '../../theme/theme';
 import type { EditableStatus, Task } from './tasks';
+import { overdueTaskLabel } from './taskLabels';
 import { taskStatus } from './taskStatuses';
 
 export { taskStatus } from './taskStatuses';
@@ -12,6 +13,7 @@ const statusTones = (colors: Palette) => ({
   'Đang chạy': { text: '#155083', background: '#E4F0FD' },
   'Tạm dừng': { text: '#80510C', background: '#FDF1D7' },
   'Vướng': { text: colors.danger, background: colors.dangerSoft },
+  [overdueTaskLabel]: { text: colors.accent, background: colors.accentSoft },
   'Chờ duyệt': { text: '#80510C', background: '#FDF1D7' },
   'Xong': { text: colors.success, background: colors.successSoft },
   'Khác': { text: colors.muted, background: colors.surfaceMuted },

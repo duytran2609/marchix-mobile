@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { TextInput } from '../../components/TextInput';
-import { AttachmentLabel, FileTypeIcon } from '../../components/AttachmentLabel';
-import { Button } from '../../components/Button';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
+import { DeleteIconButton } from '../../components/DeleteIconButton';
+import { DiscussionAttachment } from '../../components/Discussion';
 import { FilePickerButton } from '../../components/FilePickerButton';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { cashFileLimit, cashFileList } from '../cash/cashAttachments';
-import { formatFileSize, pickTaskAttachments } from '../tasks/taskAttachments';
+import type { AttachmentFile } from '../../utils/attachmentFile';
+import { formatFileSize, pickTaskAttachments, readPickedAttachment } from '../tasks/taskAttachments';
 import type { PickedAttachment } from '../tasks/taskAttachments';
 import type { TaskAttachment } from '../tasks/tasks';
 
@@ -53,31 +55,62 @@ export function useCollaborationFilePicker({ files, onChange, disabled, onPickin
   return { picking, error, pick };
 }
 
-export function CollaborationFilePicker({ label, files, onChange, disabled, onPicking }: {
+export function CollaborationFilePicker({ label, files, onChange, disabled, onPicking, onPreview }: {
   label: string; files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void;
-  disabled: boolean; onPicking: (picking: boolean) => void;
+  disabled: boolean; onPicking: (picking: boolean) => void; onPreview?: (file: AttachmentFile) => void;
 }) {
   const styles = useScreenStyles();
-  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange, disabled, onPicking });
+  const [opening, setOpening] = useState(false);
+  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange, disabled: disabled || opening, onPicking });
   return <View style={styles.stack}>
-    <FilePickerButton label={label} accessibilityLabel={label} picking={picking} disabled={disabled}
+    <FilePickerButton label={label} accessibilityLabel={label} picking={picking} disabled={disabled || opening}
       onPress={() => void pick()} hint="Tối đa 5 tệp, tổng 8 MB, mỗi tệp tối đa 5 MB." />
-    <PickedCollaborationFiles files={files} onChange={onChange} disabled={disabled || picking} error={error} />
+    <PickedCollaborationFiles files={files} onChange={onChange} disabled={disabled || picking} error={error}
+      onPreview={onPreview} onOpening={value => { setOpening(value); onPicking(value); }} />
   </View>;
 }
 
-export function PickedCollaborationFiles({ files, onChange, disabled, error }: {
+export function PickedCollaborationFiles({ files, onChange, disabled, error, onOpening, onPreview }: {
   files: PickedAttachment[]; onChange: (files: PickedAttachment[]) => void; disabled: boolean; error: string;
+  onOpening: (opening: boolean) => void; onPreview?: (file: AttachmentFile) => void;
 }) {
   const styles = useScreenStyles();
+  const lock = useRef(false);
+  const [opening, setOpening] = useState<PickedAttachment>();
+  const [preview, setPreview] = useState<AttachmentFile>();
+  const [previewError, setPreviewError] = useState('');
+
+  async function open(file: PickedAttachment) {
+    if (lock.current || disabled) return;
+    lock.current = true;
+    setOpening(file);
+    onOpening(true);
+    setPreviewError('');
+    try {
+      const loaded = await readPickedAttachment(file);
+      if (onPreview) onPreview(loaded);
+      else setPreview(loaded);
+    } catch {
+      setPreviewError('Không mở được tệp vừa chọn. Vui lòng chọn lại.');
+    } finally {
+      lock.current = false;
+      setOpening(undefined);
+      onOpening(false);
+    }
+  }
+
   if (!files.length && !error) return null;
+  const busy = disabled || !!opening;
   return <View style={styles.stack}>
-    {files.map((file, index) => <View key={index} style={styles.detailRow}>
-      <AttachmentLabel file={file}><Text style={[styles.muted, styles.metadataValue]}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
-      <Button label={'Bỏ ' + file.name} secondary disabled={disabled}
-        onPress={() => onChange(files.filter((_, position) => position !== index))} />
-    </View>)}
-    {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    {files.map((file, index) => <DiscussionAttachment key={index} file={file} openLabel={file.name}
+      detail={opening === file ? 'Đang mở…' : formatFileSize(file.size)} disabled={busy} onOpen={() => void open(file)}
+      action={<DeleteIconButton label={`Bỏ tệp ${file.name}`} disabled={busy} onPress={() => {
+        setPreviewError('');
+        onChange(files.filter(candidate => candidate !== file));
+      }} />}
+    />)}
+    {!!(error || previewError) && <Text accessibilityRole="alert" style={styles.error}>{error || previewError}</Text>}
+    {preview && <AttachmentPreview downloadable={false} file={preview} onClose={() => setPreview(undefined)} />}
   </View>;
 }
 
@@ -85,8 +118,11 @@ export function CollaborationFiles({ files, open }: { files: unknown; open: (fil
   const list = cashFileList(files);
   if (!list.length) return null;
   return <View style={{ gap: 6 }}>
-    {list.map(file => <Button key={file.id} secondary label={file.name + ' · ' + formatFileSize(file.size)}
-      leading={<FileTypeIcon name={file.name} type={file.type} />} onPress={() => open(file)} />)}
+    {list.map(file => {
+      const detail = formatFileSize(file.size);
+      return <DiscussionAttachment key={file.id} file={file} detail={detail}
+        openLabel={file.name + ' · ' + detail} onOpen={() => open(file)} />;
+    })}
   </View>;
 }
 

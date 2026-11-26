@@ -186,11 +186,15 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     setBusy(operation);
     try {
       await update();
-      if (operation === 'report') showToast('Đã ghi nhận báo hoàn thành.');
+      if (operation === 'report') {
+        showToast(liveTask.requireReview === true ? 'Đã gửi công việc để duyệt.'
+          : liveTask.requireReview === false ? 'Đã hoàn thành công việc.' : 'Đã gửi báo cáo hoàn thành.');
+      }
     } catch (err) {
       const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
-        showToast(err instanceof Error && (!code || code === 'functions/failed-precondition')
-        ? err.message : 'Chưa cập nhật được công việc. Kiểm tra kết nối rồi thử lại.', 'error');
+      const fallback = operation === 'report' ? 'Chưa gửi được báo cáo hoàn thành. Kiểm tra kết nối rồi thử lại.'
+        : 'Chưa cập nhật được việc con. Kiểm tra kết nối rồi thử lại.';
+      showToast(err instanceof Error && (!code || code === 'functions/failed-precondition') ? err.message : fallback, 'error');
     } finally {
       setBusy(null);
     }
@@ -203,7 +207,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
     try {
       await remindTask({ taskId, assigneeEmail, previousReminder: remindedAt ?? null });
       setReminded({ taskId, assigneeEmail });
-      showToast('Đã tạo thông báo. Email chờ lịch gửi.');
+      showToast('Đã tạo thông báo nhắc việc. Email đang chờ gửi.');
     } catch (err) {
       showToast(err instanceof Error && 'code' in err && err.code === 'functions/failed-precondition'
         ? err.message : 'Chưa tạo được thông báo nhắc việc. Vui lòng thử lại.', 'error');
@@ -264,7 +268,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
               }
             }} />
       </>}
-      {!inPopup && saveProgressButton}
+      {saveProgressButton}
     </> : null}
   </>;
   const generalActions = isGeneral && <>
@@ -330,7 +334,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
         <View style={[styles.popupContent, hasComposer && { maxHeight: generalHeight }]}>
           <KeyboardScrollView ref={scroll} testID="task-detail-scroll"
             style={[styles.popupScroll, !isGeneral && !hasComposer && { maxHeight: generalHeight }]}
-            contentContainerStyle={[screenStyles.stack, styles.popupScrollContent, hasComposer && styles.beforeComposer]}
+            contentContainerStyle={[screenStyles.stack, styles.popupScrollContent, hasComposer && styles.noBottomPadding]}
             onContentSizeChange={isGeneral ? (_, height) => setGeneralHeight(height) : undefined}
             keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
             {general && <View style={styles.popupSection}>{general}</View>}
@@ -338,15 +342,18 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
             {description}
             {discussion}
           </KeyboardScrollView>
-          {isGeneral && (saveProgressButton || reportCompletionButton) && <View style={styles.popupWorkflowActions}>
-            {saveProgressButton}
+          {isGeneral && reportCompletionButton && <View style={[
+            styles.popupReportAction, editButton && styles.noBottomPadding,
+          ]}>
             {reportCompletionButton}
           </View>}
-          {editButton && <View style={[styles.popupActions, hasComposer && styles.beforeComposer]}>
+          {composer && <View style={discussionHidden ? styles.hidden : [styles.popupComposer, editButton && styles.noBottomPadding]}>
+            {composer}
+          </View>}
+          {editButton && <View style={styles.popupActions}>
             {remindButton}
             {editButton}
           </View>}
-          {composer && <View style={discussionHidden ? styles.hidden : styles.popupComposer}>{composer}</View>}
         </View>
       </> : <>
         <Button label={`‹ ${backLabel}`} secondary onPress={onBack} disabled={!!busy} />
@@ -376,24 +383,30 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   );
 }
 
-export function TaskUnavailable({ onBack, backLabel = 'Danh sách công việc' }: { onBack?: () => void; backLabel?: string }) {
+export function TaskUnavailable({ onBack, backLabel = 'Danh sách công việc', notice }: {
+  onBack?: () => void; backLabel?: string; notice?: { title: string; body: string };
+}) {
   const screenStyles = useScreenStyles();
   return (
     <View style={screenStyles.panel}>
       <Text accessibilityRole="alert" style={screenStyles.error}>Không xác định được công việc hoặc bạn không còn quyền mở.</Text>
+      {notice ? <>
+        <Text accessibilityRole="header" style={screenStyles.cardTitle}>{notice.title}</Text>
+        {notice.body ? <Text style={screenStyles.body}>{notice.body}</Text> : null}
+      </> : null}
       {onBack && <Button label={backLabel} secondary onPress={onBack} />}
     </View>
   );
 }
 
-export function LinkedTaskDetail({ id, email, name, onBack, backLabel }: {
-  id: string; email: string; name: string; onBack?: () => void; backLabel?: string;
+export function LinkedTaskDetail({ id, email, name, onBack, backLabel, notice }: {
+  id: string; email: string; name: string; onBack?: () => void; backLabel?: string; notice?: { title: string; body: string };
 }) {
   const { colors } = useTheme();
   const [task, setTask] = useState<Task | null>();
   useEffect(() => watchTask(id, setTask, () => setTask(null)), [id]);
   if (task === undefined) return <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />;
-  if (task === null) return <TaskUnavailable onBack={onBack} backLabel={backLabel} />;
+  if (task === null) return <TaskUnavailable onBack={onBack} backLabel={backLabel} notice={notice} />;
   return <TaskDetailScreen liveTask={task} email={email} name={name} onBack={onBack} backLabel={backLabel} />;
 }
 
@@ -425,7 +438,7 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupTabs: { marginHorizontal: 16, flexShrink: 0 },
   popupActions: { flexDirection: 'row', gap: 8,
     paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
-  popupWorkflowActions: { paddingHorizontal: 16, paddingBottom: 16, gap: 8, flexShrink: 0 },
+  popupReportAction: { paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
   popupAction: { flex: 1, minWidth: 0 },
   popupActionLabel: { textAlign: 'center' },
   popupEditButton: { backgroundColor: lightColors.accent },
@@ -433,8 +446,8 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupSection: { gap: 14 },
   popupScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   popupScrollContent: { paddingHorizontal: 16, paddingBottom: 16 },
-  beforeComposer: { paddingBottom: 0 },
   popupComposer: { paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
+  noBottomPadding: { paddingBottom: 0 },
   taskDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   taskNote: { paddingVertical: 20 },
   hidden: { display: 'none' },

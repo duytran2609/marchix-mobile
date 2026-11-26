@@ -33,7 +33,18 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(target, 'Đính kèm chứng từ').click();
     await (await chooser).setFiles(names.map(name => name.endsWith('.pdf')
       ? { name, mimeType: 'application/pdf', buffer: pdf } : { name, mimeType: 'image/png', buffer: image }));
-    for (const name of names) await expect(button(target, 'Bỏ ' + name)).toBeVisible();
+  }
+  async function checkPickedFile(name: string) {
+    const file = button(page, name);
+    const card = file.locator('..');
+    const remove = card.getByRole('button', { name: 'Bỏ tệp ' + name, exact: true });
+    await expect(remove).toBeVisible();
+    await expect(remove).toHaveText('');
+    await expect(card).toHaveCSS('border-radius', '9px');
+    await expect(file.getByText(name, { exact: true })).toHaveCSS('font-weight', '700');
+    const [removeBox, cardBox] = await Promise.all([remove.boundingBox(), card.boundingBox()]);
+    expect(cardBox!.x + cardBox!.width - removeBox!.x - removeBox!.width).toBeLessThanOrEqual(2);
+    return remove;
   }
   async function openCash(target: Page, account: string) {
     await target.goto(url);
@@ -117,6 +128,14 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await payment.click();
     await button(page, 'Bỏ ngày').click();
     await expect(payment).toHaveAccessibleName('Hạn thanh toán, Chọn ngày');
+    await attach(page, 'chung-tu-thu.png');
+    const removeIncomeProof = await checkPickedFile('chung-tu-thu.png');
+    await button(page, 'chung-tu-thu.png').click();
+    await expect(page.getByRole('img', { name: 'chung-tu-thu.png' })).toBeVisible();
+    await button(page, 'Đóng xem trước').click();
+    await expect(amountField).toHaveValue('123.456');
+    await removeIncomeProof.click();
+    await expect(button(page, 'chung-tu-thu.png')).toHaveCount(0);
     await expect(proposal.getByRole('button', { name: 'Hủy', exact: true })).toHaveCount(0);
     await proposal.getByRole('button', { name: 'Đóng đề nghị' }).click();
     await expect(proposal).toHaveCount(0);
@@ -135,8 +154,16 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await page.getByRole('button', { name: /^Hạng mục:/ }).click();
     await page.getByRole('radio', { name: 'Chi khác', exact: true }).click();
     await expectValueStyle(status(expense.getByRole('button', { name: 'Hạng mục: Chi khác', exact: true }), 'Chi khác'));
-    await attach(page, 'hoa-don.png', 'hoa-don.pdf');
+    await attach(page, 'hoa-don.png', 'hoa-don.pdf', 'tep-bo.png');
+    const removeExpenseProof = await checkPickedFile('tep-bo.png');
+    await removeExpenseProof.click();
+    await expect(button(page, 'tep-bo.png')).toHaveCount(0);
+    await checkPickedFile('hoa-don.pdf');
+    await button(page, 'hoa-don.pdf').click();
+    await expect(page.getByTitle('hoa-don.pdf')).toHaveAttribute('src', /^blob:/);
+    await button(page, 'Đóng PDF').click();
     await button(page, 'Gửi khoản chi').click();
+    await expect(status(page, 'Đã gửi đề nghị chi. Đề nghị đang chờ duyệt.')).toBeVisible();
     await expect(page.getByRole('heading', { name: note })).toBeVisible();
     await expect(status(page.getByRole('dialog'), 'Chờ duyệt')).toBeVisible();
     await expect(button(page, 'Duyệt')).toHaveCount(0);
@@ -153,6 +180,7 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(page, 'Đóng PDF').click();
     await button(page, 'Sửa khoản này').click();
     await attach(page, 'bien-nhan.png');
+    await expect(button(page, 'Bỏ bien-nhan.png')).toBeVisible();
     await button(page, 'Lưu thay đổi').click();
     await expect(button(page, 'Xem bien-nhan.png')).toBeVisible();
     await expect(button(page, 'Xem hoa-don.png')).toBeVisible();
@@ -205,7 +233,10 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
     await button(reviewer, 'Xem bien-nhan.png').click();
     await expect(reviewer.getByRole('img', { name: 'bien-nhan.png' })).toBeVisible();
     await button(reviewer, 'Đóng xem trước').click();
+    await button(reviewer, 'Từ chối').click();
+    await expect(reviewer.getByRole('alert')).toContainText('Nhập lý do từ chối rồi bấm Từ chối lại.');
     await button(reviewer, 'Duyệt').click();
+    await expect(status(reviewer, 'Đã duyệt khoản chi. Đang chờ xác nhận đã chi.')).toBeVisible();
     await expect(status(reviewer, 'Chờ chi')).toBeVisible();
     await expect(button(reviewer, 'Xác nhận đã chi')).toHaveCount(0);
     await button(reviewer, 'Về Phê duyệt').click();
@@ -217,9 +248,12 @@ test('Thu chi: nhân viên lập khoản chi, người được giao duyệt, qu
       .format(pendingBeforeApproval - 2_500_000);
     await expect(pendingTotal(admin)).toHaveText(expectedPending);
     await entry(admin).click();
+    await button(admin, 'Xác nhận đã chi').click();
+    await expect(admin.getByRole('alert')).toContainText('Nhập mã chứng từ hoặc tham chiếu giao dịch rồi xác nhận lại.');
     await admin.getByRole('textbox', { name: 'Mã chứng từ hoặc tham chiếu giao dịch' }).fill('BANK-CASH-TEST');
     await button(admin, 'Xác nhận đã chi').click();
     await button(admin, 'Xác nhận giao dịch đã hoàn tất').click();
+    await expect(status(admin, 'Đã xác nhận giao dịch chi.')).toBeVisible();
     await expect(status(page.getByRole('dialog'), 'Đã chi')).toBeVisible();
     await expect(button(page, 'Sửa khoản này')).toHaveCount(0);
     await expect(button(page, 'Xem hoa-don.png')).toBeVisible();

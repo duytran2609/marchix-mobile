@@ -6,7 +6,8 @@ const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { createHash, randomUUID } = require('node:crypto');
 const { publishWorkflowNotifications, writeTaskNotification } = require('./workflowNotifications');
-const { taskRoleNotices } = require('./taskRoleNotices');
+const { taskChangeNotices } = require('./taskChangeNotices');
+const { taskReviewNotice } = require('./taskReviewNotice');
 const { cadences, createScheduledTasks, timeZone } = require('./recurringTasks');
 
 const projectId = 'demo-marchix-mobile';
@@ -166,11 +167,11 @@ function canReviewTasks(snapshot) {
   return snapshot.get('role') === 'admin' || (Array.isArray(grants) && grants.includes('taskReview'));
 }
 
-function assignmentContext(request, feature = 'giao việc') {
+function assignmentContext(request, feature = 'giao việc', requireEnabled = true) {
   const runtimeProject = app.options.projectId || process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
   const email = verifiedEmail(request, runtimeProject);
   if (emulator ? !process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST
-    : process.env.MARCHIX_TASK_ASSIGNMENT_ENABLED !== 'true') {
+    : requireEnabled && process.env.MARCHIX_TASK_ASSIGNMENT_ENABLED !== 'true') {
     throw new HttpsError('failed-precondition', `Tính năng ${feature} chưa được bật trong môi trường này.`);
   }
   return { email, db: getFirestore(app) };
@@ -512,7 +513,10 @@ exports.updateMobileTask = onCall(async request => {
         change.assignee = memberName(byEmail.get(assigneeEmail));
       }
     }
-    for (const notice of taskRoleNotices(task, { ...task, ...change })) {
+    for (const notice of taskChangeNotices(task, { ...task, ...change }, address => {
+      const profile = address === email ? member : byEmail.get(address);
+      return profile ? memberName(profile) : undefined;
+    })) {
       writeTaskNotification(transaction, db, {
         ...notice, from: email, taskId: ref.id, createdAt: updatedAt, includeSender: true,
       });
@@ -522,31 +526,60 @@ exports.updateMobileTask = onCall(async request => {
   });
 });
 
-exports.addMobileTaskAttachments = onCall(async request => {
-  const { email, db } = assignmentContext(request, 'đính kèm tệp trao đổi');
-  const { taskId, attachments } = request.data ?? {};
+async function appendMobileTaskDiscussion(request, isReply) {
+  const { taskId, attachments = isReply ? [] : undefined, message = '', replyTo } = request.data ?? {};
+  const { email, db } = assignmentContext(request, 'đính kèm tệp trao đổi', !isReply || attachments?.length > 0);
   if (typeof taskId !== 'string' || !/^[\w-]{1,150}$/.test(taskId)) {
     throw new HttpsError('invalid-argument', 'Mã công việc không hợp lệ.');
   }
+  if (typeof message !== 'string' || message.trim().length > 1000) {
+    throw new HttpsError('invalid-argument', 'Nội dung trao đổi tối đa 1.000 ký tự.');
+  }
+  const text = message.trim();
   const items = parseAttachments(attachments, 1);
-  if (!items.length) throw new HttpsError('invalid-argument', 'Chọn ít nhất một tệp.');
+  if (!items.length && (!isReply || !text)) {
+    throw new HttpsError('invalid-argument', isReply ? 'Nhập trả lời hoặc chọn ít nhất một tệp.' : 'Chọn ít nhất một tệp.');
+  }
+  if (isReply && (!Number.isSafeInteger(replyTo?.index) || replyTo.index < 0 ||
+    typeof replyTo.by !== 'string' || !replyTo.by || replyTo.by.length > 320 ||
+    typeof replyTo.at !== 'string' || !replyTo.at || replyTo.at.length > 64)) {
+    throw new HttpsError('invalid-argument', 'Trao đổi gốc không hợp lệ.');
+  }
   const ref = db.collection('tasks').doc(taskId);
   const scope = `${taskId}:discussion:${randomUUID()}`;
   await db.runTransaction(async transaction => {
     const [member, snapshot] = await transaction.getAll(db.collection('members').doc(email), ref);
     const task = snapshot.data();
-    if (!activeMember(member) || task?.assigneeEmail !== email) {
+    if (!activeMember(member) || !task || (task.assigneeEmail !== email && (!isReply || task.assignedBy !== email))) {
       throw new HttpsError('permission-denied', 'Bạn không còn quyền gửi trao đổi cho công việc này.');
     }
     if (task.status === 'Xong') {
       throw new HttpsError('failed-precondition', 'Công việc đã xong và chỉ có thể xem chi tiết.');
     }
+    const comments = Array.isArray(task.comments) ? task.comments : [];
+    let target;
+    let recipient;
+    if (isReply) {
+      const matches = comment => comment?.by === replyTo.by && comment?.at === replyTo.at;
+      const index = matches(comments[replyTo.index]) ? replyTo.index : comments.findIndex(matches);
+      if (index < 0) throw new HttpsError('not-found', 'Trao đổi gốc không còn tồn tại.');
+      const { by, at } = comments[index];
+      target = { index, by, at };
+      if (by !== email && isMemberEmail(by) && (by === task.assigneeEmail || by === task.assignedBy) &&
+        activeMember(await transaction.get(db.collection('members').doc(by)))) recipient = by;
+    }
     const at = new Date().toISOString();
     const files = writeAttachments(transaction, ref, items, email, at, scope);
-    transaction.update(ref, { comments: [...(task.comments ?? []), { by: email, at, text: '', files }] });
+    transaction.update(ref, { comments: [...comments, { by: email, at, text, files, ...(target && { replyTo: target }) }] });
+    if (recipient) writeTaskNotification(transaction, db, {
+      from: email, to: recipient, taskId, title: 'Có người trả lời trao đổi của bạn', body: task.title, createdAt: at,
+    });
   });
   return { ok: true };
-});
+}
+
+exports.addMobileTaskAttachments = onCall(request => appendMobileTaskDiscussion(request, false));
+exports.replyToMobileTaskComment = onCall(request => appendMobileTaskDiscussion(request, true));
 
 exports.downloadMobileTaskAttachment = onCall(async request => {
   const { email, db } = assignmentContext(request, 'tải tệp đính kèm');
@@ -693,7 +726,7 @@ exports.reportTaskCompletion = onCall(request => {
   }
   const text = note.trim();
   return editAssignedTask(request, async context => {
-    const { task, id, transaction, db, email, now } = context;
+    const { task, id, transaction, db, email, member, now } = context;
     if (task.status === 'Chờ duyệt' || (task.status === 'Xong' && task.progress === 100 && task.doneAt)) return;
     if (!openStatuses.includes(task.status)) {
       throw new HttpsError('failed-precondition', 'Công việc này hiện không thể báo hoàn thành.');
@@ -715,9 +748,10 @@ exports.reportTaskCompletion = onCall(request => {
     const profile = isMemberEmail(recipient) && recipient !== email
       ? await transaction.get(db.collection('members').doc(recipient)) : undefined;
     if (profile && activeMember(profile) && (!requiresReview || !task.approverEmail || canReviewTasks(profile))) {
-      writeTaskNotification(transaction, db, { from: email, to: recipient, taskId: id,
-        title: requiresReview ? 'Có việc chờ duyệt' : 'Công việc đã hoàn thành',
-        body: task.title, createdAt: now });
+      const notice = requiresReview
+        ? taskReviewNotice({ action: 'submit', taskTitle: task.title, email, name: memberName(member), note: text })
+        : { title: 'Công việc đã hoàn thành', body: task.title };
+      writeTaskNotification(transaction, db, { ...notice, from: email, to: recipient, taskId: id, createdAt: now });
     }
     return {
       status: requiresReview ? 'Chờ duyệt' : 'Xong',
@@ -746,13 +780,13 @@ exports.reviewTaskCompletion = onCall(request => {
   const canReview = (task, member) => task.approverEmail === access.email &&
     task.assigneeEmail !== access.email && canReviewTasks(member);
   return editTask(access, getTaskId(request.data?.taskId), canReview, async context => {
-    const { task, id, transaction, db, email, now } = context;
+    const { task, id, transaction, db, email, member, now } = context;
     if (task.status !== 'Chờ duyệt' || (task.doneAt || task.updatedAt || '') !== submission) {
       throw new HttpsError('failed-precondition', 'Lượt gửi duyệt này đã thay đổi. Hãy mở lại công việc.');
     }
-    writeTaskNotification(transaction, db, { from: email, to: task.assigneeEmail, taskId: id,
-      title: decision === 'approve' ? 'Công việc đã được duyệt' : 'Công việc cần làm lại',
-      body: task.title, createdAt: now });
+    const notice = taskReviewNotice({ action: decision, taskTitle: task.title, email,
+      name: memberName(member), rating, note: reviewNote });
+    writeTaskNotification(transaction, db, { ...notice, from: email, to: task.assigneeEmail, taskId: id, createdAt: now });
     if (decision === 'approve') {
       return {
         status: 'Xong', progress: 100, doneAt: task.doneAt || now,

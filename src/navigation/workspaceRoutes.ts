@@ -1,8 +1,9 @@
-import type { NotificationTaskTarget } from '../features/notifications/notifications';
+import type { NotificationTaskTarget, WorkspaceNotification } from '../features/notifications/notifications';
 
 import type { ProjectExpenseSeed } from '../features/projects/financeStore';
 
-type TaskSelection = NotificationTaskTarget | { id: string; direct: true };
+type TaskSelection = Exclude<NotificationTaskTarget, { id: string }>
+  | { id: string; direct?: true; notice?: Pick<WorkspaceNotification, 'title' | 'body'> };
 
 export type ProjectRoute = {
   screen: 'du-an';

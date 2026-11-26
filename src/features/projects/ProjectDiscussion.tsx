@@ -12,6 +12,7 @@ import { SearchInput } from '../../components/SearchInput';
 import { SearchableChoiceDropdown } from '../../components/SearchableChoiceList';
 import { TextInput } from '../../components/TextInput';
 import { useScreenStyles } from '../../theme/screenStyles';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 import { formatVietnamDateTime } from '../../utils/dateTime';
 import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { cashFileList } from '../cash/cashAttachments';
@@ -98,14 +99,17 @@ function ProjectMessageComposer({ placeholder, maxLength, disabled, quote, onCan
 }) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<PickedAttachment[]>([]);
+  const [opening, setOpening] = useState(false);
   const action = useCollaborationAction();
-  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange: setFiles, disabled: disabled || action.busy });
+  const { picking, error, pick } = useCollaborationFilePicker({ files, onChange: setFiles,
+    disabled: disabled || action.busy || opening });
   const message = body.trim() || files.map(file => file.name).join(', ').slice(0, maxLength);
   return <>
     <DiscussionComposer inputRef={inputRef} message={body} onChange={setBody} placeholder={placeholder} maxLength={maxLength}
-      sending={action.busy} disabled={disabled} attachmentBusy={picking} onAttach={pick}
+      sending={action.busy} disabled={disabled || opening} attachmentBusy={picking} onAttach={pick}
       quote={quote && <DiscussionQuote {...quote} />} onCancelReply={onCancelReply} sendLabel={sendLabel} canSend={!!message}
-      extras={<PickedCollaborationFiles files={files} onChange={setFiles} disabled={disabled || picking || action.busy} error={error} />}
+      extras={<PickedCollaborationFiles files={files} onChange={setFiles} disabled={disabled || picking || action.busy}
+        error={error} onOpening={setOpening} />}
       onSend={() => void action.run(async () => {
         const notice = await onPublish(message, files);
         setBody('');
@@ -128,11 +132,13 @@ function ProjectPostComposer({ projectId, email, tasks, team, visible, onClose, 
   const [mentions, setMentions] = useState<string[]>([]);
   const [files, setFiles] = useState<PickedAttachment[]>([]);
   const [picking, setPicking] = useState(false);
+  const [preview, setPreview] = useState<AttachmentFile>();
   const action = useCollaborationAction();
   const disabled = action.busy || picking;
   const recipients = team.filter(member => member.id !== email).map(member => ({ id: member.id, name: member.name || member.id }));
   if (!visible) return null;
-  return <ProjectFormPopup title="Đăng trao đổi" busy={disabled} onClose={onClose} footer={
+  return <ProjectFormPopup title="Đăng trao đổi" busy={disabled} onClose={onClose}
+    preview={preview && { file: preview, onClose: () => setPreview(undefined) }} footer={
     <PopupAction label={action.busy ? 'Đang đăng…' : 'Đăng trao đổi'} disabled={disabled || !title.trim() || !body.trim()}
       onPress={() => void action.run(async () => {
         const failed = await publishProjectPost(projectId, email, { title, body, kind, taskId, picked: files,
@@ -147,7 +153,7 @@ function ProjectPostComposer({ projectId, email, tasks, team, visible, onClose, 
     <CollaborationInput label="Tiêu đề trao đổi" value={title} onChange={setTitle} limit={200} disabled={disabled} />
     <CollaborationInput label="Nội dung trao đổi" value={body} onChange={setBody} limit={10000} multiline disabled={disabled} />
     <CollaborationFilePicker label="Đính kèm ảnh / tài liệu vào bài" files={files} onChange={setFiles}
-      onPicking={setPicking} disabled={action.busy} />
+      onPicking={setPicking} disabled={action.busy} onPreview={setPreview} />
     {!!recipients.length && <>
       <Text style={styles.label}>Nhắc người cần phản hồi</Text>
       <SearchableChoiceDropdown title="Nhắc người cần phản hồi" items={recipients} selected={mentions}

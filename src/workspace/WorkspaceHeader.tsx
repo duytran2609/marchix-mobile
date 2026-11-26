@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentRef } from 'react';
+import type { ComponentProps, ComponentRef } from 'react';
 import { Image, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { WorkspaceNotifications } from '../features/notifications/WorkspaceNotifications';
-import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { emulatorMode, pilotMode, taskAssignmentEnabled } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
@@ -34,7 +33,7 @@ function HeaderClock({ inRow = false }: { inRow?: boolean }) {
 export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
   onOpenMenu?: () => void;
   menuOpen?: boolean;
-  inbox?: { email: string; onOpenNote: (note: WorkspaceNotification) => void };
+  inbox?: Omit<ComponentProps<typeof WorkspaceNotifications>, 'header' | 'edge'>;
 }) {
   const styles = useStyles();
   const screenStyles = useScreenStyles();
@@ -69,7 +68,7 @@ export function WorkspaceHeader({ onOpenMenu, menuOpen, inbox }: {
         <HeaderClock inRow />
         <View style={[styles.headerSide, styles.headerEnd]}>
           {showWorkspaceBrand && environment}
-          {inbox && <WorkspaceNotifications email={inbox.email} header={header} edge={workspaceHeaderPadding} onOpenNote={inbox.onOpenNote} />}
+          {inbox && <WorkspaceNotifications {...inbox} header={header} edge={workspaceHeaderPadding} />}
         </View>
       </View> : <>
         <View style={styles.brandRow}>

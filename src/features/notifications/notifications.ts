@@ -13,7 +13,27 @@ export type WorkspaceNotification = {
   read: boolean;
   taskId?: string;
   projectId?: string;
+  deadlineReminder?: true;
 };
+
+const taskCategory = { value: 'cong-viec', label: 'Công việc' } as const;
+const otherCategory = { value: 'other', label: 'Khác' } as const;
+
+const notificationCategories = [
+  { value: 'don-tu', label: 'Đơn từ' },
+  { value: 'thu-chi', label: 'Thu chi' },
+  { value: 'luong', label: 'Phiếu lương' },
+  { value: 'cham-cong', label: 'Chấm công' },
+  { value: 'du-an', label: 'Dự án' },
+  { value: 'van-thu', label: 'Văn thư' },
+  otherCategory,
+] as const;
+
+export function notificationCategory(note: WorkspaceNotification) {
+  const section = note.link.split('/', 1)[0];
+  if (note.taskId || section === '#cong-viec' || section === '#cho-duyet') return taskCategory;
+  return notificationCategories.find(({ value }) => section === `#${value}`) ?? otherCategory;
+}
 
 export type NotificationTaskTarget = { id: string } | { title: string; assignment?: true };
 

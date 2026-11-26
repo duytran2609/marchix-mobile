@@ -17,11 +17,13 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
   const day = todayInVietnam();
   const project = `Dự án ${id}`;
   const task = `Công việc ${id}`;
+  const dueTask = `Việc đến hạn ${id}`;
   const cash = `Khoản chi ${id}`;
   const amount = 170001;
   const fixtures = [
     [`projects/${id}`, { name: project, status: 'Đang chạy' }],
     [`tasks/${id}`, { title: task, projectId: id, assigneeEmail: admin, assignedBy: staff, status: 'Vướng', progress: 25 }],
+    [`tasks/${id}-due`, { title: dueTask, due: day, assigneeEmail: admin, assignedBy: staff, status: 'Chưa làm' }],
     [`cash/${id}`, { note: cash, type: 'chi', method: 'Chuyển khoản', amount, date: day, dueDate: day, status: 'Chờ chi',
       createdBy: staff, approverEmail: 'nguoigiao@example.test', approvedBy: 'nguoigiao@example.test' }],
   ] as const;
@@ -70,12 +72,23 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     const personalTasks = teamTasks.filter(fields =>
       fields.assigneeEmail?.stringValue === admin || fields.assignedBy?.stringValue === admin);
     await expect(page.getByLabel(`${personalTasks.length} công việc`)).toBeVisible();
+    const todayColumn = button(page, /^Hôm nay, .* [1-9]\d* việc đến hạn$/);
+    await todayColumn.click();
+    await expect(todayColumn).toHaveAttribute('aria-pressed', 'true');
+    await expect(button(page, new RegExp(dueTask))).toBeVisible();
+    const cashDecisions = button(page, /^Thu chi, [1-9]\d* mục cần quyết định$/);
+    await cashDecisions.click();
+    await expect(cashDecisions).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('heading', { name: 'Việc cần quyết định' })).toBeVisible();
+    await cashDecisions.click();
+    await expect(page.getByRole('heading', { name: 'Việc cần quyết định' })).toHaveCount(0);
     const blocked = button(page, /^Vướng \d+$/);
     const blockedBefore = numberFrom(await blocked.innerText());
     await blocked.click();
     await expect(button(page, new RegExp(task))).toBeVisible();
     const projectRow = button(page, new RegExp(project));
     await expect(projectRow).toContainText('25%');
+    await expect(projectRow).toContainText('1 đang vướng');
 
     await button(source, `Mở công việc: ${task}`).click();
     await source.getByRole('radio', { name: 'Đang làm', exact: true }).click();
@@ -84,6 +97,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
     await expect(button(page, `Vướng ${blockedBefore - 1}`)).toBeVisible();
     await expect(button(page, new RegExp(task))).toHaveCount(0);
     await expect(projectRow).toContainText('65%');
+    await expect(projectRow).not.toContainText('đang vướng');
     await button(source, 'Đóng chi tiết công việc').click();
     await expect(source.getByLabel(`Vướng: ${blockedCount - 1} công việc`, { exact: true })).toBeVisible();
     await expect(source.getByLabel(`Đang làm: ${runningCount + 1} công việc`, { exact: true })).toBeVisible();

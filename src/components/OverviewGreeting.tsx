@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { dateInVietnam } from '../features/tasks/taskDates';
 import { useTheme } from '../theme/theme';
 
 const vietnamHour = new Intl.DateTimeFormat('en-GB', {
@@ -8,12 +9,64 @@ const vietnamHour = new Intl.DateTimeFormat('en-GB', {
 const labels = { morning: 'Chào buổi sáng', afternoon: 'Chào buổi chiều', evening: 'Chào buổi tối' };
 type Period = keyof typeof labels;
 
-export function overviewGreetingTime(now: Date): { period: Period; delay: number } {
+// Vietnamese translations, with a source for each original.
+const quotes = [
+  // https://www.afb.org/blog/entry/happy-birthday-helen
+  { text: 'Một mình ta làm được ít. Cùng nhau, ta làm được nhiều.', author: 'Helen Keller' },
+  // https://www.trlibrary.com/tr/fake-quotes
+  { text: 'Hãy làm điều có thể, với những gì đang có, ngay nơi mình đứng.', author: 'Squire Bill Widener' },
+  // https://www.gutenberg.org/files/36151/36151-h/36151-h.htm
+  { text: 'Làm tốt còn hơn nói hay.', author: 'Benjamin Franklin' },
+  // https://www.gutenberg.org/files/6920/6920-h/6920-h.htm (Book V, section 20)
+  { text: 'Trở ngại trên đường cũng có thể giúp ta tiến bước.', author: 'Marcus Aurelius' },
+  // https://en.wikisource.org/wiki/Moral_letters_to_Lucilius/Letter_1
+  { text: 'Hãy nắm lấy từng giờ mình có.', author: 'Seneca' },
+  // https://www.amnesty.org/en/wp-content/uploads/2021/05/NWS2186162018ENGLISH.pdf
+  { text: 'Chỉ sợ đứng yên, đừng sợ đi chậm.', author: 'Tục ngữ Trung Quốc' },
+  // https://ctext.org/text.pl?if=en&node=278905&remap=gb (Daodejing, chapter 64)
+  { text: 'Cẩn thận đến phút cuối như lúc bắt đầu, việc sẽ ít hỏng.', author: 'Lão Tử' },
+];
+const dayMs = 86_400_000;
+
+function shuffleQuotes(week: number) {
+  const order = [...quotes];
+  // Seed the shuffle by calendar week so the order survives app reloads.
+  let seed = Math.imul(week, 0x9e3779b9);
+  for (let index = order.length - 1; index > 0; index--) {
+    seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+    const swap = Math.floor(seed / 0x100000000 * (index + 1));
+    [order[index], order[swap]] = [order[swap], order[index]];
+  }
+  return order;
+}
+
+export function overviewQuote(now: Date) {
+  const date = new Date(dateInVietnam(now));
+  const weekday = (date.getUTCDay() + 6) % 7; // Monday is day zero.
+  const monday = date.getTime() / dayMs - weekday;
+  const order = shuffleQuotes(monday);
+  // Swapping the first two leaves Sunday's quote intact for the next week's check.
+  if (order[0] === shuffleQuotes(monday - 7)[quotes.length - 1]) {
+    [order[0], order[1]] = [order[1], order[0]];
+  }
+  return order[weekday];
+}
+
+export function overviewGreetingTime(now: Date): { period: Period; delay: number; midnightDelay: number } {
   const hour = Number(vietnamHour.format(now));
   const period = hour < 5 || hour >= 18 ? 'evening' : hour < 12 ? 'morning' : 'afternoon';
   const nextHour = period === 'morning' ? 12 : period === 'afternoon' ? 18 : hour >= 18 ? 24 + 5 : 5;
   const elapsedInHour = now.getUTCMinutes() * 60_000 + now.getUTCSeconds() * 1_000 + now.getUTCMilliseconds();
-  return { period, delay: (nextHour - hour) * 3_600_000 - elapsedInHour };
+  return {
+    period,
+    delay: (nextHour - hour) * 3_600_000 - elapsedInHour,
+    midnightDelay: (24 - hour) * 3_600_000 - elapsedInHour,
+  };
+}
+
+function greetingSnapshot(now: Date) {
+  const { period, delay, midnightDelay } = overviewGreetingTime(now);
+  return { period, quote: overviewQuote(now), delay: Math.min(delay, midnightDelay) };
 }
 
 const lightScenes = {
@@ -84,14 +137,14 @@ function GreetingArtwork({ period, scene }: { period: Period; scene: Scene }) {
 
 export function OverviewGreeting({ name, email }: { name: string; email: string }) {
   const { dark } = useTheme();
-  const [period, setPeriod] = useState(() => overviewGreetingTime(new Date()).period);
+  const [{ period, quote }, setGreeting] = useState(() => greetingSnapshot(new Date()));
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     function refresh() {
       clearTimeout(timer);
-      const { period, delay } = overviewGreetingTime(new Date());
-      setPeriod(period);
-      timer = setTimeout(refresh, delay);
+      const greeting = greetingSnapshot(new Date());
+      setGreeting(greeting);
+      timer = setTimeout(refresh, greeting.delay);
     }
     refresh();
     const subscription = AppState.addEventListener('change', state => {
@@ -110,6 +163,10 @@ export function OverviewGreeting({ name, email }: { name: string; email: string 
       {hasName ? <>{label}{', '}<Text style={[styles.name, { color: scene.name }]}>{displayName}</Text>!</> : `${label}!`}
     </Text>
     <Text style={[styles.suggestion, { color: scene.muted }]}>Chọn một việc quan trọng hôm nay và bắt đầu từ bước nhỏ nhất.</Text>
+    <View testID="overview-daily-quote" style={[styles.quote, { borderLeftColor: scene.name }]}>
+      <Text style={[styles.quoteText, { color: scene.ink }]}>“{quote.text}”</Text>
+      <Text style={[styles.quoteAuthor, { color: scene.muted }]}>{quote.author}</Text>
+    </View>
   </View>;
 }
 
@@ -136,4 +193,7 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 28, lineHeight: 36, fontWeight: '400', width: '100%', flexShrink: 1 },
   name: { fontWeight: '800' },
   suggestion: { marginTop: 8, fontSize: 15, lineHeight: 22 },
+  quote: { marginTop: 12, gap: 3, borderLeftWidth: 2, paddingLeft: 10 },
+  quoteText: { fontSize: 14, lineHeight: 21, fontStyle: 'italic', fontWeight: '500' },
+  quoteAuthor: { fontSize: 12, lineHeight: 17, fontWeight: '700' },
 });

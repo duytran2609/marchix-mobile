@@ -4,6 +4,7 @@ import { PaginatedList } from '../../components/PaginatedList';
 import { EmptyState } from '../../components/EmptyState';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from '../../components/TextInput';
 import { ClickableCardHeader } from '../../components/CardChevron';
@@ -39,6 +40,7 @@ const hours = clockChoices(24);
 const minutes = clockChoices(60);
 const optionalHours = [{ value: '', label: 'Để trống' }, ...hours];
 const attendanceReminderToggle: Field = { key: 'attendanceReminder', label: 'Nhắc quên chấm công', initial: false };
+type RenderPage = (content: ReactNode, saveButton?: ReactNode) => ReactNode;
 
 function TimeSettingsField({ field, value, disabled, onChange, label = field.label, compact }: {
   field: Field; value: FieldValue; disabled: boolean; onChange: (next: string) => void; label?: string; compact?: boolean;
@@ -127,12 +129,14 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
   );
 }
 
-function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }: {
+function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle, renderPage }: {
   tab: AdminSettingsTab; fields: Field[]; row: SettingsRow; email: string;
   onSave: (values: FieldValues, overrides: Record<string, WorkdayWeight | null>,
-    projectAccess: ReadonlyMap<string, boolean>) => Promise<void>; onCancel?: () => void;
-  popupTitle?: string;
-}) {
+    projectAccess: ReadonlyMap<string, boolean>) => Promise<void>;
+} & (
+  { popupTitle: string; onCancel: () => void; renderPage?: never } |
+  { renderPage: RenderPage; popupTitle?: never; onCancel?: never }
+)) {
   const ui = useScreenStyles();
   const { colors } = useTheme();
   const toast = useToast();
@@ -297,10 +301,9 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
         return workdayFields.includes(field) || field === shiftFields[1] || field === lunchFields[1] || field === attendanceReminderFields[1]
           ? null : renderField(field);
       })}
-      {!popupTitle && saveButton}
     </View>
   );
-  if (!popupTitle) return content;
+  if (renderPage) return renderPage(content, saveButton);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
@@ -318,8 +321,8 @@ function SettingsForm({ tab, fields, row, email, onSave, onCancel, popupTitle }:
   );
 }
 
-export function AdminSettings({ tab, email, onScrollTop }: {
-  tab: AdminSettingsTab; email: string; onScrollTop: () => void;
+export function AdminSettings({ tab, email, renderPage, onScrollTop }: {
+  tab: AdminSettingsTab; email: string; renderPage: RenderPage; onScrollTop: () => void;
 }) {
   const ui = useScreenStyles();
   const { colors } = useTheme();
@@ -358,13 +361,13 @@ export function AdminSettings({ tab, email, onScrollTop }: {
     if (!list) onScrollTop();
   }
 
-  if (error) return <View style={ui.stack}>
+  if (error) return renderPage(<View style={ui.stack}>
     <Text accessibilityRole="alert" style={ui.error}>Không tải được cài đặt. Kiểm tra kết nối hoặc quyền truy cập.</Text>
     <Button label="Thử lại" onPress={refresh} />
-  </View>;
-  if (!rows) return <ActivityIndicator accessibilityLabel="Đang tải cài đặt" color={colors.accent} />;
+  </View>);
+  if (!rows) return renderPage(<ActivityIndicator accessibilityLabel="Đang tải cài đặt" color={colors.accent} />);
   if (!list) return <SettingsForm tab={tab} fields={documentFields[tab]} row={rows[0]} email={email}
-    onSave={async (values, overrides) => { await saveSettings(tab, values, email, overrides); saved(); }} />;
+    renderPage={renderPage} onSave={async (values, overrides) => { await saveSettings(tab, values, email, overrides); saved(); }} />;
 
   const addTitle = tab === 'members' ? 'Thêm tài khoản' : 'Thêm khoản chi';
   let editor;
@@ -402,7 +405,7 @@ export function AdminSettings({ tab, email, onScrollTop }: {
     }
   }
 
-  return (
+  return renderPage(
     <View style={ui.stack}>
       <Button label={`+ ${addTitle}`} onPress={() => setEdit(emptyRow)} />
       {!rows.length ? <EmptyState icon={tab === 'members' ? 'people' : 'wallet'}

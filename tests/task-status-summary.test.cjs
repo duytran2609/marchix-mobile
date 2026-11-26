@@ -11,7 +11,9 @@ function load(file, mocks = {}) {
   return exports;
 }
 const statuses = load('taskStatuses');
-const { taskStatusSummary } = load('taskStatusSummary', { './taskStatuses': statuses });
+const { overdueTaskBucket, taskStatusSummary } = load('taskStatusSummary', {
+  './taskStatuses': statuses, './taskDates': load('taskDates'), './taskLabels': load('taskLabels'),
+});
 const plain = value => JSON.parse(JSON.stringify(value));
 const counts = rows => Object.fromEntries(taskStatusSummary(rows).map(row => [row.status, row.tasks.length]));
 test('canonical statuses include zero counts and completed tasks, independent of due date', () => {
@@ -35,4 +37,20 @@ test('summary follows supplied canonical configuration order without duplicate g
   assert.deepEqual(plain(taskStatusSummary(rows, ['New', 'Zero', 'New']).map(x => [x.status, x.tasks.length])),
     [['New', 1], ['Zero', 0], ['Khác', 1]]);
   assert.deepEqual(plain(taskStatusSummary(rows, ['Old']).map(x => [x.status, x.tasks.length])), [['Old', 1], ['Khác', 1]]);
+});
+test('overdue counts unique open tasks before today alongside their existing status', () => {
+  const past = { status: 'Đang làm', due: '2026-11-25' };
+  const summary = taskStatusSummary([
+    { id: 'open', ...past }, { id: 'open', ...past },
+    { id: 'blocked', ...past, status: 'Vướng' },
+    { id: 'done', ...past, status: 'Xong' },
+    { id: 'review', ...past, status: 'Chờ duyệt' },
+    { id: 'today', ...past, due: '2026-11-26' },
+    { id: 'future', ...past, due: '2026-11-27' },
+    { id: 'invalid', ...past, due: '2026-02-31' },
+    { id: 'no-deadline', status: 'Chưa làm' },
+  ]);
+  const overdue = overdueTaskBucket(summary, '2026-11-26');
+  assert.deepEqual(plain(overdue.tasks.map(task => task.id)), ['open', 'blocked']);
+  assert.equal(summary.reduce((total, bucket) => total + bucket.tasks.length, 0), 8);
 });

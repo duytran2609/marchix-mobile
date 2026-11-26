@@ -32,6 +32,9 @@ test('Tổng quan đổi lời chào và cảnh nền đúng giờ Việt Nam, g
     await setName({ stringValue: longName });
     const greeting = page.getByRole('heading', { name: `Chào buổi sáng, ${longName}!`, exact: true });
     const suggestion = greeting.locator('..').getByText('Chọn một việc quan trọng hôm nay và bắt đầu từ bước nhỏ nhất.', { exact: true });
+    const quote = page.getByTestId('overview-daily-quote');
+    await expect(quote).toBeVisible();
+    const dailyQuote = await quote.innerText();
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(greeting).toBeVisible();
@@ -48,8 +51,11 @@ test('Tổng quan đổi lời chào và cảnh nền đúng giờ Việt Nam, g
       expect(suggestionBounds.x).toBeGreaterThanOrEqual(0);
       expect(suggestionBounds.x + suggestionBounds.width).toBeLessThanOrEqual(width);
       expect(suggestionBounds.y).toBeGreaterThan(bounds!.y + bounds!.height);
+      const quoteBounds = (await quote.boundingBox())!;
+      expect(quoteBounds.x + quoteBounds.width).toBeLessThanOrEqual(width);
+      expect(quoteBounds.y).toBeGreaterThan(suggestionBounds.y + suggestionBounds.height);
       const card = await page.getByRole('heading', { name: 'Dòng tiền thực tế', exact: true }).boundingBox();
-      expect(card!.y).toBeGreaterThan(suggestionBounds.y + suggestionBounds.height);
+      expect(card!.y).toBeGreaterThan(quoteBounds.y + quoteBounds.height);
     }
     await setName({ stringValue: '' });
     const morning = page.getByRole('heading', { name: 'Chào buổi sáng!', exact: true });
@@ -68,8 +74,15 @@ test('Tổng quan đổi lời chào và cảnh nền đúng giờ Việt Nam, g
     const evening = page.getByRole('heading', { name: 'Chào buổi tối!', exact: true });
     await expect(evening).toBeVisible();
     await expect(evening.locator('..')).toHaveCSS('background-color', 'rgb(34, 35, 65)');
-    await moveTo(shiftDay(today, 1), '05');
+    expect(await quote.innerText()).toBe(dailyQuote);
+    const tomorrow = shiftDay(today, 1);
+    await moveTo(tomorrow, '00');
+    await expect(evening).toBeVisible();
+    await expect.poll(() => quote.innerText()).not.toBe(dailyQuote);
+    const nextQuote = await quote.innerText();
+    await moveTo(tomorrow, '05');
     await expect(morning).toBeVisible();
+    expect(await quote.innerText()).toBe(nextQuote);
   } finally {
     await setName(originalName);
   }

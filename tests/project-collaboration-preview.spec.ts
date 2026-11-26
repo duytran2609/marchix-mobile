@@ -1,5 +1,5 @@
 import { acknowledgeStartupReminder, test } from './helpers/startupReminder';
-import { expect } from '@playwright/test';
+import { expect, type Locator } from '@playwright/test';
 
 const previewUrl = process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081';
 
@@ -73,6 +73,27 @@ test('Chọn người phụ trách và trạng thái khi thêm, sửa dự án',
 });
 
 test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mục dự án', async ({ page }) => {
+  test.setTimeout(90_000);
+  const attachment = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+  async function choose(button: Locator, ...files: ReturnType<typeof attachment>[]) {
+    const chooser = page.waitForEvent('filechooser');
+    await button.click();
+    await (await chooser).setFiles(files);
+  }
+  async function checkPreview(scope: Locator, name: string, text: string) {
+    const file = scope.getByRole('button', { name, exact: true });
+    const card = file.locator('..');
+    await expect(card).toHaveCSS('border-radius', '9px');
+    await expect(file.getByText(name, { exact: true })).toHaveCSS('font-weight', '700');
+    await file.click();
+    await expect(page.getByText(text, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Đóng xem trước', exact: true }).click();
+    const remove = card.getByRole('button', { name: 'Bỏ tệp ' + name, exact: true });
+    await expect(remove).toHaveText('');
+    const [removeBox, cardBox] = await Promise.all([remove.boundingBox(), card.boundingBox()]);
+    expect(cardBox!.x + cardBox!.width - removeBox!.x - removeBox!.width).toBeLessThanOrEqual(2);
+    return remove;
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)' }).click();
@@ -94,10 +115,12 @@ test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mụ
   await postButton.click();
   await expect(composer.getByRole('textbox', { name: 'Tiêu đề trao đổi' })).toHaveValue('Rà soát hồ sơ demo');
   await composer.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Tệp kiểm thử của dự án.');
-  const chooser = page.waitForEvent('filechooser');
-  await composer.getByRole('button', { name: 'Đính kèm ảnh / tài liệu vào bài' }).click();
-  await (await chooser).setFiles({ name: 'hoso-demo.txt', mimeType: 'text/plain', buffer: Buffer.from('Dữ liệu kiểm thử.') });
-  await expect(composer.getByRole('button', { name: 'Bỏ hoso-demo.txt' })).toBeVisible();
+  await choose(composer.getByRole('button', { name: 'Đính kèm ảnh / tài liệu vào bài' }),
+    attachment('hoso-demo.txt', 'Dữ liệu kiểm thử.'), attachment('bo-qua.txt', 'Tệp sẽ bỏ.'));
+  const removePostFile = await checkPreview(composer, 'bo-qua.txt', 'Tệp sẽ bỏ.');
+  await removePostFile.click();
+  await expect(composer.getByRole('button', { name: 'bo-qua.txt', exact: true })).toHaveCount(0);
+  await expect(composer.getByRole('textbox', { name: 'Tiêu đề trao đổi' })).toHaveValue('Rà soát hồ sơ demo');
   await composer.getByRole('button', { name: 'Đăng trao đổi', exact: true }).click();
   await expect(composer).toBeHidden();
   await expect(workspace.getByRole('heading', { name: 'Rà soát hồ sơ demo' })).toBeVisible();
@@ -114,8 +137,14 @@ test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mụ
   await expect(comments.getByText('Tệp kiểm thử của dự án.', { exact: true })).toBeVisible();
   await expect(comments.getByRole('textbox', { name: 'Nội dung trao đổi' })).toBeFocused();
   await comments.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Đã xem hồ sơ.');
+  await choose(comments.getByRole('button', { name: 'Đính kèm tệp', exact: true }),
+    attachment('phan-hoi.txt', 'Tệp đính kèm bình luận.'), attachment('bo-binh-luan.txt', 'Không gửi.'));
+  await checkPreview(comments, 'phan-hoi.txt', 'Tệp đính kèm bình luận.');
+  await comments.getByRole('button', { name: 'Bỏ tệp bo-binh-luan.txt', exact: true }).click();
+  await expect(comments.getByRole('button', { name: 'bo-binh-luan.txt', exact: true })).toHaveCount(0);
   await comments.getByRole('button', { name: 'Gửi trả lời' }).click();
   await expect(comments.getByText('Đã xem hồ sơ.', { exact: true })).toBeVisible();
+  await expect(comments.getByRole('button', { name: 'Xem tệp phan-hoi.txt', exact: true })).toBeVisible();
   await comments.getByRole('button', { name: /^Trả lời trao đổi của/ }).click();
   await comments.getByRole('textbox', { name: 'Nội dung trao đổi' }).fill('Đã ghi nhận phản hồi.');
   await comments.getByRole('button', { name: 'Gửi trả lời' }).click();
@@ -151,9 +180,11 @@ test('Trao đổi có tệp, trả lời và chuyển tài liệu vào thư mụ
   await expect(folderName).toHaveCount(0);
   await expect(folder).toHaveAccessibleName('Thư mục: Nghiệm thu demo');
   const background = await folder.evaluate(item => getComputedStyle(item).backgroundColor);
-  const uploadChooser = page.waitForEvent('filechooser');
-  await attachFile.click();
-  await (await uploadChooser).setFiles({ name: 'nghiem-thu.txt', mimeType: 'text/plain', buffer: Buffer.from('Biên bản nghiệm thu.') });
+  await choose(attachFile, attachment('nghiem-thu.txt', 'Biên bản nghiệm thu.'),
+    attachment('bo-thu-vien.txt', 'Không tải lên.'));
+  await checkPreview(workspace, 'nghiem-thu.txt', 'Biên bản nghiệm thu.');
+  await workspace.getByRole('button', { name: 'Bỏ tệp bo-thu-vien.txt', exact: true }).click();
+  await expect(workspace.getByRole('button', { name: 'bo-thu-vien.txt', exact: true })).toHaveCount(0);
   await workspace.getByRole('button', { name: 'Tải lên Nghiệm thu demo' }).click();
   await expect(workspace.getByText('Đã tải tệp lên.')).toBeVisible();
   await expect(workspace.getByRole('button', { name: /^nghiem-thu\.txt ·/ })).toBeVisible();

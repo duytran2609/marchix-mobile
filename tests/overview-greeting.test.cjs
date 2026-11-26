@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 const output = {};
+const dateHelpers = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/features/tasks/taskDates.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText, { exports: dateHelpers });
 const morning = '2026-11-25T05:00:00+07:00';
 class MorningDate extends Date {
   constructor(value = morning) { super(value); }
@@ -14,6 +18,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/OverviewGr
   react: { useEffect: () => {}, useState: initial => [initial()] },
   'react-native': { Text: 'Text', View: 'View', StyleSheet: { create: value => value } },
   '../theme/theme': { useTheme: () => ({ dark: false }) },
+  '../features/tasks/taskDates': dateHelpers,
   'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
 })[name] });
 
@@ -31,6 +36,31 @@ test('Vietnam time chooses the correct period and schedules its next boundary', 
     const actual = output.overviewGreetingTime(new Date(`2026-11-25T${time}+07:00`));
     assert.equal(actual.period, period, time);
     assert.equal(actual.delay, delay, time);
+    assert.equal(actual.midnightDelay, Date.parse('2026-11-26T00:00:00+07:00') - Date.parse(`2026-11-25T${time}+07:00`));
+  }
+});
+
+test('daily quotes are stable in Vietnam time and distinct within each shuffled week', () => {
+  const start = Date.parse('2026-11-23T00:00:00+07:00');
+  const day = 86_400_000;
+  const weeks = [];
+  let previous;
+  for (let week = 0; week < 12; week++) {
+    const texts = [];
+    for (let weekday = 0; weekday < 7; weekday++) {
+      const first = start + (week * 7 + weekday) * day;
+      const quote = output.overviewQuote(new Date(first));
+      assert.equal(output.overviewQuote(new Date(first + day - 1)), quote);
+      assert.notEqual(quote, previous);
+      previous = quote;
+      texts.push(quote.text);
+    }
+    assert.equal(new Set(texts).size, 7);
+    weeks.push(texts);
+  }
+  for (let weekday = 0; weekday < 7; weekday++) {
+    const quotes = weeks.map(week => week[weekday]);
+    assert.ok(new Set(quotes).size > 1);
   }
 });
 

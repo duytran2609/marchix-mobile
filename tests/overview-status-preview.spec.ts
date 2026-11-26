@@ -1,6 +1,7 @@
 import { test } from './helpers/startupReminder';
 import { devices, expect } from '@playwright/test';
 import { taskStatuses } from '../src/features/tasks/taskStatuses';
+import { todayInVietnam } from '../src/features/tasks/taskDates';
 
 test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
 
@@ -28,26 +29,32 @@ test('Tình trạng công việc đếm đúng trạng thái, gồm Xong và kh�
     const own = documents.flatMap((row: any) => row.document ? [row.document.fields] : [])
       .filter((fields: any) => fields.assigneeEmail?.stringValue === email || fields.assignedBy?.stringValue === email);
     const counts = new Map<string, number>(taskStatuses.map(status => [status, 0]));
+    const today = todayInVietnam();
+    let overdue = 0;
     for (const fields of own) {
       const status = fields.status?.stringValue || 'Chưa làm';
       const key = taskStatuses.some(value => value === status) ? status : 'Khác';
       counts.set(key, (counts.get(key) || 0) + 1);
+      const due = fields.due?.stringValue;
+      if (due && due < today && status !== 'Xong' && status !== 'Chờ duyệt') overdue++;
     }
+    await expect(page.getByRole('button', { name: `Quá hạn ${overdue}`, exact: true })).toBeVisible();
     const ring = page.getByLabel(`${own.length} công việc`, { exact: true });
     await expect(ring).toBeVisible();
     for (const [status, count] of counts) {
       await expect(page.getByRole('button', { name: `${status} ${count}`, exact: true })).toBeVisible();
     }
     await expect(page.getByRole('button', { name: /^Đang mở khác/ })).toHaveCount(0);
-    return { counts, ring, total: own.length };
+    return { counts, overdue, ring, total: own.length };
   }
   try {
     await change('Chưa làm');
     await change('Vướng', blockedId);
+    await page.emulateMedia({ colorScheme: 'light' });
     await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Truy cập nhanh', exact: true })).toHaveCount(0);
-    const { counts, ring, total } = await check();
+    const { counts, overdue, ring, total } = await check();
     const position = (status: string) => {
       let offset = 0;
       for (const [key, count] of counts) {
@@ -81,6 +88,15 @@ test('Tình trạng công việc đếm đúng trạng thái, gồm Xong và kh�
     await expect(legend('Vướng')).toHaveAttribute('aria-expanded', 'false');
     await expect(legend('Chưa làm')).toHaveCSS('opacity', '1');
     await expect(sector('Chưa làm')).toHaveCSS('opacity', '1');
+    const overdueFilter = page.getByRole('button', { name: `Quá hạn ${overdue}`, exact: true });
+    await expect(overdueFilter).toHaveCSS('border-top-width', '0px');
+    await expect(overdueFilter.locator(':scope > div').first()).toHaveCSS('background-color', 'rgb(96, 65, 189)');
+    await expect(legend('Vướng').locator(':scope > div').first()).toHaveCSS('background-color', 'rgb(158, 52, 43)');
+    await overdueFilter.click();
+    await expect(overdueFilter).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible();
+    await expect(ring.getByText(String(total), { exact: true })).toBeVisible();
+    await overdueFilter.click();
     for (const status of [...taskStatuses, 'Trạng thái cũ', '']) {
       await change(status);
       await check();

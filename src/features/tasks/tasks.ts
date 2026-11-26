@@ -15,6 +15,7 @@ export const taskTitleMaxLength = 160;
 export type TaskAssignee = { email: string; name: string; canReview?: boolean; photoURL?: string | null };
 export type TaskAttachment = { id: string; name: string; type: string; size: number };
 export type AttachmentUpload = Pick<TaskAttachment, 'name' | 'type'> & { base64: string };
+export type TaskAttachmentMessage = { taskId: string; attachments: AttachmentUpload[]; message?: string };
 export type AssignmentProject = { id: string; name: string };
 export const taskPriorities = ['Cao', 'Trung bình', 'Thấp'] as const;
 export const taskRepeatOptions = ['Không lặp', 'Hằng tuần', 'Hằng tháng'] as const;
@@ -236,7 +237,7 @@ export async function saveProgress(task: Task, email: string, status: EditableSt
   });
 }
 
-export async function addTaskComment(taskId: string, email: string, message: string, replyTo?: TaskReplyTarget) {
+export async function addTaskComment(taskId: string, email: string, message: string) {
   if (pilotMode && !taskAssignmentEnabled) throw new Error('Bản pilot chỉ xem công việc.');
   const text = message.trim();
   if (!text || text.length > commentMaxLength) {
@@ -248,18 +249,12 @@ export async function addTaskComment(taskId: string, email: string, message: str
   await runTransaction(db, async transaction => {
     const snapshot = await transaction.get(ref);
     const task = snapshot.data() as Task | undefined;
-    if (!task || (task.assigneeEmail !== email && (!replyTo || task.assignedBy !== email))) {
+    if (!task || task.assigneeEmail !== email) {
       throw new Error('Bạn không còn quyền gửi trao đổi cho công việc này.');
     }
     if (task.status === 'Xong') throw new Error('Công việc đã xong và chỉ có thể xem chi tiết.');
     const comments = task.comments ?? [];
-    if (!replyTo) {
-      transaction.update(ref, { comments: [...comments, comment] });
-      return;
-    }
-    const index = findTaskReplyIndex(comments, replyTo);
-    if (index < 0) throw new Error('Trao đổi gốc không còn tồn tại.');
-    transaction.update(ref, { comments: [...comments, { ...comment, replyTo: { ...replyTo, index } }] });
+    transaction.update(ref, { comments: [...comments, comment] });
   });
 }
 
@@ -309,6 +304,10 @@ export const downloadTaskAttachment = pilotMode ? pilotDownload : httpsCallable<
   taskFunctions, 'downloadMobileTaskAttachment', { timeout: 45000 },
 );
 
-export const addTaskAttachments = pilotMode ? pilotAddAttachments : httpsCallable<{ taskId: string; attachments: AttachmentUpload[] }>(
+export const addTaskAttachments = pilotMode ? pilotAddAttachments : httpsCallable<TaskAttachmentMessage>(
   taskFunctions, 'addMobileTaskAttachments', { timeout: 90000 },
+);
+
+export const replyToTaskComment = httpsCallable<TaskAttachmentMessage & { replyTo: TaskReplyTarget }>(
+  taskFunctions, 'replyToMobileTaskComment', { timeout: 90000 },
 );

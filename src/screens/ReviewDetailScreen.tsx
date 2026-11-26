@@ -43,12 +43,15 @@ export function ReviewDetailScreen({ task, active, needsReviewer, onBack, onRevi
     try {
       await reviewTaskCompletion({ taskId: task.id, submission: submissionVersion(task), decision, rating, note });
       onReviewed();
-      showToast(decision === 'approve' ? 'Đã duyệt công việc.' : 'Đã trả lại công việc.');
+      showToast(decision === 'approve' ? `Đã duyệt công việc với mức đánh giá ${rating}.`
+        : 'Đã yêu cầu người thực hiện làm lại công việc.');
     } catch (err) {
       const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+      const fallback = decision === 'approve' ? 'Chưa duyệt được công việc. Kiểm tra kết nối hoặc quyền duyệt.'
+        : 'Chưa gửi được yêu cầu làm lại. Kiểm tra kết nối hoặc quyền duyệt.';
       showToast(err instanceof Error && (!code || code === 'functions/failed-precondition' || code === 'functions/invalid-argument' ||
         code === 'functions/permission-denied')
-        ? err.message : 'Chưa xử lý được công việc. Kiểm tra kết nối hoặc quyền duyệt.', 'error');
+        ? err.message : fallback, 'error');
     } finally {
       setBusy(null);
     }

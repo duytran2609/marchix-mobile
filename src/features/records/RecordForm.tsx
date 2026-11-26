@@ -7,6 +7,7 @@ import { PopupAction, PopupBody } from '../../components/PopupBody';
 import { KeyboardSafeAreaView } from '../../components/KeyboardViewport';
 import { Button } from '../../components/Button';
 import { DeleteIconButton } from '../../components/DeleteIconButton';
+import { DiscussionAttachment } from '../../components/Discussion';
 import { FieldLabel } from '../../components/FieldLabel';
 import { Dropdown } from '../../components/Dropdown';
 import { PopupHeader } from '../../components/PopupHeader';
@@ -213,7 +214,10 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
         <FieldLabel style={styles.label} required={(signing || issuing) && !existing.fileId}>Bản PDF (tối đa 5 MB)</FieldLabel>
         <Button label={attachment ? 'Chọn PDF khác' : 'Chọn PDF'} secondary disabled={!!busy} onPress={() => void pick()} />
       </>}
-      {attachment && (showPdfFileRow ? <View style={[popup.fileCard, popup.fileRow, { borderColor: colors.line }]}>
+      {attachment && (!existing ? <DiscussionAttachment file={attachment} detail={formatFileSize(attachment.size)}
+        openLabel={attachment.name} disabled={!!busy} onOpen={() => void previewPicked()}
+        action={<DeleteIconButton label={`Bỏ tệp ${attachment.name}`} disabled={!!busy} onPress={removePicked} />}
+      /> : showPdfFileRow ? <View style={[popup.fileCard, popup.fileRow, { borderColor: colors.line }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={attachment.name} disabled={!!busy}
           onPress={() => void previewPicked()}
           style={({ pressed }) => [popup.fileOpen, (pressed || !!busy) && styles.dimmed]}>
@@ -224,17 +228,12 @@ export function RecordForm({ direction, existing, action, names, email, isAdmin,
         </Pressable>
         <DeleteIconButton label={`Bỏ tệp ${attachment.name}`} disabled={!!busy} onPress={removePicked} />
       </View> : <>
-        <View style={existing ? undefined : [popup.fileCard, { borderColor: colors.line }]}>
-          <AttachmentLabel file={attachment}>
-            <Text style={[styles.body, styles.metadataValue]}>{attachment.name}</Text>
-            {!existing && <Text style={[styles.muted, styles.metadataValue]}>{formatFileSize(attachment.size)}</Text>}
-          </AttachmentLabel>
-        </View>
-        <View style={[styles.choices, !existing && popup.rightActions]}>
-          <Button label={existing ? 'Xem PDF vừa chọn' : 'Xem trước'} secondary disabled={!!busy}
-            onPress={() => void previewPicked()} />
-          <Button label={existing ? 'Bỏ tệp vừa chọn' : 'Bỏ tệp'} secondary={!!existing} danger={!existing} disabled={!!busy}
-            onPress={removePicked} />
+        <AttachmentLabel file={attachment}>
+          <Text style={[styles.body, styles.metadataValue]}>{attachment.name}</Text>
+        </AttachmentLabel>
+        <View style={styles.choices}>
+          <Button label="Xem PDF vừa chọn" secondary disabled={!!busy} onPress={() => void previewPicked()} />
+          <Button label="Bỏ tệp vừa chọn" secondary disabled={!!busy} onPress={removePicked} />
         </View>
       </>)}
     </>}

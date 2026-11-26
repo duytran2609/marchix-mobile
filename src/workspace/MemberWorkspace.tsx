@@ -10,6 +10,8 @@ import { notificationTaskTarget } from '../features/notifications/notifications'
 import type { WorkspaceNotification } from '../features/notifications/notifications';
 import { StartupReminder } from '../features/notifications/StartupReminder';
 import { useWorkspacePush } from '../features/notifications/workspacePush';
+import { useReminderSettings } from '../features/settings/reminderSettings';
+import { useWorkspaceTasks } from '../features/tasks/useWorkspaceTasks';
 import { WorkspaceDrawer } from '../navigation/WorkspaceDrawer';
 import { WorkspaceBottomNav } from '../navigation/WorkspaceBottomNav';
 import { WorkspaceNavigator } from '../navigation/WorkspaceNavigator';
@@ -17,6 +19,7 @@ import { maxPinnedTabs, usePinnedTabs, usePinningEnabled } from '../navigation/u
 import type { PinnableTab } from '../navigation/usePinnedTabs';
 import { workflowRouteForLink, workspaceTabForLink } from '../navigation/workspaceRoutes';
 import type { WorkspaceRoute, WorkspaceTab } from '../navigation/workspaceRoutes';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { auth } from '../services/firebase/firebase';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles } from '../theme/theme';
@@ -31,6 +34,8 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
   const styles = useStyles();
   const screenStyles = useScreenStyles();
   const showToast = useToast();
+  const reminders = useReminderSettings(email);
+  const taskFeed = useWorkspaceTasks(email);
   const pinnedTabs = usePinnedTabs(email);
   const pinning = usePinningEnabled(email);
   const pinningEnabled = pinning.ready && pinning.value;
@@ -106,7 +111,8 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
       return;
     }
     setShowAssignment(false);
-    setRoute({ screen: 'task-detail', task: 'id' in task ? { id: task.id, direct: true } : task });
+    setRoute({ screen: 'task-detail',
+      task: 'id' in task ? { id: task.id, direct: true, notice: { title: note.title, body: note.body } } : task });
   }
 
   async function logout() {
@@ -119,9 +125,11 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
     <>
       <View style={styles.workspaceHeader}>
         <WorkspaceHeader menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)}
-          inbox={{ email, onOpenNote: openNote }} />
+          inbox={{ email, onOpenNote: openNote, reminderWindow: reminders.window,
+            tasks: taskFeed.tasksComplete && !taskFeed.error ? taskFeed.tasks : null }} />
       </View>
-      <KeyboardScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled" contentContainerStyle={screenStyles.scroll}>
+      <KeyboardScrollView ref={scroll} scrollEnabled={!draggingTask} keyboardShouldPersistTaps="handled"
+        style={route.screen === 'cai-dat' && styles.hidden} contentContainerStyle={screenStyles.scroll}>
         <View style={[screenStyles.page, route.screen === 'cham-cong' && styles.attendancePage,
           route.screen === 'tong-quan' && styles.overviewPage]}>
           <WorkspaceNavigator email={email} name={name} photoURL={avatar} isAdmin={isAdmin} hasReviewGrant={hasReviewGrant}
@@ -129,11 +137,13 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
             canReadCash={canReadCash} canReviewCash={canReviewCash} canReviewRequests={canReviewRequests}
             canManageProjects={canManageProjects} canReadTeamPlans={canReadTeamPlans}
             canReadTeamKpi={canReadTeamKpi} canManageRecords={canManageRecords}
-            route={route} setRoute={setRoute} pinning={pinning}
+            route={route} setRoute={setRoute} reminders={reminders} taskFeed={taskFeed}
             showAssignment={showAssignment} setShowAssignment={setShowAssignment} onDragChange={setDraggingTask}
             onScrollTop={() => scroll.current?.scrollTo({ y: 0, animated: false })} />
         </View>
       </KeyboardScrollView>
+      {route.screen === 'cai-dat' && <SettingsScreen key={String(isAdmin)} reminders={reminders} pinning={pinning}
+        isAdmin={isAdmin} email={email} />}
       {pinningEnabled && (
         <WorkspaceBottomNav pins={pinnedTabs.value} activeTab={activeTab} isAdmin={isAdmin} onSelect={selectTab} />
       )}
@@ -151,6 +161,7 @@ export function MemberWorkspace({ email, name, photoURL, isAdmin, hasReviewGrant
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   attendancePage: { maxWidth: 1450 },
   overviewPage: { maxWidth: 1000 },
+  hidden: { display: 'none' },
   workspaceHeader: { paddingHorizontal: workspaceHeaderPadding, backgroundColor: colors.paper,
     borderBottomWidth: 1, borderBottomColor: colors.line },
 }));

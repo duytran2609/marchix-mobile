@@ -16,8 +16,9 @@ function visibleOffset(top: number, height: number, offset: number, viewportHeig
   return offset;
 }
 
-export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll, scrollEnabled, scrollEventThrottle, ...props }:
-  ScrollViewProps & { ref?: Ref<ScrollInstance> }) {
+export function KeyboardScrollView({
+  ref, children, onFocus, onLayout, onScroll, scrollEnabled, scrollEventThrottle, bottomObstruction = 0, ...props
+}: ScrollViewProps & { ref?: Ref<ScrollInstance>; bottomObstruction?: number }) {
   const scroll = useRef<ScrollInstance>(null);
   const frame = useRef<number>(0);
   const height = useRef(0);
@@ -48,14 +49,14 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
     const view = scroll.current;
     const viewport = view?.getBoundingClientRect();
     const button = anchor.getBoundingClientRect();
-    const room = viewport ? Math.min(space, viewport.height - button.height - 8) : 0;
-    if (!view || !viewport || room <= 0 || viewport.bottom - button.bottom >= room) {
+    const room = viewport ? Math.min(space, viewport.height - bottomObstruction - button.height - 8) : 0;
+    if (!view || !viewport || room <= 0 || viewport.bottom - bottomObstruction - button.bottom >= room) {
       tracking = true;
       updatePosition();
       return stopTracking;
     }
 
-    const needed = button.bottom + room - viewport.bottom;
+    const needed = button.bottom + room + bottomObstruction - viewport.bottom;
     const targetOffset = view.scrollTop + needed;
     const contentBottom = view.getInnerViewRef()?.getBoundingClientRect().bottom ?? viewport.bottom;
     const extra = Math.ceil(needed - Math.max(0, contentBottom - viewport.bottom));
@@ -76,7 +77,7 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
       stopTracking();
       if (extra > 0) setEndSpace(current => current === reservation ? null : current);
     };
-  }, []);
+  }, [bottomObstruction]);
 
   const revealInput = useCallback(() => {
     cancelAnimationFrame(frame.current);
@@ -90,7 +91,8 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
         if (!node || !(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) || !node.contains(input)) return;
         const field = input.getBoundingClientRect();
         const viewport = node.getBoundingClientRect();
-        const y = visibleOffset(field.top - viewport.top + node.scrollTop, field.height, node.scrollTop, node.clientHeight);
+        const y = visibleOffset(field.top - viewport.top + node.scrollTop, field.height, node.scrollTop,
+          Math.max(0, node.clientHeight - bottomObstruction));
         if (y !== node.scrollTop) node.scrollTop = y;
         return;
       }
@@ -100,11 +102,11 @@ export function KeyboardScrollView({ ref, children, onFocus, onLayout, onScroll,
       if (!input || !content || !height.current) return;
       input.measureLayout(content, (_, top, __, inputHeight) => {
         if (input !== TextInput.State.currentlyFocusedInput() || view !== scroll.current) return;
-        const y = visibleOffset(top, inputHeight, offset.current, height.current);
+        const y = visibleOffset(top, inputHeight, offset.current, Math.max(0, height.current - bottomObstruction));
         if (y !== offset.current) view.scrollTo({ y, animated: false });
       }, () => { /* The focused input can belong to a different scroll view or modal. */ });
     });
-  }, [scrollEnabled]);
+  }, [bottomObstruction, scrollEnabled]);
 
   useEffect(() => {
     const shown = Platform.OS === 'web' ? undefined : Keyboard.addListener('keyboardDidShow', revealInput);

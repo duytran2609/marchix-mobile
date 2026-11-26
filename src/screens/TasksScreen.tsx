@@ -94,7 +94,7 @@ export function TasksScreen({
               <Button label="Thử lại" secondary onPress={onRetry} />
             </View> : null}
             <DueTaskReminders tasks={tasks} email={email} window={reminderWindow} onOpen={onOpenTask} />
-            <TaskBoard tasks={tasks} member={{ email, name }} showTeamTasks={isAdmin} projects={projects}
+            <TaskBoard tasks={tasks} member={{ email, name }} showTeamTasks={isAdmin} showOverdueStat projects={projects}
               options={options} onOptionsChange={onOptionsChange} onDragChange={onDragChange}
               onOpen={onOpenTask} onDelete={taskAssignmentEnabled ? requestDelete : undefined} />
           </>}

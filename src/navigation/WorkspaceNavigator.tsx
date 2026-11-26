@@ -3,10 +3,9 @@ import type { Dispatch, SetStateAction } from 'react';
 import { ActivityIndicator } from 'react-native';
 import type { MemberSession } from '../features/auth/useSession';
 import { findNotificationTask } from '../features/notifications/notifications';
-import { useReminderSettings } from '../features/settings/reminderSettings';
+import type { useReminderSettings } from '../features/settings/reminderSettings';
 import { initialTaskBoardOptions } from '../features/tasks/TaskBoard';
-import { watchTasks } from '../features/tasks/tasks';
-import type { Task } from '../features/tasks/tasks';
+import type { useWorkspaceTasks } from '../features/tasks/useWorkspaceTasks';
 import { usePlanningDrafts } from '../features/weekly-plan/usePlanningDrafts';
 import { AttendanceScreen } from '../screens/AttendanceScreen';
 import { CashScreen } from '../screens/CashScreen';
@@ -17,42 +16,32 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { ProjectsScreen } from '../screens/ProjectsScreen';
 import { RequestsScreen } from '../screens/RequestsScreen';
 import { ReviewQueueScreen } from '../screens/ReviewQueueScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
 import { LinkedTaskDetail, TaskDetailPopup, TaskDetailScreen, TaskUnavailable } from '../screens/TaskDetailScreen';
 import { TasksScreen } from '../screens/TasksScreen';
 import { RecordsScreen } from '../screens/RecordsScreen';
 import { WeeklyPlanScreen } from '../screens/WeeklyPlanScreen';
 import { useTheme } from '../theme/theme';
-import type { usePinningEnabled } from './usePinnedTabs';
 import type { WorkspaceRoute } from './workspaceRoutes';
 
 export function WorkspaceNavigator({
   email, name, photoURL, isAdmin, hasReviewGrant, canReadCash, canReviewCash, canReviewRequests, accountCreatedAt,
   canManageProjects, canReadTeamPlans, canReadTeamKpi, canManageRecords,
-  route, setRoute, pinning, showAssignment, setShowAssignment, onDragChange, onScrollTop,
+  route, setRoute, reminders, taskFeed, showAssignment, setShowAssignment, onDragChange, onScrollTop,
 }: Omit<MemberSession, 'kind'> & {
   route: WorkspaceRoute;
   setRoute: Dispatch<SetStateAction<WorkspaceRoute>>;
-  pinning: ReturnType<typeof usePinningEnabled>;
+  reminders: ReturnType<typeof useReminderSettings>;
+  taskFeed: ReturnType<typeof useWorkspaceTasks>;
   showAssignment: boolean;
   setShowAssignment: (open: boolean) => void;
   onDragChange: (dragging: boolean) => void;
   onScrollTop: () => void;
 }) {
   const { colors } = useTheme();
-  const reminders = useReminderSettings(email);
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [tasksComplete, setTasksComplete] = useState(false);
-  const [error, setError] = useState(false);
-  const [retry, setRetry] = useState(0);
+  const { tasks, tasksComplete, error, sentError, retryTasks } = taskFeed;
   const [options, setOptions] = useState(initialTaskBoardOptions);
   const [planningWeek, setPlanningWeek] = useState<string>();
   const planningDrafts = usePlanningDrafts(email);
-  const [sentError, setSentError] = useState(false);
-  useEffect(() => watchTasks(email, (items, complete) => {
-    setTasks(items);
-    setTasksComplete(complete);
-  }, () => setError(true), () => setSentError(true)), [email, retry]);
 
   const selected = route.screen === 'task-detail' ? route.task : undefined;
   const matchedTaskId = selected && 'title' in selected && tasksComplete && tasks && !error
@@ -64,14 +53,6 @@ export function WorkspaceNavigator({
         : current);
     }
   }, [matchedTaskId, selected, setRoute]);
-
-  function retryTasks() {
-    setTasks(null);
-    setTasksComplete(false);
-    setError(false);
-    setSentError(false);
-    setRetry(value => value + 1);
-  }
 
   function openReviewQueue() {
     setRoute({ screen: 'cho-duyet' });
@@ -112,8 +93,7 @@ export function WorkspaceNavigator({
     selectedWeek={planningWeek} onSelectWeek={setPlanningWeek}
     draftStorage={planningDrafts}
     tasksError={error} onRetryTasks={retryTasks} />;
-  if (route.screen === 'cai-dat') return <SettingsScreen key={String(isAdmin)} reminders={reminders} pinning={pinning}
-    isAdmin={isAdmin} email={email} onScrollTop={onScrollTop} />;
+  if (route.screen === 'cai-dat') return null;
   if (route.screen === 'van-thu') return <RecordsScreen key={JSON.stringify([email, canManageRecords])}
     email={email} canManageRecords={canManageRecords} recordId={route.recordId}
     onSelect={recordId => setRoute({ screen: 'van-thu', recordId })} />;
@@ -158,8 +138,8 @@ export function WorkspaceNavigator({
       }
       return <ActivityIndicator accessibilityLabel="Đang tải công việc" color={colors.accent} />;
     }
-    if ('direct' in selected) return <LinkedTaskDetail key={selected.id} id={selected.id} email={email} name={name}
-      onBack={onBack} backLabel={backTo === 'cho-duyet' ? 'Phê duyệt' : backTo ? 'Tổng quan' : undefined} />;
+    if (selected.direct) return <LinkedTaskDetail key={selected.id} id={selected.id} email={email} name={name}
+      onBack={onBack} notice={selected.notice} backLabel={backTo === 'cho-duyet' ? 'Phê duyệt' : backTo ? 'Tổng quan' : undefined} />;
     const liveTask = tasks?.find(task => task.id === selected.id);
     if (liveTask && !error) return <TaskDetailScreen key={liveTask.id} liveTask={liveTask} email={email} name={name} onBack={onBack} />;
   }

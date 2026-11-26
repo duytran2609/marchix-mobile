@@ -2,7 +2,7 @@ import { devices, expect } from '@playwright/test';
 import { test } from './helpers/startupReminder';
 import { shiftDay, todayInVietnam } from '../src/features/tasks/taskDates';
 
-test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium' });
+test.use({ ...devices['iPhone 13'], defaultBrowserType: 'chromium', viewport: { width: 320, height: 720 } });
 
 test('Việc hàng ngày tự cập nhật từ chấm công, thông báo và các khoản cần xử lý', async ({ page, request }) => {
   const host = process.env.EXPO_PUBLIC_EMULATOR_HOST || '127.0.0.1';
@@ -60,9 +60,18 @@ test('Việc hàng ngày tự cập nhật từ chấm công, thông báo và c�
     const item = (title: string, complete: boolean) =>
       card.getByRole('button', { name: new RegExp(`^${title}\\. ${complete ? 'Đã' : 'Chưa'} hoàn thành`) });
     await expect(card.getByRole('textbox')).toHaveCount(0);
-    await expect(card.getByText('Hôm nay đã hoàn thành 0/5 việc')).toBeVisible();
-    await expect(card.getByText('Còn 1 thông báo chưa đọc ở chuông Thông báo')).toBeVisible();
-    await expect(card.getByText('Còn 1 khoản cần xử lý')).toBeVisible();
+    const progress = card.getByRole('progressbar', { name: 'Công việc hàng ngày đã hoàn thành' });
+    await expect(progress).toHaveAttribute('aria-valuetext', '0/5 việc');
+    expect(await card.evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(320);
+    const [checkIn, checkOut] = await Promise.all([
+      item('Chấm công vào', false).boundingBox(), item('Chấm công ra', false).boundingBox(),
+    ]);
+    expect(checkIn).not.toBeNull();
+    expect(checkOut).not.toBeNull();
+    expect(checkIn?.y).toBe(checkOut?.y);
+    await expect(card.getByLabel(/^Đọc thông báo vận hành\. Chưa hoàn thành\. 1 mục cần xử lý$/)).toContainText('1');
+    await expect(card.getByRole('button', { name: /^Xử lý thu chi cần duyệt hoặc đến hạn\. Chưa hoàn thành\. 1 mục cần xử lý$/ }))
+      .toContainText('1');
 
     await update(attendance, { email: stringify(email), name: stringify('Quản trị demo'),
       date: stringify(day), inTs: { timestampValue: `${day}T01:00:00Z` } });
@@ -77,7 +86,7 @@ test('Việc hàng ngày tự cập nhật từ chấm công, thông báo và c�
     await expect(item('Xử lý đơn từ chờ duyệt', true)).toContainText('✓');
     await update(cashPath, { status: stringify('Đã chi') });
     await expect(item('Xử lý thu chi cần duyệt hoặc đến hạn', true)).toContainText('✓');
-    await expect(card.getByText('Hôm nay đã hoàn thành 5/5 việc')).toBeVisible();
+    await expect(progress).toHaveAttribute('aria-valuetext', '5/5 việc');
 
     const midnight = Date.parse(`${tomorrow}T00:00:00+07:00`);
     await page.clock.fastForward(midnight + 1000 - await page.evaluate(() => Date.now()));

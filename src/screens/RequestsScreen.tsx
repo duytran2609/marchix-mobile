@@ -20,7 +20,8 @@ import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteIconButton } from '../components/DeleteIconButton';
 import { PopupHeader } from '../components/PopupHeader';
-import { useToast } from '../components/Toast';
+import { ToastLayer, useToast } from '../components/Toast';
+import { workflowWriteError } from '../utils/workflowWriteError';
 import { watchMemberDirectory } from '../features/auth/memberDirectory';
 import type { DirectoryMember as Member } from '../features/auth/memberDirectory';
 import { displayDate, vnd } from '../features/cash/cash';
@@ -290,25 +291,36 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     if (busy) return;
     setBusy(true);
     setError('');
+    let writing = false;
     try {
-      if (action === 'reject' && !reply.trim()) throw new Error('Nhập lý do từ chối.');
+      if (action === 'reject' && !reply.trim()) throw new Error('Nhập lý do từ chối rồi bấm Từ chối lại.');
       if ((action === 'route' || (!row && approver)) &&
           (directoryState !== 'ready' || !approvers.some(member => member.email === approver))) {
         throw new Error('Chọn người có quyền duyệt đơn.');
       }
-      if (!row) await createRequest(fields(), approver, access.email);
-      else await changeRequest(row, access, action, {
-        fields: action === 'edit' ? fields() : undefined,
+      const draft = !row || action === 'edit' ? fields() : undefined;
+      writing = true;
+      if (row) await changeRequest(row, access, action, {
+        fields: draft,
         value: action === 'route' ? approver : reply.trim(), creatorName: memberName(row.createdBy),
       });
-      const messages = { edit: row ? 'Đã lưu đơn.' : 'Đã tạo đơn.', route: 'Đã lưu người duyệt.',
-        approve: row?.type === 'Tạm ứng lương' ? 'Đã duyệt đơn và tạo đề nghị chi.' : 'Đã duyệt đơn.',
-        reject: 'Đã từ chối đơn.' };
+      else if (draft) await createRequest(draft, approver, access.email);
+      const messages = { edit: row ? 'Đã lưu thay đổi của đơn.' : 'Đã gửi đơn. Đơn đang chờ duyệt.',
+        route: 'Đã chỉ định người duyệt đơn.',
+        approve: row?.type === 'Tạm ứng lương' ? 'Đã duyệt đơn tạm ứng và tạo đề nghị chi chờ duyệt.' : 'Đã duyệt đơn.',
+        reject: 'Đã từ chối đơn và lưu lý do.' };
       toast(messages[action]);
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error && !('code' in cause) ? cause.message :
-        'Không thể lưu thay đổi. Kiểm tra kết nối, quyền xử lý và thử lại.');
+      if (!writing) {
+        setError(cause instanceof Error ? cause.message : 'Kiểm tra thông tin trên đơn rồi thử lại.');
+      } else {
+        const messages = { edit: row ? 'Chưa lưu được thay đổi của đơn.' : 'Chưa xác nhận được đơn đã gửi.',
+          route: 'Chưa chỉ định được người duyệt đơn.', approve: 'Chưa duyệt được đơn.', reject: 'Chưa từ chối được đơn.' };
+        toast(workflowWriteError(cause, messages[action], row ? 'đơn' : 'danh sách đơn', row
+          ? 'Kiểm tra kết nối và trạng thái đơn trước khi thử lại.'
+          : 'Kiểm tra kết nối và danh sách đơn trước khi gửi lại.'), 'error');
+      }
     } finally {
       setBusy(false);
     }
@@ -488,6 +500,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
           })}
         </View>
       </CalendarDialog>}
+      <ToastLayer safeAreaApplied />
     </KeyboardSafeAreaView>
   </Modal>;
 }

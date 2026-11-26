@@ -2,6 +2,7 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { Bytes } from 'firebase/firestore';
 import { Platform } from 'react-native';
+import type { AttachmentFile } from '../../utils/attachmentFile';
 import { downloadTaskAttachment } from './tasks';
 import type { AttachmentUpload, TaskAttachment } from './tasks';
 
@@ -12,6 +13,12 @@ const binaryType = 'application/octet-stream';
 const mediaType = /^[\w.+-]+\/[\w.+-]+$/;
 
 export type PickedAttachment = Pick<TaskAttachment, 'name' | 'type' | 'size'> & { read: () => Promise<string> };
+
+export async function readPickedAttachment({ name, type, size, read }: PickedAttachment): Promise<AttachmentFile> {
+  const bytes = Bytes.fromBase64String(await read()).toUint8Array();
+  if (bytes.length !== size) throw new Error('Kích thước tệp đã thay đổi.');
+  return { name, type, bytes };
+}
 
 export async function pickTaskAttachments(options: { multiple?: boolean; type?: string | string[] } = {}): Promise<PickedAttachment[]> {
   const result = await getDocumentAsync({ multiple: true, copyToCacheDirectory: true, base64: false, ...options });

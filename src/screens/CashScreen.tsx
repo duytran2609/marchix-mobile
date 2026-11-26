@@ -9,7 +9,10 @@ import { TextInput } from '../components/TextInput';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AttachmentLabel } from '../components/AttachmentLabel';
+import { AttachmentPreview } from '../components/AttachmentPreview';
 import { ClickableCardHeader } from '../components/CardChevron';
+import { DeleteIconButton } from '../components/DeleteIconButton';
+import { DiscussionAttachment } from '../components/Discussion';
 import { PageHeader } from '../components/PageHeader';
 import { Dropdown } from '../components/Dropdown';
 import { Button } from '../components/Button';
@@ -17,7 +20,8 @@ import { FieldLabel } from '../components/FieldLabel';
 import { FilePickerButton } from '../components/FilePickerButton';
 import { PopupHeader } from '../components/PopupHeader';
 import { SearchableChoiceDropdown } from '../components/SearchableChoiceList';
-import { useToast } from '../components/Toast';
+import { ToastLayer, useToast } from '../components/Toast';
+import { workflowWriteError } from '../utils/workflowWriteError';
 import { canAct, cashStatus, cashStatuses, cashTotals, categories, changeCash, createCash, displayDate,
   expenseLimit, parties, verifiedCash, vnd, watchCash, watchCashApprovers } from '../features/cash/cash';
 import type { Cash, CashAccess, CashAction, CashType } from '../features/cash/cash';
@@ -27,12 +31,13 @@ import { CashProofs } from '../features/cash/CashProofs';
 import type { ProjectExpenseSeed } from '../features/projects/financeStore';
 import { projectExpenseCategories } from '../features/projects/projectExpenseCategories';
 import { watchProjects, type Project } from '../features/projects/projects';
-import { formatFileSize, pickTaskAttachments, type PickedAttachment } from '../features/tasks/taskAttachments';
+import { formatFileSize, pickTaskAttachments, readPickedAttachment, type PickedAttachment } from '../features/tasks/taskAttachments';
 import { DateCalendarField } from '../features/tasks/CalendarDialog';
 import { todayInVietnam } from '../features/tasks/taskDates';
 import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { formatMonthLabel, formatVietnamDateTime } from '../utils/dateTime';
+import type { AttachmentFile } from '../utils/attachmentFile';
 
 type Option = { id: string; name: string };
 const options = (values: readonly string[]) => values.map(value => ({ id: value, name: value }));
@@ -77,6 +82,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
 }) {
   const styles = useScreenStyles();
   const local = useLocalStyles();
+  const toast = useToast();
   const [values, setValues] = useState(() => ({
     date: row?.date || todayInVietnam(), amount: row ? String(row.amount) : seed?.amount ? String(seed.amount) : '', dueDate: row?.dueDate || '',
     projectId: row?.projectId || seed?.projectId || '', note: row?.note || seed?.name || '', category: row?.category || seed?.category || '',
@@ -93,6 +99,9 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<PickedAttachment[]>([]);
   const [picking, setPicking] = useState(false);
+  const [opening, setOpening] = useState<PickedAttachment>();
+  const [preview, setPreview] = useState<AttachmentFile>();
+  const attachmentBusy = busy || picking || !!opening;
   const formLock = useRef(false);
   const lock = operationLock ?? formLock;
   const set = (key: keyof typeof values) => (value: string) => setValues(prev => ({ ...prev, [key]: value }));
@@ -121,6 +130,21 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
     }
   }
 
+  async function previewPicked(file: PickedAttachment) {
+    if (lock.current) return;
+    lock.current = true;
+    setOpening(file);
+    setError('');
+    try {
+      setPreview(await readPickedAttachment(file));
+    } catch {
+      setError('Không mở được chứng từ vừa chọn. Vui lòng chọn lại.');
+    } finally {
+      lock.current = false;
+      setOpening(undefined);
+    }
+  }
+
   async function save() {
     if (lock.current) return;
     setError('');
@@ -143,7 +167,10 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
       onSaved(row?.id ?? await createCash(fields, approver, access.email, attachments,
         seed && !seed.refund ? { expenseProfile: expenseProfile === 'fnb' ? 'fnb' : 'project' } : undefined), fields.date);
     } catch (cause) {
-      setError(writeError(cause));
+      const summary = row ? `Chưa lưu được thay đổi của khoản ${type}.` : `Chưa xác nhận được đề nghị ${type} đã gửi.`;
+      toast(workflowWriteError(cause, summary, row ? `khoản ${type}` : 'sổ thu chi', row
+        ? 'Kiểm tra kết nối và trạng thái khoản này trước khi thử lại.'
+        : 'Kiểm tra kết nối và sổ thu chi trước khi gửi lại.'), 'error');
     } finally {
       lock.current = false;
       setBusy(false);
@@ -191,18 +218,23 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
       {row && cashFileList(row.files).length > 0 && <CashProofs cashId={row.id} files={cashFileList(row.files)} />}
       <View style={local.field}>
         <Text style={styles.label}>Đính kèm chứng từ</Text>
-        <FilePickerButton accessibilityLabel="Đính kèm chứng từ" disabled={busy} picking={picking}
+        <FilePickerButton accessibilityLabel="Đính kèm chứng từ" disabled={busy || !!opening} picking={picking}
           onPress={() => void pick()} hint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng." />
       </View>
-      {picked.map((file, index) => <View key={index} style={styles.detailRow}>
+      {picked.map((file, index) => row ? <View key={index} style={styles.detailRow}>
         <AttachmentLabel file={file}><Text style={[styles.body, styles.metadataValue]}>{file.name} · {formatFileSize(file.size)}</Text></AttachmentLabel>
         <Button label={`Bỏ ${file.name}`} secondary disabled={busy || picking}
           onPress={() => setPicked(current => current.filter((_, i) => i !== index))} />
-      </View>)}
+      </View> : <DiscussionAttachment key={index} file={file}
+        detail={opening === file ? 'Đang mở…' : formatFileSize(file.size)}
+        openLabel={file.name} disabled={attachmentBusy} onOpen={() => void previewPicked(file)}
+        action={<DeleteIconButton label={`Bỏ tệp ${file.name}`} disabled={attachmentBusy}
+          onPress={() => setPicked(current => current.filter(candidate => candidate !== file))} />}
+      />)}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
   </>;
   const saveAction = <PopupAction label={busy ? 'Đang lưu…' : row ? 'Lưu thay đổi' : 'Gửi khoản ' + type}
-    onPress={() => void save()} disabled={busy || picking} />;
+    onPress={() => void save()} disabled={attachmentBusy} />;
   if (row) return <PopupBody footer={<>
     {saveAction}
     {!projectExpenseRequest && <PopupAction label="Quay lại" secondary onPress={onBack} disabled={busy || picking} />}
@@ -214,28 +246,26 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
     </View>
   </PopupBody>;
 
-  const close = () => { if (!lock.current) onBack(); };
+  const close = () => {
+    if (preview) setPreview(undefined);
+    else if (!lock.current) onBack();
+  };
   return <Modal transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
     <SafeAreaView style={local.formOverlay}>
       <KeyboardViewport style={local.formKeyboard}>
-        <View style={[styles.panel, local.formPanel]}>
-          <PopupHeader title={seed ? refund ? 'Đề nghị thu hoàn dự án' : 'Đề nghị chi dự án' : 'Tạo đề nghị ' + type}
-            closeLabel="Đóng đề nghị" onClose={close} disabled={busy || picking} inset={false} />
-          <PopupBody inset={false} contentContainerStyle={local.formBody} footer={saveAction}>
-            {fields}
-          </PopupBody>
+        <View style={[styles.panel, local.formPanel, preview && local.formPreview]}>
+          {preview ? <AttachmentPreview embedded downloadable={false} file={preview} onClose={close} /> : <>
+            <PopupHeader title={seed ? refund ? 'Đề nghị thu hoàn dự án' : 'Đề nghị chi dự án' : 'Tạo đề nghị ' + type}
+              closeLabel="Đóng đề nghị" onClose={close} disabled={attachmentBusy} inset={false} />
+            <PopupBody inset={false} contentContainerStyle={local.formBody} footer={saveAction}>
+              {fields}
+            </PopupBody>
+          </>}
         </View>
       </KeyboardViewport>
+      <ToastLayer safeAreaApplied />
     </SafeAreaView>
   </Modal>;
-}
-
-function writeError(cause: unknown) {
-  if (cause && typeof cause === 'object' && 'code' in cause) {
-    if (cause.code === 'permission-denied') return 'Không thể lưu với quyền hiện tại. Kiểm tra quyền hoặc mở lại hồ sơ.';
-    return 'Không lưu được khoản thu chi. Kiểm tra kết nối và thử lại.';
-  }
-  return cause instanceof Error ? cause.message : 'Không lưu được khoản thu chi.';
 }
 
 function CashDetail({ row, access, approvers, project, operationLock, notice, onEdit }: {
@@ -257,20 +287,35 @@ function CashDetail({ row, access, approvers, project, operationLock, notice, on
   const can = (action: CashAction) => canAct(action, row, access);
   const eligibleApprovers = approvers.filter(option => option.id !== row.createdBy);
   const files = cashFileList(row.files);
-  async function handle(action: CashAction, raw = '') {
+  async function handle(action: Exclude<CashAction, 'edit'>, raw = '') {
     if (lock.current) return;
     const value = raw.trim();
     setError('');
-    if (action === 'reject' && !value) return setError('Nhập lý do từ chối.');
-    if (action === 'record' && !value) return setError('Nhập mã chứng từ hoặc tham chiếu giao dịch.');
+    if (action === 'reject' && !value) return setError('Nhập lý do từ chối rồi bấm Từ chối lại.');
+    if (action === 'record' && !value) return setError('Nhập mã chứng từ hoặc tham chiếu giao dịch rồi xác nhận lại.');
     if (action === 'record' && !confirm) { setConfirm(true); return; }
     lock.current = true;
     setBusy(true);
     try {
       await changeCash(row, action, access, value);
       setConfirm(false);
-      toast('Đã cập nhật khoản thu chi.', 'success');
-    } catch (cause) { setError(writeError(cause)); }
+      const messages = {
+        route: `Đã chỉ định người duyệt khoản ${row.type}.`,
+        approve: `Đã duyệt khoản ${row.type}. Đang chờ xác nhận đã ${row.type}.`,
+        reject: `Đã từ chối khoản ${row.type} và lưu lý do.`,
+        record: `Đã xác nhận giao dịch ${row.type}.`,
+        requeue: `Đã đưa khoản ${row.type} về chờ duyệt.`,
+      };
+      toast(messages[action]);
+    } catch (cause) {
+      const messages = {
+        route: `Chưa chỉ định được người duyệt khoản ${row.type}.`, approve: `Chưa duyệt được khoản ${row.type}.`,
+        reject: `Chưa từ chối được khoản ${row.type}.`, record: `Chưa xác nhận được giao dịch ${row.type}.`,
+        requeue: `Chưa đưa được khoản ${row.type} về chờ duyệt.`,
+      };
+      toast(workflowWriteError(cause, messages[action], `khoản ${row.type}`,
+        'Kiểm tra kết nối và trạng thái khoản này trước khi thử lại.'), 'error');
+    }
     finally { lock.current = false; setBusy(false); }
   }
   const fields = [
@@ -400,7 +445,8 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
         if (!row) {
           setAwaiting(id); setMonth(date.slice(0, 7)); setType(''); setStatus(''); setProject('');
         }
-        setSelected(id); setEditor(undefined); toast('Đã lưu khoản thu chi.', 'success');
+        setSelected(id); setEditor(undefined);
+        toast(row ? `Đã lưu thay đổi của khoản ${kind}.` : `Đã gửi đề nghị ${kind}. Đề nghị đang chờ duyệt.`);
       }} />;
   }
   const showDetail = !!selected && (!error || !!onBackToReview);
@@ -518,6 +564,7 @@ export function CashScreen({ access, initialCashId, projectExpense, onBackToRevi
               {detail}
             </View>
           </KeyboardViewport>
+          <ToastLayer safeAreaApplied />
         </SafeAreaView>
     </Modal>}
   </>;
@@ -529,6 +576,7 @@ const useLocalStyles = createThemedStyles(colors => StyleSheet.create({
   formOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   formKeyboard: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   formPanel: { width: '100%', maxWidth: 560, maxHeight: '100%', flexShrink: 1 },
+  formPreview: { height: '100%', padding: 0, overflow: 'hidden' },
   formBody: { gap: 12, paddingBottom: 2 },
   detailPopup: { backgroundColor: colors.paper, borderRadius: 16, overflow: 'hidden' },
   detailActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },

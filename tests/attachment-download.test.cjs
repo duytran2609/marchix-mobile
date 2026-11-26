@@ -9,58 +9,90 @@ const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, verbatimModuleSyntax: false },
 });
 
-function androidSave({ createFile, unlink, write, savedBytes }) {
+const cache = 'file:///cache';
+const uri = 'content://media/external_primary/downloads/1';
+const bytes = Uint8Array.of(0x50, 0x4b, 3, 4);
+const file = { name: 'Mô tả / hệ thống.docx', type: 'application/octet-stream', bytes };
+const docxType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function androidSave({ createFile, copy, stat, unlink, pickDirectory, write }) {
   class File {
-    constructor(uri) {
-      this.uri = uri;
+    constructor(folder, name) {
+      this.uri = `${folder.uri}/${name}`;
     }
     write(bytes) {
       return write(this.uri, bytes);
     }
-    async bytes() {
-      return savedBytes;
-    }
   }
   const mocks = {
     'react-native': { Platform: { OS: 'android', Version: 30 } },
-    'expo-file-system': { File },
+    'expo-file-system': { Directory: { pickDirectoryAsync: pickDirectory }, File, Paths: { cache: { uri: cache } } },
     'expo-sharing': {},
-    'react-native-blob-util': { media: { createFile }, fs: { unlink } },
+    'react-native-blob-util': { media: { createFile }, fs: { cp: copy, stat, unlink } },
   };
   const exports = {};
-  vm.runInNewContext(outputText, { exports, require: name => mocks[name] });
+  vm.runInNewContext(outputText, { exports, Error, require: name => mocks[name] });
   return exports.saveAttachment;
 }
 
-const uri = 'content://media/external/downloads/1';
-const bytes = Uint8Array.of(1, 2, 3);
-const file = { name: 'Phiếu / thu.csv', type: 'application/octet-stream', bytes };
-
-test('Android creates a user-visible download and writes the original bytes', async () => {
+test('Android copies a DOCX into Downloads using its original bytes and inferred type', async () => {
+  let cachedFile;
+  const removed = [];
   const save = androidSave({
     async createFile(descriptor, collection) {
-      assert.equal(descriptor.name, 'Phiếu _ thu.csv');
-      assert.equal(descriptor.mimeType, 'text/csv');
+      assert.equal(descriptor.name, 'Mô tả _ hệ thống.docx');
+      assert.equal(descriptor.mimeType, docxType);
       assert.equal(collection, 'Download');
       return uri;
     },
     async write(destination, data) {
-      assert.equal(destination, uri);
+      assert.match(destination, /^file:\/\/\/cache\/attachment-/);
       assert.equal(data, bytes);
+      cachedFile = destination;
     },
-    savedBytes: bytes,
+    async copy(source, destination) {
+      assert.equal(destination, uri);
+      assert.equal(source, cachedFile);
+    },
+    async stat(destination) {
+      assert.equal(destination, uri);
+      return { size: bytes.length };
+    },
+    async unlink(destination) { removed.push(destination); },
   });
   assert.equal(await save(file), 'Đã lưu tệp vào thư mục Tải xuống.');
+  assert.deepEqual(removed, [cachedFile]);
 });
 
-test('Android removes an incomplete download and reports a save failure', async () => {
+test('Android removes an incomplete download and saves to the folder the user selects', async () => {
   const removed = [];
   const save = androidSave({
     async createFile() { return uri; },
     async write() {},
+    async copy() {},
+    async stat() { return { size: 1 }; },
     async unlink(destination) { removed.push(destination); },
-    savedBytes: bytes.subarray(0, 1),
+    async pickDirectory() {
+      assert.equal(removed[0], uri);
+      assert.match(removed[1], /^file:\/\/\/cache\/attachment-/);
+      return { createFile(name, type) {
+        assert.equal(name, 'Mô tả _ hệ thống.docx');
+        assert.equal(type, docxType);
+        return { async write(data) { assert.equal(data, bytes); } };
+      } };
+    },
   });
-  await assert.rejects(save(file), /không đủ dữ liệu/);
-  assert.deepEqual(removed, [uri]);
+  assert.equal(await save(file), 'Đã lưu tệp vào thư mục đã chọn.');
+});
+
+test('Android canceling the folder picker leaves the attachment unsaved', async () => {
+  const save = androidSave({
+    async createFile() { throw new Error('Downloads is unavailable'); },
+    async write() {},
+    async unlink() {},
+    async pickDirectory() {
+      throw Object.assign(new Error('Canceled'), { code: 'ERR_PICKER_CANCELLED' });
+    },
+  });
+  assert.equal(await save(file), undefined);
 });

@@ -1,16 +1,18 @@
 import Constants from 'expo-constants';
-import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import type { ComponentRef } from 'react';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { TextInput } from '../components/TextInput';
 import { useToast } from '../components/Toast';
 import { AdminSettings } from '../features/settings/AdminSettings';
+import { SettingsPage } from '../features/settings/SettingsPage';
 import { SettingsSwitch } from '../features/settings/SettingsSwitch';
 import { maxReminderDays, parseReminderDays, reminderOptions } from '../features/settings/reminderSettings';
 import type { useReminderSettings } from '../features/settings/reminderSettings';
 import type { usePinningEnabled } from '../navigation/usePinnedTabs';
-import { useScreenStyles } from '../theme/screenStyles';
+import { useInformationStyles, useScreenStyles } from '../theme/screenStyles';
 import { useTheme } from '../theme/theme';
 import type { ThemeMode } from '../theme/theme';
 
@@ -30,6 +32,21 @@ const adminTabs = [
 ] as const;
 const allTabs = [generalTab, ...adminTabs] as const;
 const reminderChoices = [...reminderOptions, { value: 'custom', label: 'Tùy chỉnh' }] as const;
+
+function operatingSystem() {
+  if (Platform.OS === 'android') return 'Android';
+  if (Platform.OS === 'ios') return 'iOS';
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+    const { userAgent, maxTouchPoints } = navigator;
+    if (/Android/i.test(userAgent)) return 'Android';
+    if (/iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && maxTouchPoints > 1)) return 'iOS';
+    if (/Windows/i.test(userAgent)) return 'Windows';
+    if (/Macintosh/i.test(userAgent)) return 'macOS';
+    if (/CrOS/i.test(userAgent)) return 'ChromeOS';
+    if (/Linux/i.test(userAgent)) return 'Linux';
+  }
+  return 'Chưa xác định';
+}
 
 function Options<T extends string>({ label, options, value, disabled, onSelect }: {
   label: string;
@@ -80,13 +97,21 @@ function ReminderTimingOptions({ reminders }: { reminders: ReturnType<typeof use
   const days = parseReminderDays(input.trim());
   const canSave = reminders.ready && days !== null && days > 0 && days !== reminders.timing;
 
-  async function saveCustom() {
-    if (!canSave) return;
+  async function saveTiming(timing: number) {
     try {
-      await reminders.setTiming(days);
-      setDraft(current => current === draft ? null : current);
+      await reminders.setTiming(timing);
+      showToast(timing === 0 ? 'Đã đặt nhắc việc vào đúng ngày đến hạn.' : `Đã đặt nhắc việc trước hạn ${timing} ngày.`);
+      return true;
     } catch {
       showToast('Chưa lưu được thời điểm nhắc hạn. Vui lòng thử lại.', 'error');
+      return false;
+    }
+  }
+
+  async function saveCustom() {
+    if (!canSave) return;
+    if (await saveTiming(days)) {
+      setDraft(current => current === draft ? null : current);
     }
   }
 
@@ -99,7 +124,8 @@ function ReminderTimingOptions({ reminders }: { reminders: ReturnType<typeof use
             return;
           }
           setDraft(null);
-          await reminders.setTiming(Number(value));
+          const timing = Number(value);
+          if (timing !== reminders.timing) await saveTiming(timing);
         }} />
       {choice === 'custom' && (
         <View style={styles.stack}>
@@ -116,16 +142,17 @@ function ReminderTimingOptions({ reminders }: { reminders: ReturnType<typeof use
   );
 }
 
-export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop }: {
+export function SettingsScreen({ reminders, pinning, isAdmin, email }: {
   reminders: ReturnType<typeof useReminderSettings>;
   pinning: ReturnType<typeof usePinningEnabled>;
   isAdmin: boolean;
   email: string;
-  onScrollTop: () => void;
 }) {
   const theme = useTheme();
   const styles = useScreenStyles();
+  const information = useInformationStyles();
   const showToast = useToast();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [selectedTab, setSelectedTab] = useState<typeof allTabs[number]['id']>(generalTab.id);
   const adminTab = isAdmin ? adminTabs.find(tab => tab.id === selectedTab) : undefined;
   const activeTab = adminTab ?? generalTab;
@@ -135,8 +162,12 @@ export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop
       showToast('Không mở được trang quản lý Marchix. Vui lòng thử lại.', 'error'));
   }
 
-  return (
-    <View style={styles.stack}>
+  function scrollTop() {
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  const header = (
+    <>
       <PageHeader title="Cài đặt" />
       <View accessibilityRole="tablist" accessibilityLabel="Nhóm cài đặt"
         style={[tabStyles.row, { backgroundColor: theme.colors.surfaceMuted }]}>
@@ -144,7 +175,7 @@ export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop
           const selected = tab.id === activeTab.id;
           return (
             <Pressable key={tab.id} accessibilityRole="tab" aria-selected={selected}
-              onPress={() => { setSelectedTab(tab.id); onScrollTop(); }}
+              onPress={() => { setSelectedTab(tab.id); scrollTop(); }}
               style={[tabStyles.tab, selected && { backgroundColor: theme.colors.paper }]}>
               <Text style={[tabStyles.label, { color: theme.colors.muted },
                 selected && { color: theme.colors.accent, fontWeight: '800' }]}>
@@ -154,50 +185,71 @@ export function SettingsScreen({ reminders, pinning, isAdmin, email, onScrollTop
           );
         })}
       </View>
-      {adminTab ? (
-        <View style={styles.panel}>
-          <Text accessibilityRole="header" style={styles.cardTitle}>{adminTab.label}</Text>
-          <Text style={styles.muted}>{adminTab.description}</Text>
-          <AdminSettings key={adminTab.id} tab={adminTab.id} email={email} onScrollTop={onScrollTop} />
+    </>
+  );
+
+  if (adminTab) {
+    const panelHeader = <>
+      <Text accessibilityRole="header" style={styles.cardTitle}>{adminTab.label}</Text>
+      <Text style={styles.muted}>{adminTab.description}</Text>
+    </>;
+    return <AdminSettings key={adminTab.id} tab={adminTab.id} email={email} onScrollTop={scrollTop}
+      renderPage={(content, saveButton) => (
+        <SettingsPage scroll={scroll} header={header} panelHeader={panelHeader} saveButton={saveButton}>
+          {content}
+        </SettingsPage>
+      )} />;
+  }
+
+  const appInformation = [
+    ['Phiên bản', Constants.expoConfig?.version ?? 'Chưa xác định'],
+    ['Hệ điều hành', operatingSystem()],
+  ];
+
+  return (
+    <SettingsPage scroll={scroll} header={header}>
+      <View style={styles.panel}>
+        <Text accessibilityRole="header" style={styles.cardTitle}>Chế độ hiển thị</Text>
+        <Options label="Chế độ hiển thị" options={appearanceOptions} value={theme.mode}
+          disabled={!theme.ready} onSelect={theme.setMode} />
+      </View>
+      <View style={[styles.panel, optionStyles.switchRow]}>
+        <View style={optionStyles.switchText}>
+          <Text accessibilityRole="header" style={styles.cardTitle}>Ghim mục yêu thích</Text>
+          <Text style={styles.muted}>Ghim các mục từ menu vào thanh điều hướng dưới.</Text>
         </View>
-      ) : (
-        <>
-          <View style={styles.panel}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>Chế độ hiển thị</Text>
-            <Options label="Chế độ hiển thị" options={appearanceOptions} value={theme.mode}
-              disabled={!theme.ready} onSelect={theme.setMode} />
+        <SettingsSwitch label="Ghim mục yêu thích" disabled={!pinning.ready} checked={pinning.value}
+          onChange={value => void pinning.save(value).catch(() =>
+            showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
+      </View>
+      <View style={styles.panel}>
+        <View style={optionStyles.switchRow}>
+          <View style={optionStyles.switchText}>
+            <Text accessibilityRole="header" style={styles.cardTitle}>Nhắc hạn công việc</Text>
+            <Text style={styles.muted}>Nhắc việc được giao sắp đến hạn và quá hạn trên chuông theo giờ Việt Nam. Việc sắp đến hạn cũng hiển thị trong tab Công việc.</Text>
           </View>
-          <View style={[styles.panel, optionStyles.switchRow]}>
-            <View style={optionStyles.switchText}>
-              <Text accessibilityRole="header" style={styles.cardTitle}>Ghim mục yêu thích</Text>
-              <Text style={styles.muted}>Ghim các mục từ menu vào thanh điều hướng dưới.</Text>
+          <SettingsSwitch label="Nhắc hạn công việc" disabled={!reminders.ready} checked={reminders.enabled}
+            onChange={enabled => void reminders.setEnabled(enabled).then(() =>
+              showToast(enabled ? 'Đã bật nhắc hạn công việc trên chuông.' : 'Đã tắt nhắc hạn công việc trên chuông.'),
+            () => showToast('Chưa lưu được cài đặt nhắc hạn. Vui lòng thử lại.', 'error'))} />
+        </View>
+        {reminders.enabled && <ReminderTimingOptions reminders={reminders} />}
+      </View>
+      <View style={styles.panel}>
+        <Text accessibilityRole="header" style={styles.cardTitle}>Thông tin ứng dụng</Text>
+        <View>
+          {appInformation.map(([label, value], index) => (
+            <View key={label} style={[information.row, index > 0 && information.divider]}>
+              <Text style={information.label}>{label}</Text>
+              <Text style={information.value}>{value}</Text>
             </View>
-            <SettingsSwitch label="Ghim mục yêu thích" disabled={!pinning.ready} checked={pinning.value}
-              onChange={value => void pinning.save(value).catch(() =>
-                showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
-          </View>
-          <View style={styles.panel}>
-            <View style={optionStyles.switchRow}>
-              <View style={optionStyles.switchText}>
-                <Text accessibilityRole="header" style={styles.cardTitle}>Nhắc hạn công việc</Text>
-                <Text style={styles.muted}>Hiển thị việc được giao sắp đến hạn trong tab Công việc, theo giờ Việt Nam.</Text>
-              </View>
-              <SettingsSwitch label="Nhắc hạn công việc" disabled={!reminders.ready} checked={reminders.enabled}
-                onChange={enabled => void reminders.setEnabled(enabled).catch(() =>
-                  showToast('Chưa lưu được cài đặt. Vui lòng thử lại.', 'error'))} />
-            </View>
-            {reminders.enabled && <ReminderTimingOptions reminders={reminders} />}
-          </View>
-          <View style={styles.panel}>
-            <Button label="Web Quản lý Marchix ↗" secondary onPress={openManagementWeb} />
-          </View>
-          <View style={styles.panel}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>Phiên bản ứng dụng</Text>
-            <Text style={[styles.body, styles.metadataValue]}>{Constants.expoConfig?.version ?? 'Chưa xác định'}</Text>
-          </View>
-        </>
-      )}
-    </View>
+          ))}
+        </View>
+      </View>
+      <View style={styles.panel}>
+        <Button label="Web Quản lý Marchix ↗" secondary onPress={openManagementWeb} />
+      </View>
+    </SettingsPage>
   );
 }
 

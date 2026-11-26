@@ -10,6 +10,12 @@ const typesByExtension = new Map([
   ['pdf', 'application/pdf'], ['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'],
   ['png', 'image/png'], ['gif', 'image/gif'], ['webp', 'image/webp'],
   ['txt', 'text/plain'], ['csv', 'text/csv'],
+  ['doc', 'application/msword'],
+  ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  ['xls', 'application/vnd.ms-excel'],
+  ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  ['ppt', 'application/vnd.ms-powerpoint'],
+  ['pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
 ]);
 
 export function attachmentMimeType(file: Pick<AttachmentFile, 'name' | 'type'>) {
@@ -21,6 +27,23 @@ export function attachmentMimeType(file: Pick<AttachmentFile, 'name' | 'type'>) 
 
 export function hasPdfHeader(bytes: Uint8Array) {
   return [37, 80, 68, 70, 45].every((byte, index) => bytes[index] === byte);
+}
+
+async function saveToAndroidDownloads(name: string, type: string, bytes: Uint8Array) {
+  const { fs, media } = await import('react-native-blob-util');
+  const source = new File(Paths.cache, `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  let uri: string | undefined;
+  try {
+    await source.write(bytes);
+    uri = await media.createFile({ name, mimeType: type }, 'Download');
+    await fs.cp(source.uri, uri);
+    if ((await fs.stat(uri)).size !== bytes.length) throw new Error('Tệp đã lưu không đủ dữ liệu.');
+  } catch (error) {
+    if (uri) await fs.unlink(uri).catch(() => undefined);
+    throw error;
+  } finally {
+    await fs.unlink(source.uri).catch(() => undefined);
+  }
 }
 
 export async function saveAttachment(file: AttachmentFile) {
@@ -40,17 +63,12 @@ export async function saveAttachment(file: AttachmentFile) {
   }
 
   if (Platform.OS === 'android' && Platform.Version >= 29) {
-    const { fs, media } = await import('react-native-blob-util');
-    const uri = await media.createFile({ name, mimeType: type }, 'Download');
-    const destination = new File(uri);
     try {
-      await destination.write(file.bytes);
-      if ((await destination.bytes()).length !== file.bytes.length) throw new Error('Tệp đã lưu không đủ dữ liệu.');
-    } catch (error) {
-      await fs.unlink(uri).catch(() => undefined);
-      throw error;
+      await saveToAndroidDownloads(name, type, file.bytes);
+      return 'Đã lưu tệp vào thư mục Tải xuống.';
+    } catch {
+      // A user-selected folder remains available if Android rejects the shared download.
     }
-    return 'Đã lưu tệp vào thư mục Tải xuống.';
   }
 
   if (Platform.OS === 'android') {

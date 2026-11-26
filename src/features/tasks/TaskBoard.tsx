@@ -8,22 +8,23 @@ import { Dropdown } from '../../components/Dropdown';
 import { PeopleSummary } from '../../components/PeopleSummary';
 import { SearchInput } from '../../components/SearchInput';
 import { SegmentedButtons } from '../../components/SegmentedButtons';
-import { formatDue, formatTaskDate, todayInVietnam } from './taskDates';
-import { taskUnsetLabel } from './taskLabels';
+import { daysOverdue, formatDue, formatTaskDate, isOpenTask } from './taskDates';
+import { overdueTaskLabel, taskUnsetLabel } from './taskLabels';
 import { useScreenStyles } from '../../theme/screenStyles';
 import { TaskGantt } from './TaskGantt';
 import type { GanttRange } from './TaskGantt';
 import { TaskKanban } from './TaskKanban';
 import { TaskPriority } from './TaskPriority';
 import { statusTone, taskStatus, TaskProgress } from './TaskProgress';
-import { taskStatusSummary } from './taskStatusSummary';
+import { overdueTaskBucket, taskStatusSummary } from './taskStatusSummary';
+import { useVietnamToday } from './useVietnamToday';
 import { searchByName } from '../../utils/search';
 import { listTaskAssignees, taskPriorities, taskStatuses } from './tasks';
 import type { AssignmentProject, Task, TaskAssignee } from './tasks';
 import { auth, taskAssignmentEnabled } from '../../services/firebase/firebase';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 
-const taskFilters = ['Tất cả', 'Chưa xong', 'Quá hạn', ...taskStatuses] as const;
+const taskFilters = ['Tất cả', 'Chưa xong', overdueTaskLabel, ...taskStatuses] as const;
 const statusOptions = taskFilters.map(value => ({ value, label: value }));
 const priorityFilters = ['', ...taskPriorities, taskUnsetLabel] as const;
 const priorityOptions = priorityFilters.map(value => ({ value, label: value || 'Tất cả' }));
@@ -42,19 +43,6 @@ export type TaskBoardOptions = {
 export const initialTaskBoardOptions: TaskBoardOptions = {
   search: '', filter: 'Tất cả', assignee: '', priority: '', project: null, view: 'list', ganttRange: 'month',
 };
-
-function isOpenTask(task: Task) {
-  return task.status !== 'Xong' && task.status !== 'Chờ duyệt';
-}
-
-function daysOverdue(task: Task, today: string) {
-  if (!isOpenTask(task) || !task.due || !/^\d{4}-\d{2}-\d{2}$/.test(task.due) || task.due >= today) return 0;
-
-  // Date-only ISO values parse at UTC midnight, so the difference counts calendar days.
-  const deadline = new Date(task.due);
-  if (!Number.isFinite(deadline.getTime()) || deadline.toISOString().slice(0, 10) !== task.due) return 0;
-  return (Date.parse(today) - deadline.getTime()) / 86_400_000;
-}
 
 function assigneeKey(task: Task) {
   const name = task.assignee?.trim();
@@ -82,7 +70,7 @@ const TaskCard = memo(function TaskCard({
   );
 
   const overdueDays = daysOverdue(task, today);
-  const overdueLabel = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : '';
+  const overdueLabel = overdueDays > 0 ? `${overdueTaskLabel} ${overdueDays} ngày` : '';
   const due = !task.due ? taskUnsetLabel : task.due === today && isOpenTask(task) ? 'Hạn hôm nay' : formatDue(task.due);
   const personId = assigneeKey(task);
   const card = (
@@ -128,9 +116,12 @@ const TaskCard = memo(function TaskCard({
   </View> : card;
 });
 
-export function TaskBoard({ tasks, member, showTeamTasks = false, projects, options, onOptionsChange, onOpen, onDelete, onDragChange }: {
+export function TaskBoard({
+  tasks, member, showTeamTasks = false, showOverdueStat = false, projects, options, onOptionsChange, onOpen, onDelete, onDragChange,
+}: {
   tasks: Task[]; member: { email: string; name: string };
   showTeamTasks?: boolean;
+  showOverdueStat?: boolean;
   projects?: AssignmentProject[];
   options: TaskBoardOptions; onOptionsChange: (options: TaskBoardOptions) => void;
   onOpen: (task: Task) => void;
@@ -175,12 +166,16 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
   const scopedTasks = tasks.filter(task => (!assignee || assigneeKey(task) === assignee) &&
     (!priority || (task.priority?.trim() || taskUnsetLabel) === priority) &&
     (project === null || (task.projectId || '') === project));
-  const today = todayInVietnam();
-  const stats = taskStatusSummary(scopedTasks);
+  const today = useVietnamToday(true);
+  const summary = taskStatusSummary(scopedTasks);
+  const stats = showOverdueStat
+    ? [...summary.filter(bucket => bucket.status !== 'Khác'), overdueTaskBucket(summary, today)]
+    : summary;
+  const statRows = showOverdueStat ? [stats.slice(0, 3), stats.slice(3)] : [stats];
   const filteredTasks = scopedTasks.filter(task => {
     const status = taskStatus(task);
-    return filter === 'Tất cả' || filter === status ||
-      (filter === 'Chưa xong' && isOpenTask(task)) || (filter === 'Quá hạn' && daysOverdue(task, today) > 0);
+    if (filter === overdueTaskLabel) return daysOverdue(task, today) > 0;
+    return filter === 'Tất cả' || filter === status || (filter === 'Chưa xong' && isOpenTask(task));
   });
   const visibleTasks = searchByName(filteredTasks, search, task => task.title);
   const showNoMatch = tasks.length > 0 || search.trim().length > 0;
@@ -216,15 +211,17 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
   return (
     <View style={styles.board}>
       <View style={styles.stats}>
-        {stats.map(({ status, tasks: statusTasks }) => {
-          const tone = statusTone(status, colors);
-          const count = statusTasks.length;
-          return <View key={status} accessible accessibilityLabel={`${status}: ${count} công việc`}
-            style={[styles.stat, width < 600 && styles.compactStat, { backgroundColor: tone.background }]}>
-            <Text style={[styles.statLabel, { color: tone.text }]}>{status}</Text>
-            <Text style={[styles.statValue, { color: tone.text }]}>{count}</Text>
-          </View>;
-        })}
+        {statRows.map(row => <View key={row[0].status} style={[styles.statRow, !showOverdueStat && styles.wrappedStats]}>
+          {row.map(({ status, tasks: statusTasks }) => {
+            const tone = statusTone(status, colors);
+            const count = statusTasks.length;
+            return <View key={status} accessible accessibilityLabel={`${status}: ${count} công việc`}
+              style={[styles.stat, !showOverdueStat && width < 600 && styles.compactStat, { backgroundColor: tone.background }]}>
+              <Text style={[styles.statLabel, { color: tone.text }]}>{status}</Text>
+              <Text style={[styles.statValue, { color: tone.text }]}>{count}</Text>
+            </View>;
+          })}
+        </View>)}
       </View>
       <View style={styles.controls}>
         <View style={styles.filterRow}>
@@ -276,7 +273,9 @@ export function TaskBoard({ tasks, member, showTeamTasks = false, projects, opti
 
 const useStyles = createThemedStyles(colors => StyleSheet.create({
   board: { gap: 12 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stats: { gap: 8 },
+  statRow: { flexDirection: 'row', gap: 8 },
+  wrappedStats: { flexWrap: 'wrap' },
   stat: { flex: 1, minWidth: 0, minHeight: 72, alignItems: 'center', gap: 3,
     paddingVertical: 10, paddingHorizontal: 6, borderWidth: 1, borderRadius: 13, borderColor: colors.line },
   compactStat: { flexBasis: '30%' },

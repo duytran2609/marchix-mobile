@@ -1,25 +1,30 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ComponentRef, RefObject } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatVietnamDateTime } from '../../utils/dateTime';
 import { db } from '../../services/firebase/firebase';
-import { markNotificationsRead, watchNotifications } from './notifications';
+import { markNotificationsRead, notificationCategory, watchNotifications } from './notifications';
 import type { WorkspaceNotification } from './notifications';
+import { useTaskDeadlineReminders } from './useTaskDeadlineReminders';
 import { ClickableCardHeader } from '../../components/CardChevron';
 import { EmptyState } from '../../components/EmptyState';
 import { PopupHeader } from '../../components/PopupHeader';
 import { popupActionText } from '../../components/PopupBody';
 import { createThemedStyles, useTheme } from '../../theme/theme';
 import { ToastLayer, useToast } from '../../components/Toast';
+import type { ReminderWindow } from '../settings/reminderSettings';
+import type { Task } from '../tasks/tasks';
 
 const inboxTabs = [{ id: 'all', label: 'Tất cả' }, { id: 'unread', label: 'Chưa đọc' }] as const;
 
-export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
+export function WorkspaceNotifications({ email, header, edge, tasks, reminderWindow, onOpenNote }: {
   email: string;
   header: RefObject<ComponentRef<typeof View> | null>;
   edge: number;
+  tasks: Task[] | null;
+  reminderWindow: ReminderWindow;
   onOpenNote: (note: WorkspaceNotification) => void;
 }) {
   const { colors } = useTheme();
@@ -34,9 +39,14 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
   const [retry, setRetry] = useState(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const seenKey = `marchix:seen-notifications:${db.app.options.projectId}:${email}`;
-  const unread = notes?.filter(note => !note.read) ?? [];
-  const visibleNotes = (tab === 'unread' ? unread : notes ?? []).slice(0, 30);
+  const projectId = db.app.options.projectId;
+  const seenKey = `marchix:seen-notifications:${projectId}:${email}`;
+  const deadlineReminders = useTaskDeadlineReminders(projectId, email, tasks, reminderWindow);
+  const inbox = useMemo(() => [...deadlineReminders.notes, ...(notes ?? [])].sort((a, b) =>
+    Number(!b.read && b.deadlineReminder === true) - Number(!a.read && a.deadlineReminder === true) ||
+    b.createdAt.localeCompare(a.createdAt)), [notes, deadlineReminders.notes]);
+  const unread = inbox.filter(note => !note.read);
+  const visibleNotes = (tab === 'unread' ? unread : inbox).slice(0, 30);
   const badgeCount = seen ? unread.filter(note => !seen.has(note.id)).length : 0;
   const opened = top !== null;
 
@@ -72,10 +82,15 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
     setRetry(value => value + 1);
   }
 
-  async function markRead(items: WorkspaceNotification[]) {
+  async function markRead(items: WorkspaceNotification[], confirmAll = false) {
+    if (saving || items.length === 0) return;
     setSaving(true);
     try {
-      await markNotificationsRead(items);
+      await Promise.all([
+        deadlineReminders.markRead(items),
+        markNotificationsRead(items.filter(note => !note.deadlineReminder)),
+      ]);
+      if (confirmAll) showToast(`Đã đánh dấu ${items.length} thông báo là đã đọc.`);
     } catch {
       showToast('Chưa lưu được trạng thái đã đọc. Vui lòng thử lại.', 'error');
     } finally {
@@ -142,22 +157,24 @@ export function WorkspaceNotifications({ email, header, edge, onOpenNote }: {
             ) : (
               <>
                 {unread.length > 0 ? (
-                  <Pressable accessibilityRole="button" disabled={saving} onPress={() => void markRead(notes)}
+                  <Pressable accessibilityRole="button" disabled={saving} onPress={() => void markRead(unread, true)}
                     style={styles.action}>
                     <Text style={[styles.actionText, popupActionText]}>Đánh dấu tất cả đã đọc</Text>
                   </Pressable>
                 ) : null}
                 <ScrollView key={tab} style={styles.list} contentContainerStyle={styles.listContent}>
                   {visibleNotes.map(note => {
-                    const time = formatVietnamDateTime(note.createdAt);
+                    const time = formatVietnamDateTime(note.deadlineReminder ? undefined : note.createdAt);
+                    const categoryLabel = notificationCategory(note).label;
                     return (
                       <Pressable key={note.id} accessibilityRole="button"
                         accessibilityLabel={note.read ? note.title : `Chưa đọc: ${note.title}`}
-                        accessibilityHint={note.body || undefined} disabled={saving} onPress={() => openNote(note)}
+                        accessibilityHint={note.body ? `${categoryLabel}. ${note.body}` : categoryLabel}
+                        disabled={saving} onPress={() => openNote(note)}
                         style={({ pressed }) => [styles.note, !note.read && styles.unread, pressed && styles.pressed]}>
                         <ClickableCardHeader><Text style={styles.noteTitle}>{note.title}</Text></ClickableCardHeader>
                         {note.body ? <Text style={styles.muted}>{note.body}</Text> : null}
-                        {time ? <Text style={styles.date}>{time}</Text> : null}
+                        <Text style={styles.date}>{categoryLabel}{time ? ` · ${time}` : ''}</Text>
                       </Pressable>
                     );
                   })}

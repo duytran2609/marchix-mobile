@@ -1,13 +1,12 @@
 import { Bytes } from 'firebase/firestore';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Image, Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useScreenStyles } from '../theme/screenStyles';
-import { useTheme } from '../theme/theme';
+import { createThemedStyles, useTheme } from '../theme/theme';
 import { attachmentMimeType, hasPdfHeader, saveAttachment } from '../utils/attachmentFile';
 import type { AttachmentFile } from '../utils/attachmentFile';
 import { FileTypeIcon } from './AttachmentLabel';
-import { PopupAction } from './PopupBody';
 import { PdfPreview } from './PdfPreview';
 import { PopupHeader } from './PopupHeader';
 
@@ -18,6 +17,7 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
   file: AttachmentFile; onClose: () => void; embedded?: boolean; downloadable?: boolean;
 }) {
   const styles = useScreenStyles();
+  const headerStyles = useHeaderStyles();
   const { colors } = useTheme();
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,7 +52,17 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
   const content = (
     <SafeAreaView style={{ flex: 1, padding: 16, gap: 12, backgroundColor: colors.background }}>
       <PopupHeader title={file.name} closeLabel={pdf ? 'Đóng PDF' : 'Đóng xem trước'} onClose={close}
-        disabled={saving} inset={false} titleLines={2} leading={<FileTypeIcon name={file.name} type={file.type} />} />
+        disabled={saving} inset={false} titleLines={2} leading={<FileTypeIcon name={file.name} type={file.type} />}
+        actions={downloadable && <Pressable accessibilityRole="button" accessibilityLabel="Tải xuống"
+          accessibilityState={{ busy: saving, disabled: saving }} disabled={saving} onPress={() => void download()}
+          style={({ pressed }) => [headerStyles.download, pressed && styles.dimmed]}>
+          {saving ? <ActivityIndicator color={colors.accent} />
+            : <View aria-hidden pointerEvents="none" style={headerStyles.downloadIcon}>
+              <View style={headerStyles.arrowShaft} />
+              <View style={headerStyles.arrowHead} />
+              <View style={headerStyles.tray} />
+            </View>}
+        </Pressable>} />
       {failed || (type === 'application/pdf' && !pdf)
         ? <Text accessibilityRole="alert" style={styles.error}>Không hiển thị được nội dung tệp.</Text>
         : pdf ? <PdfPreview bytes={file.bytes} name={file.name} onError={fail} />
@@ -67,10 +77,17 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
       {downloadable && Platform.OS === 'ios' && <Text style={styles.muted}>Chọn “Lưu vào Tệp” để lưu trên iPhone.</Text>}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!!saved && <Text accessibilityLiveRegion="polite" role="status" style={styles.body}>{saved}</Text>}
-      {downloadable && <View style={styles.choices}>
-        <PopupAction label={saving ? 'Đang tải xuống…' : 'Tải xuống'} disabled={saving} onPress={() => void download()} />
-      </View>}
     </SafeAreaView>
   );
   return embedded ? content : <Modal visible animationType="slide" onRequestClose={close}>{content}</Modal>;
 }
+
+const useHeaderStyles = createThemedStyles(colors => StyleSheet.create({
+  download: { width: 44, height: 44, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+  downloadIcon: { width: 22, height: 22, alignItems: 'center' },
+  arrowShaft: { width: 2, height: 13, borderRadius: 1, backgroundColor: colors.accent },
+  arrowHead: { position: 'absolute', top: 5, width: 8, height: 8, borderBottomWidth: 2, borderRightWidth: 2,
+    borderColor: colors.accent, transform: [{ rotate: '45deg' }] },
+  tray: { position: 'absolute', bottom: 0, width: 20, height: 7, borderWidth: 2, borderTopWidth: 0,
+    borderBottomLeftRadius: 3, borderBottomRightRadius: 3, borderColor: colors.accent },
+}));
