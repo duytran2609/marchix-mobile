@@ -69,6 +69,9 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
       ...changes.map(([key, title, body]) => note(key, title, '#cong-viec', {
         taskId: updatedTaskId, body: `Công việc: ${updatedTaskTitle}\n${body}`,
       })),
+      note('other-due', 'Hạn công việc đã thay đổi', '#cong-viec', {
+        taskId: 'cap-nhat-huong-dan', body: 'Công việc: Cập nhật hướng dẫn bàn giao\nHạn: 26/11/2026 → 28/11/2026',
+      }),
       ...reviews.map(({ key, title, taskTitle, body }) => note(key, title, '#cong-viec', {
         taskId: `${uid}-${key}`, body: `Công việc: ${taskTitle}\n${body}`,
       })),
@@ -84,7 +87,8 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
     await expect(page.getByRole('heading', { name: 'Cập nhật hướng dẫn bàn giao', exact: true })).toBeVisible();
     for (const [, title, body] of changes) {
       await page.getByRole('button', { name: /^Thông báo(?:,|$)/ }).click();
-      const change = page.getByRole('button', { name: 'Chưa đọc: ' + title, exact: true });
+      const change = page.getByRole('button', { name: 'Chưa đọc: ' + title, exact: true })
+        .filter({ hasText: `Công việc: ${updatedTaskTitle}` });
       await expect(change).toContainText(body);
       await change.click();
       await expect(page.getByRole('heading', { name: updatedTaskTitle, exact: true })).toBeVisible();
