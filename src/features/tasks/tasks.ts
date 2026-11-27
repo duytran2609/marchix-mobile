@@ -88,7 +88,7 @@ export function findTaskReplyIndex(comments: readonly TaskComment[], target: Tas
 
 export function parseTaskProgress(text: string) {
   const value = Number(text);
-  return /^[0-9]{1,3}$/.test(text) && value <= 100 ? value : undefined;
+  return /^\d+$/.test(text) && value <= 100 ? value : undefined;
 }
 
 export function watchTask(id: string, onTask: (task: Task | null) => void, onError: () => void) {

@@ -28,6 +28,7 @@ test('Tổng quan đổi lời chào và cảnh nền đúng giờ Việt Nam, g
     await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Chào buổi sáng, Quản trị demo!', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toHaveCount(0);
     const longName = 'Nguyễn Thị Hoàng Anh Minh Châu';
     await setName({ stringValue: longName });
     const greeting = page.getByRole('heading', { name: `Chào buổi sáng, ${longName}!`, exact: true });

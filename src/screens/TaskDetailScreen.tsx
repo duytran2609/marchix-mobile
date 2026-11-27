@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentRef, ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../components/EmptyState';
 import { TextInput } from '../components/TextInput';
 import { NumberStepper } from '../components/NumberStepper';
@@ -312,7 +312,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
               style={[screenStyles.input, screenStyles.messageInput]} multiline maxLength={commentMaxLength}
               value={reportNote} onChangeText={setReportNote} editable={!busy} />
           </>}
-        {!inPopup && reportCompletionButton}
+        {reportCompletionButton}
       </View>
     ) : null}
     {liveTask.rating || liveTask.reviewNote ? (
@@ -323,30 +323,25 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
       </View>
     ) : null}
   </>;
-  function renderDetail(history: ReactNode, composer: ReactNode) {
+  function renderDetail(history: ReactNode, composer: ReactNode, dismissComposer?: () => void) {
     const discussionHidden = tab !== 'discussion';
     const hasComposer = !discussionHidden && Boolean(composer);
     const discussion = <View style={discussionHidden && styles.hidden}>{history}</View>;
 
     return <View style={inPopup ? styles.popupBody : screenStyles.stack}>
       {inPopup ? <>
-        <View style={[styles.popupSection, styles.popupTabs]}>{header}</View>
+        <View style={[styles.popupSection, styles.popupTabs]} onTouchEnd={dismissComposer}>{header}</View>
         <View style={[styles.popupContent, hasComposer && { maxHeight: generalHeight }]}>
           <KeyboardScrollView ref={scroll} testID="task-detail-scroll"
             style={[styles.popupScroll, !isGeneral && !hasComposer && { maxHeight: generalHeight }]}
             contentContainerStyle={[screenStyles.stack, styles.popupScrollContent, hasComposer && styles.noBottomPadding]}
             onContentSizeChange={isGeneral ? (_, height) => setGeneralHeight(height) : undefined}
-            keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+            keyboardShouldPersistTaps="handled" onTouchEnd={dismissComposer} showsVerticalScrollIndicator>
             {general && <View style={styles.popupSection}>{general}</View>}
             {generalActions}
             {description}
             {discussion}
           </KeyboardScrollView>
-          {isGeneral && reportCompletionButton && <View style={[
-            styles.popupReportAction, editButton && styles.noBottomPadding,
-          ]}>
-            {reportCompletionButton}
-          </View>}
           {composer && <View style={discussionHidden ? styles.hidden : [styles.popupComposer, editButton && styles.noBottomPadding]}>
             {composer}
           </View>}
@@ -379,7 +374,7 @@ export function TaskDetailScreen({ liveTask, email, name, onBack, backLabel = 'D
   }
 
   return (
-    <TaskDiscussion task={liveTask} email={email} name={name} members={members}>{renderDetail}</TaskDiscussion>
+    <TaskDiscussion task={liveTask} email={email} name={name} members={members} inPopup={inPopup}>{renderDetail}</TaskDiscussion>
   );
 }
 
@@ -417,8 +412,11 @@ export function TaskDetailPopup({ id, task, email, name, onClose }: {
   return <Modal transparent visible onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
     <SafeAreaView style={styles.popupOverlay}>
       <KeyboardViewport style={styles.popupCenter}>
+        {Platform.OS !== 'web' && <View accessible={false} style={StyleSheet.absoluteFill} onTouchEnd={Keyboard.dismiss} />}
         <View role="dialog" accessibilityLabel="Chi tiết công việc" accessibilityViewIsModal style={styles.popup}>
-          <PopupHeader title="Chi tiết công việc" closeLabel="Đóng chi tiết công việc" onClose={onClose} />
+          <View onTouchEnd={Platform.OS !== 'web' ? Keyboard.dismiss : undefined}>
+            <PopupHeader title="Chi tiết công việc" closeLabel="Đóng chi tiết công việc" onClose={onClose} />
+          </View>
           {task ? <TaskDetailScreen liveTask={task} email={email} name={name} />
             : <LinkedTaskDetail id={id} email={email} name={name} />}
         </View>
@@ -438,7 +436,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   popupTabs: { marginHorizontal: 16, flexShrink: 0 },
   popupActions: { flexDirection: 'row', gap: 8,
     paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
-  popupReportAction: { paddingHorizontal: 16, paddingBottom: 16, flexShrink: 0 },
   popupAction: { flex: 1, minWidth: 0 },
   popupActionLabel: { textAlign: 'center' },
   popupEditButton: { backgroundColor: lightColors.accent },

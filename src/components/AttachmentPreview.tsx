@@ -1,4 +1,3 @@
-import { Bytes } from 'firebase/firestore';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,11 +5,11 @@ import { useScreenStyles } from '../theme/screenStyles';
 import { createThemedStyles, useTheme } from '../theme/theme';
 import { attachmentMimeType, hasPdfHeader, saveAttachment } from '../utils/attachmentFile';
 import type { AttachmentFile } from '../utils/attachmentFile';
+import { attachmentImageUri } from '../utils/attachmentImage';
 import { FileTypeIcon } from './AttachmentLabel';
 import { PdfPreview } from './PdfPreview';
 import { PopupHeader } from './PopupHeader';
 
-const imageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const textLimit = 64 * 1024;
 
 export function AttachmentPreview({ file, onClose, embedded, downloadable = true }: {
@@ -27,8 +26,7 @@ export function AttachmentPreview({ file, onClose, embedded, downloadable = true
   const fail = useCallback(() => setFailed(true), []);
   const type = attachmentMimeType(file);
   const pdf = type === 'application/pdf' && hasPdfHeader(file.bytes);
-  const imageUri = useMemo(() => imageTypes.has(type)
-    ? `data:${type};base64,${Bytes.fromUint8Array(file.bytes).toBase64()}` : '', [file.bytes, type]);
+  const imageUri = useMemo(() => attachmentImageUri(file.bytes, type), [file.bytes, type]);
   const plainText = useMemo(() => type.startsWith('text/') && typeof TextDecoder !== 'undefined'
     ? new TextDecoder().decode(file.bytes.subarray(0, textLimit)) : undefined, [file.bytes, type]);
 

@@ -55,10 +55,9 @@ export function BudgetLineEditor({ line, categories, onSave, onClose, onRemove, 
     remainingEstimate: formatVndInput(line?.remainingEstimate ?? null),
   });
   const set = (key: keyof typeof data) => (value: string) => setData(current => ({ ...current, [key]: value }));
-  const input = (key: keyof typeof data, label: string, inputMode?: 'numeric' | 'decimal', maxLength?: number,
-    stepBounds?: NumberStepBounds) =>
-    <FinanceInput label={label} value={data[key]} onChange={set(key)} inputMode={inputMode} maxLength={maxLength}
-      stepBounds={stepBounds} disabled={busy} />;
+  const input = (key: keyof typeof data, label: string,
+    options?: Pick<Parameters<typeof FinanceInput>[0], 'inputMode' | 'maxLength' | 'stepBounds'>) =>
+    <FinanceInput label={label} value={data[key]} onChange={set(key)} disabled={busy} {...options} />;
   const date = (key: 'quoteDate' | 'payDate' | 'refundDue' | 'reviewDate', label: string) =>
     <DateCalendarField label={label} value={data[key]} onChange={set(key)} clearLabel="Bỏ ngày" disabled={busy} />;
   function detailedLine(draft = data) {
@@ -101,36 +100,38 @@ export function BudgetLineEditor({ line, categories, onSave, onClose, onRemove, 
         onChange={set('category')} fallbackLabel="Chọn hạng mục" disabled={busy} highlightSelection={false} />
       <Dropdown label="Loại khoản" value={data.nature} choices={financeChoices(BUDGET_NATURES)}
         onChange={set('nature')} disabled={busy} highlightSelection={false} />
-      {input('total', 'Số tiền tổng (VNĐ)', 'numeric', 20)}
+      {input('total', 'Số tiền tổng (VNĐ)', { inputMode: 'numeric' })}
       <Text style={styles.muted}>Để trống khi chưa xác định. Nhập 0 khi xác nhận không phát sinh.</Text>
     </>}
     {tab === 'cost' && <>
-      {input('quantity', 'Số lượng', 'decimal', 12, { min: 0.001, max: 100000 })}
-      {input('unitLabel', 'Đơn vị tính', undefined, 80)}
-      {input('unit', 'Đơn giá (VNĐ)', 'numeric', 20)}
-      {input('fees', 'Phí khác (VNĐ)', 'numeric', 20)}
+      {input('quantity', 'Số lượng', { inputMode: 'decimal', stepBounds: { min: 0.001, max: 100000 } })}
+      {input('unitLabel', 'Đơn vị tính', { maxLength: 80 })}
+      {input('unit', 'Đơn giá (VNĐ)', { inputMode: 'numeric' })}
+      {input('fees', 'Phí khác (VNĐ)', { inputMode: 'numeric' })}
       <Dropdown label="Cách tính VAT" value={data.taxMode} choices={financeChoices(TAX_MODES)}
         onChange={set('taxMode')} disabled={busy} highlightSelection={false} />
       {(data.taxMode === TAX_MODES[1] || data.taxMode === TAX_MODES[2]) && <>
         <Dropdown label="Nhập VAT theo" value={data.vatMethod}
           choices={[{ value: 'rate', label: 'Thuế suất' }, { value: 'manual', label: 'Tiền VAT' }]}
           onChange={set('vatMethod')} disabled={busy} highlightSelection={false} />
-        {data.vatMethod === 'rate' ? input('vatRate', 'Thuế suất (%)', 'decimal', 6) : input('vat', 'Tiền VAT (VNĐ)', 'numeric', 20)}
+        {data.vatMethod === 'rate' ? input('vatRate', 'Thuế suất (%)', { inputMode: 'decimal' })
+          : input('vat', 'Tiền VAT (VNĐ)', { inputMode: 'numeric' })}
       </>}
-      {data.nature === 'Chi phí trả trước' && input('allocationMonths', 'Số tháng phân bổ', 'numeric', 3, { min: 1, max: 120 })}
+      {data.nature === 'Chi phí trả trước' && input('allocationMonths', 'Số tháng phân bổ',
+        { inputMode: 'numeric', stepBounds: { min: 1, max: 120 } })}
     </>}
     {tab === 'forecast' && <>
-      {input('quote', 'Căn cứ báo giá', undefined, 240)}
+      {input('quote', 'Căn cứ báo giá', { maxLength: 240 })}
       {date('quoteDate', 'Ngày báo giá')}
       {date('payDate', 'Ngày dự kiến chi')}
       {data.nature === 'Cọc có thể thu hồi' && date('refundDue', 'Ngày dự kiến thu hồi cọc')}
-      {input('reviewUnit', 'Đơn giá rà soát (VNĐ)', 'numeric', 20)}
+      {input('reviewUnit', 'Đơn giá rà soát (VNĐ)', { inputMode: 'numeric' })}
       <Dropdown label="Loại căn cứ rà soát" value={data.reviewBasis}
         choices={financeChoices(['Báo giá cập nhật', 'Hóa đơn thực tế'])} onChange={set('reviewBasis')}
         disabled={busy} highlightSelection={false} />
-      {input('reviewSource', 'Căn cứ rà soát', undefined, 240)}
+      {input('reviewSource', 'Căn cứ rà soát', { maxLength: 240 })}
       {date('reviewDate', 'Ngày rà soát')}
-      {input('remainingEstimate', 'Chi còn lại (VNĐ)', 'numeric', 20)}
+      {input('remainingEstimate', 'Chi còn lại (VNĐ)', { inputMode: 'numeric' })}
     </>}
   </ProjectFormPopup>;
 }
@@ -159,13 +160,13 @@ export function CashForecastEditor({ plan, onSave, onClose, busy, error }: {
         weeks: weeks.map(week => ({ in: parseVndInput(week.in), out: parseVndInput(week.out) })),
       })} />
     </>}>
-    {cashFields.map(([key, label]) => <FinanceInput key={key} label={label} inputMode="numeric" maxLength={20}
+    {cashFields.map(([key, label]) => <FinanceInput key={key} label={label} inputMode="numeric"
       value={values[key]} onChange={value => setValues(current => ({ ...current, [key]: value }))} disabled={busy} />)}
     <DateCalendarField label="Bắt đầu tuần 1" value={start} onChange={setStart} clearLabel="Bỏ ngày" disabled={busy} />
     {weeks.map((week, index) => <View key={index} style={styles.choices}>
-      <FinanceInput label={'Thu tuần ' + (index + 1) + ' (VNĐ)'} value={week.in} inputMode="numeric" maxLength={20}
+      <FinanceInput label={'Thu tuần ' + (index + 1) + ' (VNĐ)'} value={week.in} inputMode="numeric"
         onChange={value => updateWeek(index, 'in', value)} disabled={busy} />
-      <FinanceInput label={'Chi tuần ' + (index + 1) + ' (VNĐ)'} value={week.out} inputMode="numeric" maxLength={20}
+      <FinanceInput label={'Chi tuần ' + (index + 1) + ' (VNĐ)'} value={week.out} inputMode="numeric"
         onChange={value => updateWeek(index, 'out', value)} disabled={busy} />
     </View>)}
   </ProjectFormPopup>;
@@ -188,7 +189,7 @@ export function RentEditor({ busy, onSave, onClose, error }: {
     }, sequence))} />
   }>
     <FinanceInput label="Tiền thuê mỗi tháng (VNĐ)" inputMode="numeric" value={monthly} onChange={setMonthly} />
-    <FinanceInput label="Số tháng" inputMode="numeric" maxLength={3} value={months} onChange={setMonths}
+    <FinanceInput label="Số tháng" inputMode="numeric" value={months} onChange={setMonths}
       stepBounds={{ min: 1, max: 120 }} disabled={busy} />
     <Dropdown label="Cách thanh toán" value={payment} choices={[
       { value: 'monthly', label: 'Trả theo tháng' }, { value: 'prepaid', label: 'Trả trước' },

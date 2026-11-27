@@ -13,7 +13,7 @@ type ReminderPreference = { enabled: boolean; timing: number };
 const defaultPreference: ReminderPreference = { enabled: false, timing: 1 };
 
 export function parseReminderDays(value: string): number | null {
-  if (!/^\d{1,3}$/.test(value)) return null;
+  if (!/^\d+$/.test(value)) return null;
   const days = Number(value);
   return days <= maxReminderDays ? days : null;
 }

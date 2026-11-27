@@ -8,13 +8,15 @@ const pageSizes = [5, 10, 25, 50, 100] as const;
 type PageSize = typeof pageSizes[number];
 const choices = pageSizes.map(value => ({ value, label: `${value} dòng` }));
 
-export function PaginatedList<T>({ items, children, resetKey }: {
+export function PaginatedList<T>({ items, children, resetKey, fixedPageSize }: {
   items: readonly T[];
   children: (pageItems: T[]) => ReactNode;
   resetKey?: string;
+  fixedPageSize?: number;
 }) {
   const styles = useStyles();
-  const [size, setSize] = useState<PageSize>(5);
+  const [selectedSize, setSize] = useState<PageSize>(5);
+  const size = fixedPageSize ?? selectedSize;
   const [position, setPosition] = useState({ page: 1, key: resetKey });
   const pageCount = Math.max(1, Math.ceil(items.length / size));
   const page = position.key === resetKey ? Math.min(position.page, pageCount) : 1;
@@ -26,14 +28,14 @@ export function PaginatedList<T>({ items, children, resetKey }: {
 
   return <>
     {children(items.slice(start, start + size))}
-    {items.length > 0 && <View style={styles.toolbar}>
-      <Dropdown label="Số dòng mỗi trang" hideLabel singleLineValue highlightSelection={false} keepMenuAttached
-        style={styles.size} value={size} choices={choices}
+    {(fixedPageSize ? pageCount > 1 : items.length > 0) && <View style={styles.toolbar}>
+      {!fixedPageSize && <Dropdown label="Số dòng mỗi trang" hideLabel singleLineValue highlightSelection={false} keepMenuAttached
+        style={styles.size} value={selectedSize} choices={choices}
         onChange={value => {
-          if (size === value) return;
+          if (selectedSize === value) return;
           setSize(value);
           goTo(1);
-        }} />
+        }} />}
       <View style={styles.navigation}>
         <PageArrow label="Trang trước" arrow="‹" disabled={page === 1} onPress={() => goTo(page - 1)} />
         <Text accessibilityLiveRegion="polite" style={styles.label}>Trang {page} / {pageCount}</Text>

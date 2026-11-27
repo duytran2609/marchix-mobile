@@ -37,7 +37,7 @@ test('Tổng quan khớp các trang nguồn và tự cập nhật khi lưu', asy
   async function login(target: Page) {
     await target.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
     await button(target, 'Đăng nhập quản trị (mô phỏng)').click();
-    await expect(target.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
+    await expect(target.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
   }
   async function navigate(target: Page, name: string) {
     await button(target, 'Mở menu').click();

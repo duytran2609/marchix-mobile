@@ -60,7 +60,7 @@ function CollaborationWorkspace({ section, project, email, isAdmin, tasks, onOpe
     <CollaborationFeedback error={read.error} />
     {section === 'discussion' ? <ProjectDiscussion project={project} email={email} isAdmin={isAdmin} team={team} tasks={tasks}
       memberName={memberName} memberPhoto={memberPhoto} onOpenTask={onOpenTask} />
-      : <ProjectLibrary id={project.id} email={email} isAdmin={isAdmin} memberName={memberName} openFile={openFile} />}
+      : <ProjectLibrary id={project.id} email={email} isAdmin={isAdmin} openFile={openFile} />}
     {membersError && <>
       <CollaborationFeedback error="Không tải được danh sách thành viên." />
       <Button label="Tải lại thành viên" secondary onPress={() => { setMembersError(false); setMemberRetry(value => value + 1); }} />

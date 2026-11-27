@@ -887,6 +887,8 @@ service cloud.firestore {
         allow update: if projectDiscussionAccess(id) && (projectAdmin() || resource.data.createdBy == email())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['folderPath', 'updatedAt'])
           && projectFolderPath(request.resource.data.folderPath) && request.resource.data.updatedAt == request.time;
+        // Discussion attachments can still reference the corresponding document in /files.
+        allow delete: if projectDiscussionAccess(id) && (projectAdmin() || resource.data.createdBy == email());
       }
       match /posts/{postId} {
         function validPost(data) {

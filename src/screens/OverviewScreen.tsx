@@ -6,7 +6,6 @@ import type { GestureResponderEvent } from 'react-native';
 import type { ReactNode } from 'react';
 import { CardChevron } from '../components/CardChevron';
 import { Button } from '../components/Button';
-import { PageHeader } from '../components/PageHeader';
 import { OverviewGreeting } from '../components/OverviewGreeting';
 import { cashStatus, cashTotals, verifiedCash, vnd, watchCash } from '../features/cash/cash';
 import type { Cash, CashAccess } from '../features/cash/cash';
@@ -280,7 +279,6 @@ export function OverviewScreen({
   const incomplete = sources.some(source => !Array.isArray(source));
 
   return <>
-    <PageHeader title="Tổng quan" />
     <OverviewGreeting name={name} email={email} />
     <DailyChecklist email={email} isAdmin={isAdmin} canReadCash={canReadCash} canReviewCash={canReviewCash}
       canReviewRequests={canReviewRequests} cash={cash} requests={requests} onNavigate={onNavigate} onRetry={reload} />

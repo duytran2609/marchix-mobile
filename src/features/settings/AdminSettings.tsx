@@ -104,7 +104,7 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
         autoCapitalize={field.key === 'email' ? 'none' : undefined}
         inputMode={digitsOnly ? 'numeric' : field.key === 'email' ? 'email' :
           typeof field.initial === 'number' && field.min !== undefined && field.min >= 0 ? 'decimal' : 'text'}
-        maxLength={250}
+        numeric={typeof field.initial === 'number'}
         onChangeText={text => {
           if (digitsOnly) {
             onChange(text.replace(/\D/g, '').replace(/^0+(?=\d)/, ''));

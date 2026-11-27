@@ -132,8 +132,17 @@ try {
   projectFileBatch.set(doc(db, 'projects', projectId, 'posts', 'rules-demo-file-post'), { ...postData, files: projectFiles });
   await projectFileBatch.commit();
   const projectChunk = client => doc(client, 'files', projectFiles[0].id, 'chunks', '0');
+  const libraryEntry = (client, index) => doc(client, 'projects', projectId, 'library', projectFiles[index].id);
   assert((await getDocFromServer(projectChunk(reviewerDb))).exists());
   await denied(getDocFromServer(projectChunk(otherDb)));
+  await denied(deleteDoc(libraryEntry(anonymousDb, 0)));
+  await denied(deleteDoc(libraryEntry(otherDb, 0)));
+  await denied(deleteDoc(libraryEntry(reviewerDb, 0)));
+  await deleteDoc(libraryEntry(db, 0));
+  await deleteDoc(libraryEntry(adminDb, 1));
+  assert(!(await getDocFromServer(libraryEntry(db, 0))).exists());
+  assert(!(await getDocFromServer(libraryEntry(db, 1))).exists());
+  assert((await getDocFromServer(projectChunk(reviewerDb))).exists());
   await updateDoc(collaborationProject(adminDb), { collaborators: [] });
   await denied(getDocFromServer(post(db)));
   await denied(getDocFromServer(projectChunk(db)));

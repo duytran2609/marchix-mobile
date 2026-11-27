@@ -45,12 +45,12 @@ for (const mode of ['pilot', 'structured', 'missing-project', 'legacy'] as const
       }
       await page.goto(process.env.MARCHIX_PREVIEW_URL ?? 'http://localhost:8081');
       await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).click();
-      await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
       await page.getByRole('button', { name: /^Thông báo(?:,|$)/ }).click();
       await page.getByRole('button', { name: 'Chưa đọc: ' + title, exact: true }).first().click();
       if (mode === 'legacy') {
         await expect(page.getByRole('alert')).toContainText('Thông báo cũ chưa có mã dự án.');
-        await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
       } else if (mode === 'missing-project') {
         await expect(page.getByRole('alert')).toContainText('Không tìm thấy dự án từ thông báo');
       } else {

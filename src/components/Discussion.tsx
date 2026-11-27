@@ -1,5 +1,5 @@
-import { useState, type ComponentRef, type ReactNode, type Ref } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from './Button';
 import { AttachmentLabel } from './AttachmentLabel';
 import { Dropdown } from './Dropdown';
@@ -14,8 +14,8 @@ const sortChoices = [
   { value: 'newest', label: 'Mới nhất → Cũ nhất' },
 ] as const;
 
-export function DiscussionHeader({ sort, onSort }: {
-  sort: DiscussionSort; onSort?: (sort: DiscussionSort) => void;
+export function DiscussionHeader({ sort, onSort, action }: {
+  sort: DiscussionSort; onSort?: (sort: DiscussionSort) => void; action?: ReactNode;
 }) {
   const styles = useStyles();
   const ui = useScreenStyles();
@@ -23,6 +23,7 @@ export function DiscussionHeader({ sort, onSort }: {
     <Text accessibilityRole="header" style={ui.cardTitle}>Trao đổi</Text>
     {onSort && <Dropdown label="Sắp xếp theo thời gian" hideLabel style={styles.sortControl}
       value={sort} choices={sortChoices} onChange={onSort} highlightSelection={false} />}
+    {action}
   </View>;
 }
 
@@ -93,20 +94,57 @@ export function DiscussionAttachment({ file, detail, onOpen, openLabel = `Xem t�
 }
 
 export function DiscussionComposer({ inputRef, message, onChange, placeholder, maxLength, sending, disabled,
-  attachmentBusy, onAttach, quote, onCancelReply, attachments, extras, sendLabel, onSend, canSend }: {
+  attachmentBusy, onAttach, quote, onCancelReply, attachments, extras, sendLabel, onSend, canSend, collapseOnBlur }: {
   inputRef?: Ref<ComponentRef<typeof TextInput>>; message: string; onChange: (text: string) => void;
   placeholder: string; maxLength: number; sending: boolean; disabled?: boolean;
   attachmentBusy?: boolean; onAttach?: () => void; quote?: ReactNode; onCancelReply?: () => void;
   attachments?: ReactNode; extras?: ReactNode; sendLabel?: string; onSend: () => void; canSend?: boolean;
+  collapseOnBlur?: boolean;
 }) {
   const ui = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   // Keep the reply actions in place when pressing them blurs the input.
-  const expanded = focused || Boolean(quote) || message.length > 0;
+  const expanded = focused || (!collapseOnBlur && (Boolean(quote) || message.length > 0));
+  const blurOnWeb = collapseOnBlur && Platform.OS === 'web';
+  const composer = useRef<ComponentRef<typeof View>>(null);
+  const pointerPressed = useRef(false);
+
+  useEffect(() => {
+    if (!blurOnWeb || !focused) return;
+    let timer: number | undefined;
+    function press() {
+      pointerPressed.current = true;
+    }
+    function release() {
+      pointerPressed.current = false;
+      window.clearTimeout(timer);
+      // Let the clicked control receive its press before the popup changes height.
+      timer = window.setTimeout(() => {
+        const element = composer.current as unknown as HTMLElement | null;
+        if (!element?.contains(document.activeElement)) setFocused(false);
+      }, 0);
+    }
+
+    window.addEventListener('pointerdown', press, true);
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    return () => {
+      window.removeEventListener('pointerdown', press, true);
+      window.removeEventListener('pointerup', release, true);
+      window.removeEventListener('pointercancel', release, true);
+      window.clearTimeout(timer);
+      pointerPressed.current = false;
+    };
+  }, [blurOnWeb, focused]);
+
   const busy = disabled || sending || attachmentBusy;
-  return <View style={ui.stack}>
+  return <View ref={composer} style={ui.stack} onBlur={blurOnWeb ? event => {
+    // Keep the composer in place while focus moves to an attachment or send button.
+    const { currentTarget, relatedTarget } = event as unknown as { currentTarget: HTMLElement; relatedTarget: Node | null };
+    if (!pointerPressed.current && !currentTarget.contains(relatedTarget)) setFocused(false);
+  } : undefined}>
     {quote && <View style={styles.replyPreview}>
       {quote}
       <Pressable accessibilityRole="button" disabled={busy} style={styles.replyButton} onPress={onCancelReply}>
@@ -119,7 +157,7 @@ export function DiscussionComposer({ inputRef, message, onChange, placeholder, m
           onAttach && (expanded ? styles.inputWithAttachment : styles.compactInputWithAttachment),
           !!attachments && styles.borderlessInput]}
         value={message} onChangeText={onChange} multiline maxLength={maxLength} editable={!sending && !disabled}
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        onFocus={() => setFocused(true)} onBlur={blurOnWeb ? undefined : () => setFocused(false)}
         accessory={onAttach && <Pressable accessibilityRole="button" accessibilityLabel="Đính kèm tệp"
           accessibilityHint="Tối đa 5 tệp mỗi lượt, 5 MB mỗi tệp và 8 MB tổng cộng."
           accessibilityState={{ busy: attachmentBusy }} disabled={busy} onPress={onAttach}

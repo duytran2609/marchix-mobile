@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -46,6 +46,9 @@ const quickDates = [
 const initialOptions: AssignmentOptions = {
   priority: 'Trung bình', status: 'Chưa làm', repeat: 'Không lặp', projectId: '', milestone: false,
 };
+const checklistInputHeight = 42;
+const checklistColumnGap = 8;
+const checklistDeleteWidth = 44;
 
 function functionError(error: unknown, fallback: string) {
   const code = error instanceof Error && 'code' in error ? error.code : '';
@@ -68,18 +71,28 @@ function MemberPicker({ members, selected, email, disabled, title, label, emptyM
   }))} selected={selected} disabled={disabled} label={label} emptyMessage={emptyMessage} onToggle={onToggle} />;
 }
 
-function WeightField({ label, value, disabled, onChange, onSubmit }: {
+function ChecklistItemFields({ children, label, value, disabled, onChange, onSubmit, remove }: {
+  children: ReactNode;
   label: string; value: string; disabled: boolean; onChange: (value: string) => void; onSubmit?: () => void;
+  remove?: { label: string; onPress: () => void };
 }) {
   const styles = useStyles();
   return (
-    <View style={styles.weightField}>
-      <Text style={styles.weightLabel}>Khối lượng</Text>
-      <NumberStepper accessibilityLabel={label} style={styles.weightInput} value={value} placeholder="1"
-        editable={!disabled} inputMode="numeric" maxLength={15} min={1} max={maxChecklistWeight} emptyValue={1}
-        onChangeText={next => { if (/^\d*$/.test(next)) onChange(next); }}
-        onSubmitEditing={onSubmit} returnKeyType={onSubmit ? 'done' : undefined}
-        submitBehavior={onSubmit ? 'submit' : undefined} blurOnSubmit={onSubmit ? false : undefined} />
+    <View style={styles.checklistFields}>
+      <Text style={[styles.weightLabel, styles.weightColumn, remove && styles.weightLabelWithDelete]}>Khối lượng</Text>
+      <View style={styles.checklistInputs}>
+        {children}
+        <NumberStepper accessibilityLabel={label}
+          style={[styles.input, styles.checklistInput, styles.weightColumn, styles.weightInput]}
+          value={value} placeholder="1"
+          editable={!disabled} inputMode="numeric" min={1} max={maxChecklistWeight} emptyValue={1}
+          onChangeText={next => { if (/^\d*$/.test(next)) onChange(next); }}
+          onSubmitEditing={onSubmit} returnKeyType={onSubmit ? 'done' : undefined}
+          submitBehavior={onSubmit ? 'submit' : undefined} blurOnSubmit={onSubmit ? false : undefined} />
+        {remove && <View style={styles.deleteItem}>
+          <DeleteIconButton label={remove.label} disabled={disabled} onPress={remove.onPress} />
+        </View>}
+      </View>
     </View>
   );
 }
@@ -440,32 +453,32 @@ export function TaskAssignmentForm({ email, task, initial, onClose, onSaved }: {
                   </View>
                   <View style={styles.field}>
                     <Text style={styles.label}>Việc con (checklist)</Text>
-                    {items.map((item, index) => <View key={index} style={[styles.person, styles.checklistRow]}>
-                      {workflowLocked ? <Text style={[styles.personLabel, styles.label, styles.lockedItemName]}>{item.t}</Text>
-                        : <TextInput accessibilityLabel={`Tên việc con ${index + 1}`}
-                          style={[styles.input, styles.personLabel, styles.itemNameInput]} value={item.t} editable={!saving}
-                          placeholder="Nhập tên việc con" maxLength={160}
-                          onChangeText={t => setItems(current => current.map((entry, position) =>
-                            position === index ? { ...entry, t } : entry))} />}
-                      <View style={styles.itemControls}>
-                        <WeightField label={`Khối lượng việc con ${index + 1}`} value={item.weight}
-                          disabled={saving || workflowLocked} onChange={weight => setItems(current => current.map((entry, position) =>
-                            position === index ? { ...entry, weight } : entry))} />
-                        {!workflowLocked ? <View style={styles.deleteItem}>
-                          <DeleteIconButton label={`Bỏ việc con ${index + 1}`} disabled={saving}
-                            onPress={() => setItems(current => current.filter((_, position) => position !== index))} />
-                        </View> : null}
-                      </View>
+                    {items.map((item, index) => <View key={index} style={styles.checklistItem}>
+                      <ChecklistItemFields label={`Khối lượng việc con ${index + 1}`} value={item.weight}
+                        disabled={saving || workflowLocked} onChange={weight => setItems(current => current.map((entry, position) =>
+                          position === index ? { ...entry, weight } : entry))}
+                        remove={workflowLocked ? undefined : {
+                          label: `Bỏ việc con ${index + 1}`,
+                          onPress: () => setItems(current => current.filter((_, position) => position !== index)),
+                        }}>
+                        {workflowLocked ? <View style={[styles.personLabel, styles.lockedItemName]}>
+                          <Text style={styles.label}>{item.t}</Text>
+                        </View>
+                          : <TextInput accessibilityLabel={`Tên việc con ${index + 1}`}
+                            style={[styles.input, styles.personLabel, styles.checklistInput]} value={item.t} editable={!saving}
+                            placeholder="Nhập tên việc con" maxLength={160}
+                            onChangeText={t => setItems(current => current.map((entry, position) =>
+                              position === index ? { ...entry, t } : entry))} />}
+                      </ChecklistItemFields>
                     </View>)}
                     {!workflowLocked && items.length < 30 ? <>
-                      <View style={styles.newItemRow}>
-                        <TextInput accessibilityLabel="Tên việc con" style={[styles.input, styles.personLabel, styles.itemNameInput]}
+                      <ChecklistItemFields label="Khối lượng việc con mới" value={newWeight}
+                        disabled={saving} onChange={setNewWeight} onSubmit={addItem}>
+                        <TextInput accessibilityLabel="Tên việc con" style={[styles.input, styles.personLabel, styles.checklistInput]}
                           value={newItem} editable={!saving} onChangeText={setNewItem} onSubmitEditing={addItem}
                           returnKeyType="done" submitBehavior="submit" blurOnSubmit={false}
                           placeholder="Nhập tên việc con" maxLength={160} />
-                        <WeightField label="Khối lượng việc con mới" value={newWeight}
-                          disabled={saving} onChange={setNewWeight} onSubmit={addItem} />
-                      </View>
+                      </ChecklistItemFields>
                       <Button label="+ Thêm việc con" onPress={addItem} disabled={saving || !newItem.trim()} style={styles.addItem} />
                     </> : null}
                   </View>
@@ -523,7 +536,6 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
   progressHint: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   field: { gap: 7 },
   addItem: { alignSelf: 'flex-end' },
-  newItemRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   label: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   attachmentValue: metadataValueStyle(colors),
   input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderRadius: 9,
@@ -535,15 +547,17 @@ const useStyles = createThemedStyles(colors => StyleSheet.create({
     color: colors.onAccent, textAlign: 'center', fontWeight: '800' },
   markChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
   personLabel: { flex: 1, gap: 2 },
-  checklistRow: { alignItems: 'flex-end' },
-  lockedItemName: { alignSelf: 'center' },
-  itemNameInput: { height: 42, minHeight: 42, paddingVertical: 0, borderWidth: 1.5 },
-  weightField: { width: 84, gap: 3 },
-  weightLabel: { color: colors.muted, fontSize: 11 },
-  weightInput: { height: 42, borderWidth: 1, borderRadius: 9, borderColor: colors.line, paddingLeft: 5,
+  checklistItem: { padding: 10, backgroundColor: colors.surfaceMuted, borderRadius: 9, borderWidth: 1, borderColor: colors.line },
+  checklistFields: { gap: 3 },
+  checklistInputs: { flexDirection: 'row', alignItems: 'flex-start', gap: checklistColumnGap },
+  lockedItemName: { minHeight: checklistInputHeight, justifyContent: 'center' },
+  checklistInput: { height: checklistInputHeight, minHeight: checklistInputHeight, paddingVertical: 0, borderWidth: 1.5 },
+  weightColumn: { width: 84, flexShrink: 0 },
+  weightLabel: { alignSelf: 'flex-end', color: colors.muted, fontSize: 11 },
+  weightLabelWithDelete: { marginRight: checklistDeleteWidth + checklistColumnGap },
+  weightInput: { paddingLeft: 5,
     textAlign: 'center', color: colors.ink, fontSize: 15, fontWeight: '700' },
-  itemControls: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  deleteItem: { height: 42, justifyContent: 'center' },
+  deleteItem: { width: checklistDeleteWidth, height: checklistInputHeight, justifyContent: 'center' },
   back: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 9,
     paddingHorizontal: 10, backgroundColor: colors.accentSoft },
   actionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },

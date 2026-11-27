@@ -150,8 +150,11 @@ export async function uploadProjectFiles(projectId: string, email: string, folde
   await batch.commit();
 }
 
-export function moveProjectFile(projectId: string, fileId: string, folderPath: string) {
-  return updateDoc(doc(projectCollection(projectId, 'library'), fileId), { folderPath, updatedAt: serverTimestamp() });
+export function removeProjectLibraryEntry(projectId: string, fileId: string) {
+  const entry = doc(projectCollection(projectId, 'library'), fileId);
+  return runTransaction(db, async tx => {
+    if ((await tx.get(entry)).exists()) tx.delete(entry);
+  });
 }
 
 export async function readProjectAttachment(projectId: string, file: TaskAttachment): Promise<AttachmentFile> {

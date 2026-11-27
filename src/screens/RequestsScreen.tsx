@@ -42,7 +42,7 @@ const requestTypeChoices = requestTypes.map(value => ({ value, label: value }));
 const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
 const displayMonth = (value: string) => value.split('-').reverse().join('/');
 const groupDigits = (value: string) => value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-const digitsOnly = (value: string) => value.replace(/\D/g, '').slice(0, 15);
+const digitsOnly = (value: string) => value.replace(/\D/g, '');
 const rangeDays = (from: string, to: string) =>
   1 + (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000;
 const validDuration = (value: number) => value > 0 && value <= 366 && value % 0.5 === 0;
@@ -256,7 +256,9 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
     }
     if (trip) {
       if (!destination.trim()) throw new Error('Nhập địa điểm công tác.');
-      result.trip = { destination: destination.trim(), host: host.trim(), estimatedCost: Number(cost), ...(time && { time }) };
+      const estimatedCost = Number(cost);
+      if (!Number.isSafeInteger(estimatedCost) || estimatedCost < 0) throw new Error('Nhập chi phí dự kiến hợp lệ (VNĐ).');
+      result.trip = { destination: destination.trim(), host: host.trim(), estimatedCost, ...(time && { time }) };
     }
     if (overtime) {
       const [hours, minutes] = overtimeTime.split(':').map(Number);
@@ -281,7 +283,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
   }
 
   function changeDays(value: string) {
-    if (!/^\d{0,3}([.,]\d?)?$/.test(value)) return;
+    if (!/^\d*(?:[.,]\d*)?$/.test(value)) return;
     setDays(value);
     const duration = Number(value.replace(',', '.'));
     if (range && validDuration(duration)) setTo(shiftDay(from, Math.ceil(duration) - 1));
@@ -391,7 +393,7 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
               </View>
               {advance ? <>
                 {input('Số tiền tạm ứng (VNĐ)', groupDigits(amount), value => setAmount(digitsOnly(value)),
-                  { keyboardType: 'number-pad', maxLength: 24, required: true })}
+                  { keyboardType: 'number-pad', required: true })}
                 <FieldLabel style={shared.label} required>Trừ vào lương tháng</FieldLabel>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Đổi tháng năm, ${displayMonth(month)}`}
                   aria-expanded={monthPickerYear !== null} disabled={busy} style={[shared.input, styles.picker]}
@@ -430,14 +432,14 @@ function RequestDialog({ row, access, members, memberName, directoryState, retry
                     }} />}
                 </> : <>
                   {dateField('to', 'Đến ngày', to)}
-                  {!trip && input('Số ngày', days, changeDays, { inputMode: 'decimal', maxLength: 5, required: type !== 'Đề xuất khác',
+                  {!trip && input('Số ngày', days, changeDays, { inputMode: 'decimal', required: type !== 'Đề xuất khác',
                     stepBounds: { min: type === 'Đề xuất khác' ? 0 : 0.5, max: 366 } })}
                 </>}
                 {trip && <>
                   {input('Địa điểm công tác', destination, setDestination, { maxLength: 250, required: true })}
                   {input('Đơn vị làm việc', host, setHost, { maxLength: 250 })}
                   {input('Chi phí dự kiến (VNĐ)', groupDigits(cost), value => setCost(digitsOnly(value)),
-                    { keyboardType: 'number-pad', maxLength: 24 })}
+                    { keyboardType: 'number-pad' })}
                 </>}
               </>}
               {input(overtime ? 'Lý do làm thêm giờ' : trip ? 'Mục đích / nội dung công tác' : 'Lý do / nội dung',

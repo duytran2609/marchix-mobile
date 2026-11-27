@@ -28,10 +28,10 @@ function schedule(task: Task) {
   const start = calendarDay(task.startDate);
   const due = calendarDay(task.due);
   if (start !== undefined && due !== undefined && start <= due) {
-    return { start, end: due, startDate: dateLabel(start), deadline: dateLabel(due) };
+    return { start, end: due, deadline: dateLabel(due) };
   }
   if (due !== undefined) return { start: due, deadline: dateLabel(due) };
-  if (start !== undefined) return { start, startDate: dateLabel(start) };
+  if (start !== undefined) return { start };
   return {};
 }
 
@@ -59,12 +59,8 @@ export function TaskGantt({ tasks, visibleTasks, today, range, onOpen }: {
   const rows = visibleTasks.map(task => {
     const dates = schedule(task);
     const progress = taskProgressValue(task);
-    const labels = [];
-    if (dates.startDate) labels.push(`Bắt đầu: ${dates.startDate}`);
-    if (dates.deadline) labels.push(`Hạn chót: ${dates.deadline}`);
-    if (!labels.length) labels.push(taskUnsetLabel);
     const inRange = dates.start !== undefined && dates.start < rangeEnd && (dates.end ?? dates.start) >= start;
-    return { task, progress, ...dates, inRange, hint: `${labels.join('. ')}. Tiến độ ${progress}%.` };
+    return { task, progress, ...dates, inRange, hint: `Hạn chót: ${dates.deadline ?? taskUnsetLabel}. Tiến độ ${progress}%.` };
   });
   const activeId = rows.find(row => row.inRange && row.task.id === selectedId)?.task.id;
 
@@ -72,20 +68,17 @@ export function TaskGantt({ tasks, visibleTasks, today, range, onOpen }: {
     <View style={styles.chart}>
       <View style={styles.names}>
         <View style={styles.nameHeader}><Text style={styles.heading}>Công việc</Text></View>
-        {rows.map(({ task, startDate, deadline, hint, progress }) => (
+        {rows.map(({ task, deadline, hint, progress }) => (
           <Pressable key={task.id} accessibilityRole="button" accessibilityLabel={`Mở công việc: ${task.title}`}
             accessibilityHint={hint}
             onPress={() => onOpen(task)} style={({ pressed }) => [styles.nameRow, pressed && styles.pressed,
               activeId !== undefined && activeId !== task.id && styles.dimmed]}>
             <View style={styles.taskDetails}>
               <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-              {startDate ? <Text style={[styles.dateLabel, ui.metadataValue]}>
-                <Text style={ui.metadataLabel}>Bắt đầu: </Text>{startDate}
-              </Text> : null}
-              {deadline ? <Text style={[styles.dateLabel, ui.metadataValue]}>
-                <Text style={ui.metadataLabel}>Hạn chót: </Text>{deadline}
-              </Text> : null}
-              {!startDate && !deadline ? <Text style={[styles.dateLabel, ui.unsetValue]}>{taskUnsetLabel}</Text> : null}
+              <Text style={[styles.dateLabel, ui.metadataValue]}>
+                <Text style={ui.metadataLabel}>Hạn chót: </Text>
+                {deadline ?? <Text style={ui.unsetValue}>{taskUnsetLabel}</Text>}
+              </Text>
             </View>
             <Text style={styles.progressValue}>{progress}%</Text>
           </Pressable>

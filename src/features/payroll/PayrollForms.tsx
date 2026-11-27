@@ -114,7 +114,7 @@ function TextField({ label, value, onChange, busy, kind = 'text', required, step
   return <View style={{ gap: 5 }}>
     <FieldLabel style={styles.label} required={required}>{fieldLabel}</FieldLabel>
     <Input style={styles.input} accessibilityLabel={fieldLabel} value={displayValue} onChangeText={change}
-      editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'} maxLength={250}
+      editable={!busy} inputMode={inputMode} autoCapitalize={kind === 'text' ? 'sentences' : 'none'}
       {...stepBounds} />
   </View>;
 }

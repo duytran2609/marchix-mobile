@@ -183,7 +183,7 @@ function CashForm({ type, row, seed, projects, ledger, approvers, access, operat
         : 'Khoản mới sẽ ở trạng thái Chờ duyệt.'}</Text>
       <Field required label="Nội dung" value={values.note} onChange={set('note')} limit={1000} />
       <Field required label="Số tiền (VNĐ)" value={formatAmount(values.amount)}
-        onChange={value => set('amount')(amountDigits(value))} numeric limit={32} />
+        onChange={value => set('amount')(amountDigits(value))} numeric />
       {type === 'chi' && amount > expenseLimit && <Text style={styles.error}>Khoản chi trên 2.000.000 VNĐ cần duyệt bằng văn bản trước khi chi.</Text>}
       <DateCalendarField required label="Ngày giao dịch" value={validDate(values.date) ? values.date : ''}
         onChange={set('date')} disabled={busy} />

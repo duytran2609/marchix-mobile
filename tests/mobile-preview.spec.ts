@@ -127,7 +127,8 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
     });
     expect(followsProgressInput).toBe(true);
     await expect(edit).toBeInViewport();
-    expect((await edit.boundingBox())!.y).toBeGreaterThan((await tab('Báo hoàn thành').boundingBox())!.y);
+    const report = content.getByRole('button', { name: 'Báo hoàn thành', exact: true });
+    await expect(report.locator('..').getByRole('textbox', { name: 'Kết quả thực hiện' })).toBeVisible();
     await tab('Mô tả').click();
     await expect(edit).toBeInViewport();
     await expect(tab('Báo hoàn thành')).toHaveCount(0);
@@ -137,6 +138,29 @@ test('Popup chi tiết nới theo nội dung rồi cuộn trong giới hạn tab
     await expect(edit).toBeInViewport();
     const sendBox = (await send.boundingBox())!;
     expect((await edit.boundingBox())!.y).toBeGreaterThanOrEqual(sendBox.y + sendBox.height);
+
+    const message = dialog.getByRole('textbox', { name: 'Nội dung trao đổi', exact: true });
+    const messageHeight = () => message.evaluate(element => element.getBoundingClientRect().height);
+    const compactHeight = await messageHeight();
+    await message.fill('Nội dung đang soạn');
+    await expect.poll(messageHeight).toBeGreaterThan(compactHeight);
+    await dialog.getByRole('heading', { name: 'Chi tiết công việc', exact: true }).click();
+    await expect.poll(messageHeight).toBeCloseTo(compactHeight);
+    await expect(message).toHaveValue('Nội dung đang soạn');
+
+    const search = dialog.getByRole('textbox', { name: 'Tìm trong trao đổi', exact: true });
+    await search.fill('Nội dung trao đổi 36');
+    await expect(dialog.getByText('Nội dung trao đổi 1', { exact: true })).toHaveCount(0);
+    await message.focus();
+    await tab('Mở rộng trao đổi').click();
+    const fullHistory = page.getByRole('dialog', { name: 'Toàn bộ trao đổi', exact: true });
+    await expect(fullHistory.getByText(/^Nội dung trao đổi \d+$/)).toHaveCount(36);
+    await expect(fullHistory.getByRole('heading', { name: 'Toàn bộ trao đổi', exact: true })).toHaveCount(0);
+    await expect(fullHistory.getByText('Nội dung trao đổi 1', { exact: true })).toBeVisible();
+    await expect(fullHistory.getByRole('textbox')).toHaveCount(0);
+    await fullHistory.getByRole('button', { name: 'Đóng toàn bộ trao đổi', exact: true }).click();
+    await expect(fullHistory).toBeHidden();
+    await expect(message).toHaveValue('Nội dung đang soạn');
   } finally {
     await request.delete(url, { headers });
   }
@@ -1072,7 +1096,7 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
   async function openOverview(target: typeof page, login: string) {
     await target.goto(previewUrl);
     await target.getByRole('button', { name: login }).click();
-    await expect(target.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
+    await expect(target.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
   }
 
   try {
@@ -1090,7 +1114,7 @@ test('Tổng quan mở mặc định sau đăng nhập và dùng dữ liệu the
     await page.getByRole('button', { name: /Đối chiếu checklist phát hành/ }).click();
     await expect(page.getByRole('heading', { name: 'Đối chiếu checklist phát hành' })).toBeVisible();
     await page.getByRole('button', { name: '‹ Tổng quan', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /^(Cảnh báo|Phê duyệt)/ })).toHaveCount(0);
 
     await openOverview(admin, 'Đăng nhập quản trị (mô phỏng)');
@@ -2314,6 +2338,13 @@ test('Gantt dùng màu riêng và chạm để làm nổi bật từng công vi�
     const [first, second] = titles.map(title => page.getByRole('button', { name: `Mở công việc: ${title}`, exact: true }));
     await expect(bar).toBeVisible();
     await expect(marker).toBeVisible();
+    const deadline = `Hạn chót: ${formatTaskDate(shiftDay(start, 1))}`;
+    await expect(first.getByText(deadline, { exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Tìm tên công việc' }).fill(titles[0]);
+    await expect(second).toHaveCount(0);
+    await expect(first).toHaveText(`${titles[0]}${deadline}0%`);
+    await page.getByRole('textbox', { name: 'Tìm tên công việc' }).clear();
+    await expect(second).toBeVisible();
     await expect(bar.locator(':scope > div')).toHaveCSS('width', '112px');
     await expect(oneDayBar.locator(':scope > div')).toHaveCSS('width', '56px');
     await expect(marker.locator(':scope > div')).toHaveCSS('width', '10px');

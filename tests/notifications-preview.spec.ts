@@ -81,7 +81,7 @@ test('Chuông thông báo mở đúng công việc, đơn từ, thu chi và kỳ
       timeout: 90_000, waitUntil: 'domcontentloaded',
     });
     await page.getByRole('button', { name: 'Đăng nhập bằng Google', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Tổng quan', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible({ timeout: 15_000 });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await openNote('Thông báo thử giao việc');
     await expect(page.getByRole('heading', { name: 'Cập nhật hướng dẫn bàn giao', exact: true })).toBeVisible();
