@@ -118,7 +118,7 @@ function SettingsField({ tab, field, value, disabled, onChange }: {
         }} />;
   return (
     <View style={inlineNumber ? fieldStyles.inlineFieldRow : fieldStyles.plain}>
-      <FieldLabel style={[ui.label, inlineNumber && [ui.listHeading, fieldStyles.inlineNumberLabel]]} required={required}>{label}</FieldLabel>
+      <FieldLabel style={[ui.label, inlineNumber && ui.listHeading]} required={required}>{label}</FieldLabel>
       {inlineNumber ? <View style={fieldStyles.inlineNumberInput}>{input}</View> : isCoordinate ? <View>
         {input}
         <View aria-hidden pointerEvents="none" style={fieldStyles.coordinateSuffix}>
@@ -453,9 +453,7 @@ const fieldStyles = StyleSheet.create({
   compactClock: { flex: 1, minWidth: 0, gap: 4 },
   toggleGroup: { gap: 4 },
   inlineFieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  // Align the label with the input above its character counter.
-  inlineNumberLabel: { marginBottom: 16 },
-  inlineNumberInput: { width: 104, maxWidth: '40%', transform: [{ translateY: 3 }] },
+  inlineNumberInput: { width: 104, maxWidth: '40%' },
   workdayLabel: { flex: 1, fontWeight: '400' },
   workdayDropdown: { flex: 2 },
   coordinateRow: { flexDirection: 'row', gap: 8 },

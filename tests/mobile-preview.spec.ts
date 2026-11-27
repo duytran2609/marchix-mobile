@@ -261,8 +261,7 @@ test('Phê duyệt hiển thị thông tin công việc còn trống bằng ch�
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto(previewUrl);
     await page.getByRole('button', { name: 'Đăng nhập quản trị (mô phỏng)', exact: true }).click();
-    await page.getByRole('button', { name: 'Mở menu' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Phê duyệt', exact: true }).click();
+    await openSection(page, 'Phê duyệt');
 
     const card = page.getByRole('button', { name: `Xem công việc: ${title}`, exact: true })
       .or(page.getByRole('button', { name: `Duyệt công việc: ${title}`, exact: true }));
@@ -1817,7 +1816,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     expect(longitudeBox.x).toBeLessThan(latitudeBox.x);
     expect(radiusBox.y).toBeGreaterThan(latitudeBox.y);
     expect(radiusLabelBox.x + radiusLabelBox.width).toBeLessThan(radiusBox.x);
-    expect(radiusBox.y + radiusBox.height / 2).toBeCloseTo(radiusLabelBox.y + radiusLabelBox.height / 2 + 3, 0);
+    expect(radiusBox.y + radiusBox.height / 2).toBeCloseTo(radiusLabelBox.y + radiusLabelBox.height / 2, 0);
     await expect(latitude.locator('../../..').getByText('°', { exact: true })).toBeVisible();
     await expect(longitude.locator('../../..').getByText('°', { exact: true })).toBeVisible();
     const shiftHour = page.getByRole('button', { name: /^Giờ vào ca – Giờ:/ });
@@ -1836,7 +1835,7 @@ test('Quản trị lưu các nhóm cài đặt trực tiếp trong ứng dụng'
     const graceInputPosition = (await graceInput.boundingBox())!;
     expect(graceLabelPosition.x + graceLabelPosition.width).toBeLessThan(graceInputPosition.x);
     expect(graceInputPosition.y + graceInputPosition.height / 2)
-      .toBeCloseTo(graceLabelPosition.y + graceLabelPosition.height / 2 + 3, 0);
+      .toBeCloseTo(graceLabelPosition.y + graceLabelPosition.height / 2, 0);
     await graceInput.fill('12');
     const monday = page.getByRole('button', { name: /^Thứ 2:/ });
     await monday.click();
